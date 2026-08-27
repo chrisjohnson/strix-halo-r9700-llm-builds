@@ -1,0 +1,12 @@
+name: nvidia-nemotron-3-super-120b-a12b--llamacpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: NVIDIA-Nemotron-3-Super-120B-A12B
+  params: 120B
+  active_params: 12B
+  quant: Q4_K_XL
+  mtp: false
+  dflash: false
+  notes: >-
+    Not yet measured locally; reference figure from kyuz0's raw results.

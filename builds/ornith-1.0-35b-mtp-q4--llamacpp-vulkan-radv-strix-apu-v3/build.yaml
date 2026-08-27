@@ -1,0 +1,24 @@
+name: ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: ornith-1.0 (MTP-Q4_K_M)
+  params: 35B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  notes: >-
+    Serving-config-only change vs v1: --cache-ram raised 2048 -> 4096
+    (2026-08-21, M-126). Real live usage under sustained triple-model
+    real work showed system RAM headroom holding rock-steady at ~11.2GB
+    with the 2GB caps in place (20+ samples over ~8 minutes, zero drift).
+    Doubling ornith and qwen's budgets together costs at most +2GB more
+    each if both fully fill (worst case), leaving ~7GB genuine safety
+    margin against the observed stable baseline. Chosen as a measured
+    step up rather than jumping further in one move.
+
+    Was manually run as the live medium-moe backend for a time (the
+    restart:always promotion from v1 was never finished/committed).
+    Superseded 2026-08-22 by ornith-1.5-35b-a3b-q4's plain build as the
+    standing medium-moe endpoint.

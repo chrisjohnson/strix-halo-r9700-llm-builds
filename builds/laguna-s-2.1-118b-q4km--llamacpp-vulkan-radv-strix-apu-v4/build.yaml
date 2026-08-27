@@ -1,0 +1,35 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v4
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 (UD-Q4_K_M)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Final standing config after the M-126 -np investigation (2026-08-21).
+    Explicit -np 4 --kv-unified, functionally identical to v2's unset-np
+    default (n_slots=4, kv_unified=true) but explicit rather than relying
+    on llama-server's auto-behavior, which silently changes if -np is
+    ever touched again (exactly what broke v3 - setting -np disabled the
+    default-enabled --kv-unified, halving context to 64K until caught).
+
+    Full investigation trail: v3 (-np 2) was tried to save memory. First
+    A/B test appeared to show ~4GB savings (80.22GB vs 84.26GB) - but
+    that number was measured on a BROKEN v3 config that had silently
+    halved context to 64K (kv_unified=false, uncaught until a real
+    startup-log review). After fixing v3 with --kv-unified, re-measured:
+    84.27GB, essentially identical to v2/v4's 84.26GB - the earlier
+    "savings" was entirely an artifact of the context-halving bug, not a
+    real slot-count effect. Once both configs are correctly unified,
+    -np has ZERO memory cost either way.
+
+    With memory no longer a differentiator, -np 4 is strictly better
+    than -np 2: same GTT (84.26-84.27GB both), same solo/2-concurrent
+    performance, but real 4-concurrent-thread capacity -np 2
+    structurally cannot offer (51.1 tok/s aggregate on 4 slots vs 38.2
+    tok/s degraded when 4 requests contend for only 2 real slots).
+    Standardized on this config; v2 and v3 kept defined for
+    reference/rollback. See M-126.

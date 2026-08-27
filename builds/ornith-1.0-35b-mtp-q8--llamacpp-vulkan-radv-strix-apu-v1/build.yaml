@@ -1,0 +1,13 @@
+name: ornith-1.0-35b-mtp-q8--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Ornith-1.0-35B-MTP (Q8_0)
+  params: 35.5B
+  active_params: null
+  quant: Q8_0
+  mtp: true
+  dflash: false
+  notes: >-
+    Q8_0 MTP build. Catalog id is ...-mtp.yaml (matching model file);
+    compose_service_id is -v1. Benchmark pending.

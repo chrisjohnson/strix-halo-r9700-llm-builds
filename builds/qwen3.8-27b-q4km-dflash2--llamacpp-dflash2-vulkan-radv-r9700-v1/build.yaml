@@ -1,0 +1,49 @@
+name: qwen3.8-27b-q4km-dflash2--llamacpp-dflash2-vulkan-radv-r9700-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-dflash2-vulkan-radv-v1
+  model: Qwen3.8-27B (Q4_K_M)
+  params: 27.32B
+  active_params: null
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    DFlash 2 (incoai/z-lab, https://github.com/z-lab/dflash) - NOT the
+    same "dflash" already in this repo (poolside's private llama.cpp
+    fork, laguna branch). Genuinely different, newer technique: block-
+    diffusion drafting with a candidate-path selector, currently an
+    UNMERGED upstream ggml-org/llama.cpp PR (#27342). Custom engine build
+    required and confirmed necessary live - the stock
+    kyuz0/amd-strix-halo-toolboxes:vulkan-radv image cannot load a
+    DFlash2 draft GGUF at all ("wrong number of tensors; expected 81,
+    got 58"). See docker/llamacpp-dflash2-vulkan-radv.dockerfile /
+    scripts/build-dflash2-vulkan-radv.sh for the build (image
+    local-ai-machine/llamacpp-dflash2:vulkan-radv, PR commit 1deefcc).
+
+    Uses the ALREADY-downloaded bartowski qwen3.8-27b-q4km target model
+    directly - confirmed live it loads and generates correctly with this
+    custom engine, so the separate ggml-org/Qwen3.8-27B-GGUF target
+    DFlash2 was originally evaluated against was NOT needed.
+
+    Draft model: incoai/Qwen3.8-27B-DFlash2-GGUF Q4_K_M
+    (qwen3.8-27b-dflash2-draft-q4km in configuration.nix), 1,143,006,752
+    bytes.
+
+    Initial smoke test (single 100-token request, -c 8192): 22.02 tok/s,
+    draft_n=239/draft_n_accepted=64 (~27% accept) - flagged at the time
+    as exactly the kind of data M-050/052/053/055/086 (the original
+    dflash investigation) warned against over-trusting.
+
+    Real llm-inference-bench sweep (2026-08-22, run 112, full matrix
+    concurrency 1/2/4/8 x context 0/16k/32k/64k, -c 131072 -n 8192):
+    aggregate throughput 27-36 tok/s across the whole matrix (best at
+    conc=1: 35.1-36.2 tok/s depending on context; degrades under
+    concurrency same as everything else here). Prefill: 857-1,066 tok/s
+    (128k context TTFT 153s). CONCLUSION: genuinely worse than the
+    existing qwen3.8-27b-q4km-mtp sibling's 41-52 tok/s across the board,
+    not just a smoke-test artifact - DFlash2 (at least with
+    --spec-draft-n-max 7 untuned, default settings) does not beat native
+    MTP for this model on this hardware. Not promoted; kept as a real,
+    working, benchmarked reference build.

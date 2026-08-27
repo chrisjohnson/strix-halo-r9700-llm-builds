@@ -1,0 +1,19 @@
+name: docker
+services:
+  laguna-xs-2.1-33b-q4km--llamacpp-vulkan-radv-strix-apu-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: laguna-xs-2.1-33b-q4km--llamacpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/laguna-xs-2.1-33b-q4km:/models:ro
+    command: 'llama-server -m /models/Laguna-XS-2.1-Q4_K_M.gguf -dev Vulkan1 -ngl
+      999 -fa 1 -c 262144 --host 0.0.0.0 --port 8080 -a laguna-xs-2.1-33b-q4km --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8106:8080

@@ -1,0 +1,20 @@
+name: docker
+services:
+  glm-4.7-flash--ollama-rocm-0177-broken-strix-apu-v1:
+    image: ollama/ollama:0.17.7-rocm
+    container_name: glm-4.7-flash--ollama-rocm-0177-broken-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    ports:
+    - 127.0.0.1:11437:11434
+    volumes:
+    - ollama_data:/root/.ollama
+    - /var/lib/ai-models:/gguf-source:ro
+volumes:
+  ollama_data:
+    external: true
+    name: docker_ollama_data

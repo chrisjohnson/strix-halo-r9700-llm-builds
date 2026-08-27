@@ -1,0 +1,13 @@
+name: qwen3.6-35b-a3b--llamacpp-vulkan-radv-mtp-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Qwen3.6-35B-A3B (MTP)
+  params: 34.7B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  notes: >-
+    MTP-tensor-bearing GGUF from a separate unsloth repo; draft-mtp spec
+    (n-max 3).

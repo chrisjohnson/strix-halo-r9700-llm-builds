@@ -1,0 +1,13 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-speculative-dflash-strix-apu-v1
+status: BROKEN
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 + DFlash (classic speculative attempt)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  notes: >-
+    Classic speculative decoding attempt with the poolside DFlash draft on the
+    plain toolbox — no draft-server support there; catalog BROKEN.

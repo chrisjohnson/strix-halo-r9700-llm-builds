@@ -1,0 +1,23 @@
+name: qwen3.8-27b-q4km--llamacpp-vulkan-radv-r9700-mtp-v2
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-27B (Q4_K_M)
+  params: 27B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    Serving-config-only change vs v1: quantize the MTP draft model's own
+    KV cache (--spec-draft-type-k/-v q8_0, was unset/f16 default) in
+    addition to the main model's KV cache (already q8_0 on v1). Real test
+    (2026-08-21, direct :8137): no memory win - real VRAM was 22.48GB,
+    slightly *higher* than v1's known ~21.7-21.75GB baseline (within
+    noise, but certainly not a reduction). Speed/quality unaffected
+    (48.1 tok/s mean, comparable to or better than v1's recorded 41.4
+    tok/s solo baseline). Same likely explanation as ornith-v2: MTP here
+    uses an internal draft head within the same model, so there may be no
+    large distinct draft KV buffer to quantize. Not promoted; v1 remains
+    the standing endpoint. See M-126.

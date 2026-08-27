@@ -1,0 +1,13 @@
+name: qwen3.6-27b--llamacpp-vulkan-radv-mtp-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Qwen3.6-27B (MTP)
+  params: 26.9B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  notes: >-
+    MTP variant; Qwen3.6-27B-Q4_K_M.gguf from the -mtp dir carries MTP
+    tensors.

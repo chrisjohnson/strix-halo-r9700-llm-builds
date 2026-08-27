@@ -1,0 +1,13 @@
+name: qwen3.5-122b-a10b--llamacpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.5-122B-A10B
+  params: 122B
+  active_params: 10B
+  quant: Q5_K_XL
+  mtp: false
+  dflash: false
+  notes: >-
+    Not yet measured locally; reference figure from kyuz0's raw results.json
+    on the same hardware.

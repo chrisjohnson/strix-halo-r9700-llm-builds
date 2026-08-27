@@ -1,0 +1,12 @@
+name: gpt-oss-20b--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: GPT-OSS-20B
+  params: 20B
+  active_params: 3.5B
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    First real serve/benchmark of this model in any form on this box.

@@ -1,0 +1,13 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-laguna-fork-vulkan-dflash-strix-apu-v2
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-laguna-fork-vulkan-v1
+  model: Laguna-S-2.1 + DFlash-Q4_K_M (poolside fork, Vulkan)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  notes: >-
+    M-086 quantized-draft experiment: Q4_K_M draft at n2 beats the 30.0 tok/s
+    plain baseline (33-35 tok/s). The only DFlash config that wins.

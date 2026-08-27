@@ -1,0 +1,12 @@
+name: kat-coder-v2.5-dev-mtp-q6--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: KAT-Coder-V2.5-Dev (MTP graft, Q6_K)
+  params: 34.7B
+  active_params: 3B
+  quant: Q6_K
+  mtp: true
+  dflash: false
+  notes: >-
+    gbuzhf MTP graft, ~28.0 GiB confirmed. draft-mtp,ngram-mod spec.

@@ -1,0 +1,22 @@
+name: docker
+services:
+  qwen3.8-27b-q4km-dflash2--llamacpp-dflash2-vulkan-radv-r9700-v1:
+    image: strix-halo-r9700-llm-builds/llamacpp-dflash2:vulkan-radv
+    container_name: qwen3.8-27b-q4km-dflash2--llamacpp-dflash2-vulkan-radv-r9700-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/qwen3.8-27b-q4km:/models:ro
+    - /var/lib/ai-models/qwen3.8-27b-dflash2-draft-q4km:/draft:ro
+    command: './build/bin/llama-server -m /models/Qwen3.8-27B-Q4_K_M.gguf -md /draft/Qwen3.8-27B-DFlash2-Q4_K_M.gguf
+      --spec-type draft-dflash --spec-draft-n-max 7 -dev Vulkan0 -ngl 999 -fa 1
+      -np 1 -c 131072 -n 8192 --host 0.0.0.0 --port 8080 -a qwen3.8-27b-q4km-dflash2-r9700
+      --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8144:8080

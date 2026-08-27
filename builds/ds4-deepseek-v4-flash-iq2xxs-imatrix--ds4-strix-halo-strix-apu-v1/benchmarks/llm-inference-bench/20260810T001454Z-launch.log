@@ -1,0 +1,56 @@
+ds4: Linux rocm backend set oom_score_adj=1000
+ds4: ROCm backend initialized on AMD Radeon 8060S Graphics (sm_115)
+ds4: ROCm preparing model tensor mappings
+ds4: ROCm loading model tensors into device cache
+ds4: ROCm loading model tensors 16.02 GiB cached
+ds4: ROCm prepared model tensor mappings 16.37 GiB
+ds4: ROCm loading model tensors 32.06 GiB cached
+ds4: ROCm prepared model tensor mappings 32.07 GiB
+ds4: ROCm loading model tensors 45.76 GiB cached
+ds4: ROCm prepared model tensor mappings 46.09 GiB
+ds4: ROCm loading model tensors 48.02 GiB cached
+ds4: ROCm prepared model tensor mappings 48.43 GiB
+ds4: ROCm loading model tensors 60.37 GiB cached
+ds4: ROCm prepared model tensor mappings 61.27 GiB
+ds4: ROCm loading model tensors 64.06 GiB cached
+ds4: ROCm prepared model tensor mappings 64.13 GiB
+ds4: ROCm loading model tensors 80.04 GiB cached
+ds4: ROCm prepared model tensor mappings 80.24 GiB
+ds4: ROCm startup model preparation covered 80.76 GiB of tensor spans in 53.107s
+ds4: rocm backend initialized for graph diagnostics
+ds4: memory: KV 1.75 GiB (raw 0.10 + compressed 1.64) + buffers 0.24 GiB + resident model 80.76 GiB = 82.75 GiB planned
+ds4: memory detail: ctx=128000 prefill_cap=1024 raw_kv_rows=1280 compressed_kv_rows=32002 backend=rocm
+0807 20:32:34 ds4-server: context buffers 2037.89 MiB (ctx=128000, backend=rocm, prefill_chunk=1024, raw_kv_rows=1280, compressed_kv_rows=32002)
+0807 20:32:34 ds4-server: listening on http://0.0.0.0:8080
+0807 20:51:43 ds4-server: shutdown requested, draining requests
+ds4: Linux rocm backend set oom_score_adj=1000
+ds4: ROCm backend initialized on AMD Radeon 8060S Graphics (sm_115)
+ds4: ROCm preparing model tensor mappings
+ds4: ROCm loading model tensors into device cache
+ds4: ROCm loading model tensors 15.70 GiB cached
+ds4: ROCm prepared model tensor mappings 15.71 GiB
+ds4: ROCm loading model tensors 16.02 GiB cached
+ds4: ROCm prepared model tensor mappings 16.37 GiB
+ds4: ROCm loading model tensors 27.77 GiB cached
+ds4: ROCm prepared model tensor mappings 29.21 GiB
+ds4: ROCm loading model tensors 32.06 GiB cached
+ds4: ROCm prepared model tensor mappings 32.07 GiB
+ds4: ROCm loading model tensors 43.21 GiB cached
+ds4: ROCm prepared model tensor mappings 43.37 GiB
+ds4: ROCm loading model tensors 48.02 GiB cached
+ds4: ROCm prepared model tensor mappings 48.43 GiB
+ds4: ROCm loading model tensors 55.43 GiB cached
+ds4: ROCm prepared model tensor mappings 55.70 GiB
+ds4: ROCm loading model tensors 63.99 GiB cached
+ds4: ROCm loading model tensors 64.06 GiB cached
+ds4: ROCm prepared model tensor mappings 64.13 GiB
+ds4: ROCm loading model tensors 75.50 GiB cached
+ds4: ROCm prepared model tensor mappings 76.53 GiB
+ds4: ROCm loading model tensors 80.04 GiB cached
+ds4: ROCm prepared model tensor mappings 80.24 GiB
+ds4: ROCm startup model preparation covered 80.76 GiB of tensor spans in 75.727s
+ds4: rocm backend initialized for graph diagnostics
+ds4: memory: KV 1.75 GiB (raw 0.10 + compressed 1.64) + buffers 0.24 GiB + resident model 80.76 GiB = 82.75 GiB planned
+ds4: memory detail: ctx=128000 prefill_cap=1024 raw_kv_rows=1280 compressed_kv_rows=32002 backend=rocm
+0809 23:56:09 ds4-server: context buffers 2037.89 MiB (ctx=128000, backend=rocm, prefill_chunk=1024, raw_kv_rows=1280, compressed_kv_rows=32002)
+0809 23:56:10 ds4-server: listening on http://0.0.0.0:8080

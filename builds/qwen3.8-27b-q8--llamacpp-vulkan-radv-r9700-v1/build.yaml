@@ -1,0 +1,16 @@
+name: qwen3.8-27b-q8--llamacpp-vulkan-radv-r9700-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-27B
+  params: 27.32B
+  active_params: null
+  quant: Q8_0
+  mtp: false
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    New model, R9700-only, same hybrid linear-attention architecture as
+    the Q4_K_M sibling. llama-bench measured pp512 1071.87, tg128 19.34
+    tok/s - dramatically FASTER than the Q4_K_M sibling despite being
+    the larger quant; see catalog/builds/ for the full analysis.

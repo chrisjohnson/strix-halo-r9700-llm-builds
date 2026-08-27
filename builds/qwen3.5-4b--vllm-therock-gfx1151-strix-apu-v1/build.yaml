@@ -1,0 +1,19 @@
+name: qwen3.5-4b--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Qwen3.5-4B
+  params: 4B
+  active_params: null
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    Small judge/utility model (served as qwen3.5-4b-judge), gpu-memory-
+    utilization 0.20, max-model-len 131072. M-101 smoke-test target.
+bench:
+  concurrency: 1,2
+  contexts: 0,8192
+  duration: 15
+  max_tokens: 1024
+  kv_budget: 0

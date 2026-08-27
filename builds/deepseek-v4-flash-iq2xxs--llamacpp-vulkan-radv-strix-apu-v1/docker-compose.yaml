@@ -1,0 +1,20 @@
+name: docker
+services:
+  deepseek-v4-flash-iq2xxs--llamacpp-vulkan-radv-strix-apu-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: deepseek-v4-flash-iq2xxs--llamacpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/llamacpp-deepseek-v4-flash-iq2xxs:/models:ro
+    command: 'llama-server -m /models/UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host
+      0.0.0.0 --port 8080 -a deepseek-v4-flash-iq2xxs --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8114:8080

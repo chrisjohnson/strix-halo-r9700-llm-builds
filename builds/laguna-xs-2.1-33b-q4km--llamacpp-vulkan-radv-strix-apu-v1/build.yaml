@@ -1,0 +1,12 @@
+name: laguna-xs-2.1-33b-q4km--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-XS-2.1 (Q4_K_M)
+  params: 33.4B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    poolside/Laguna-XS-2.1-GGUF, single-file Q4_K_M GGUF.

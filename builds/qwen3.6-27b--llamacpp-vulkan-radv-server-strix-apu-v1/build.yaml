@@ -1,0 +1,14 @@
+name: qwen3.6-27b--llamacpp-vulkan-radv-server-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-server-v1
+  model: Qwen3.6-27B
+  params: 26.9B
+  active_params: null
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Standing server-mode build (np 4, -cb -kvu, 32k ctx) for
+    interactive/factory use. Correctness check passed (mandatory per engine
+    gotchas).

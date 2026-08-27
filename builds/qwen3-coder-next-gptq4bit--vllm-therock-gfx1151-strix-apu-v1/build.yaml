@@ -1,0 +1,13 @@
+name: qwen3-coder-next-gptq4bit--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Qwen3-Coder-Next
+  params: 80B
+  active_params: 3B
+  quant: GPTQ-4bit
+  mtp: false
+  dflash: false
+  notes: >-
+    Swapped in via scripts/speed_benchmark_swap.sh / swap_model_* (gptq4bit
+    GGUF-style swap, not the FP8 swap path).

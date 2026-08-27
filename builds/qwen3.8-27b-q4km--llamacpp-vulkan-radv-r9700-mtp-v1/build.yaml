@@ -1,0 +1,29 @@
+name: qwen3.8-27b-q4km--llamacpp-vulkan-radv-r9700-mtp-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-27B
+  params: 27.32B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    MTP speculative decoding, real measured result on this R9700
+    (2026-08-20): 41-52 tok/s generation depending on prompt (short
+    Fibonacci task ~52.4, longer hash-table explanation+code ~41.3) vs
+    8.51 tok/s plain (qwen3.8-27b-q4km--llamacpp-vulkan-radv-r9700-v1) -
+    a 5-6x speedup, meeting/exceeding the ~50 tok/s target. MTP head
+    ships baked into the same GGUF (bartowski/Qwen3.8-27B-GGUF), no
+    separate download needed. --spec-draft-n-max 3 --spec-draft-p-min 0.6
+    beat both n-max 2 and 4 across both test prompts tried (llama-cli
+    single-shot tests, not yet run through the full llm-inference-bench
+    concurrency/context sweep). Q8_0's MTP layers stay full precision
+    (vs Q4_K_M's forced Q4_0 MTP layers per bartowski's own model card)
+    and measured slower (38.2 tok/s with the same flags) - MTP not
+    applied to the Q8_0 build, Q4_K_M is the better MTP host here.
+
+    Superseded 2026-08-22 by qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1
+    (Q6_K_L, full 262144 context) as the standing medium-dense endpoint;
+    docker-compose.yml's restart:always removed here.

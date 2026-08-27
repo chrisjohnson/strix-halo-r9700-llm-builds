@@ -1,0 +1,16 @@
+name: glm-4.7-flash--ollama-vulkan-0177-strix-apu-v1
+status: WORKING
+derived:
+  engine: ollama-vulkan-0177-v1
+  model: GLM-4.7-Flash
+  params: 30B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    ~13 tok/s generation (rough measurement). Bench targets the shared
+    ollama_data store.
+bench:
+  model: glm-4.7-flash-gguf:latest
+  engine: ollama

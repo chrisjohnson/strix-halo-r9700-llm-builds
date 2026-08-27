@@ -1,0 +1,12 @@
+name: gemma-4-31b-it--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Gemma-4-31B-it
+  params: 31B
+  active_params: null
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    Slowest model tested all session; degrades hardest under concurrency.

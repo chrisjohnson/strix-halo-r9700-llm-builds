@@ -1,0 +1,15 @@
+name: ds4-deepseek-v4-flash-iq2xxs--ds4-strix-halo-strix-apu-v1
+status: WORKING
+derived:
+  engine: ds4-strix-halo-v1
+  model: DeepSeek-V4-Flash (DS4/DwarfStar, IQ2XXS)
+  params: 284B
+  active_params: 13B
+  quant: IQ2XXS
+  mtp: false
+  dflash: true
+  notes: >-
+    Standalone DwarfStar (ds4) engine, NOT llama.cpp. Previously ad hoc docker
+    run only; standing service is best-effort (ds4-server flags from
+    M-047/M-051 notes). MTP made no measurable difference (11.86 tok/s either
+    way); ran on the WRONG non-imatrix GGUF — superseded by the imatrix build.

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>llm-inference-bench orchestrator</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 2rem; background: #0f1117; color: #e6e6e6; }
+  h1 { font-size: 1.3rem; }
+  h2 { font-size: 1rem; margin-top: 2rem; }
+  .card { background: #1a1d27; border: 1px solid #2a2e3d; border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; text-transform: uppercase; }
+  .st-queued { background: #3d3a1f; color: #e0d06a; }
+  .st-running { background: #1f3d33; color: #6ae0a8; }
+  .st-done { background: #1f3d2a; color: #6ae08a; }
+  .st-failed { background: #4a2020; color: #e07a6a; }
+  .st-pending, .st-running.b { background: #3a3a3a; color: #ccc; }
+  pre { white-space: pre-wrap; background: #11131a; padding: 0.5rem; border-radius: 6px; font-size: 0.8rem; }
+  #log { min-height: 8rem; max-height: 22rem; overflow: auto; }
+  .log-btn, .stdout-link { font-size: 0.7rem; margin-left: 0.4rem; cursor: pointer; color: #6aaee0; background: none; border: none; padding: 0; text-decoration: underline; }
+  select { min-height: 12rem; width: 100%; }
+  .row { display: flex; gap: 2rem; align-items: flex-start; }
+  .col { flex: 1; }
+  button { margin-top: 0.5rem; }
+  .muted { color: #888; font-size: 0.85rem; }
+  .error { color: #e07a6a; }
+</style>
+</head>
+<body>
+<h1>llm-inference-bench orchestrator</h1>
+<div class="row">
+  <div class="col card">
+    <h2>Enqueue a run</h2>
+    <div class="muted">Ctrl/⌘-click to co-launch multiple builds in one run (benchmarked serially).</div>
+    <select id="builds" multiple></select>
+    <button id="enqueue">Enqueue as one run</button>
+    <button id="enqueue-separate">Enqueue each as its own run</button>
+    <div id="enqueue-msg" class="error"></div>
+    <h2>Advanced</h2>
+    <textarea id="raw" rows="4" placeholder='{"runs": [["svc-a"], ["svc-b", "svc-c"]]}' style="width:100%"></textarea>
+    <button id="enqueue-raw">POST /runs with JSON above</button>
+  </div>
+  <div class="col card">
+    <h2>Queue <span class="muted">(polls every 5s)</span></h2>
+    <div id="queue"></div>
+  </div>
+</div>
+<div class="card">
+  <h2>Log <span class="muted" id="log-label">auto-follows the active run</span></h2>
+  <pre id="log"><span class="muted">Run logs stream here as the worker executes — stages, commands, and bench output.</span></pre>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function refreshBuilds() {
+  const r = await fetch("/builds");
+  const { builds } = await r.json();
+  $("builds").innerHTML = builds.map(b =>
+    `<option value="${b.name}">${b.name}${b.always_up ? " (always-up)" : ""}${b.has_build_yaml ? " • build.yaml" : ""}</option>`
+  ).join("");
+}
+
+function statusBadge(status) {
+  return `<span class="status st-${status}">${status}</span>`;
+}
+
+function buildCell(runId, buildName, b) {
+  const bits = [statusBadge(b.status)];
+  if (b.attempts) bits.push(`attempts ${b.attempts}`);
+  if (b.raw_json) bits.push(`<a href="#" data-copy="${b.raw_json}" class="copy">${b.raw_json}</a>`);
+  if (b.stdout_log) bits.push(`<button class="stdout-link" data-run="${runId}" data-build="${buildName}">stdout</button>`);
+  if (b.error) bits.push(`<span class="error">${b.error}</span>`);
+  return `<div style="margin:4px 0">${bits.join(" · ")}</div>`;
+}
+
+let currentLog = { runId: null, build: null, es: null };
+let autoFollow = true;
+
+function stopStream() {
+  if (currentLog.es) { currentLog.es.close(); currentLog.es = null; }
+}
+
+function showLog(runId, build = null) {
+  if (currentLog.runId === runId && currentLog.build === build) return;
+  stopStream();
+  currentLog.runId = runId;
+  currentLog.build = build;
+  const pre = $("log");
+  pre.textContent = "";
+  $("log-label").textContent = `Run ${runId}${build ? ` · ${build}` : ""}`;
+  const url = `/runs/${runId}/log${build ? `?build=${encodeURIComponent(build)}` : ""}`;
+  if (build) {
+    fetch(url).then(r => r.ok ? r.text() : "").then(t => {
+      if (currentLog.runId !== runId || currentLog.build !== build) return;
+      pre.textContent = t || `(no stdout log for ${build} yet)`;
+      pre.scrollTop = pre.scrollHeight;
+    });
+    return;
+  }
+  const es = new EventSource(`${url}?stream=1`);
+  currentLog.es = es;
+  es.onmessage = (e) => {
+    pre.textContent += e.data + "\n";
+    pre.scrollTop = pre.scrollHeight;
+  };
+  es.addEventListener("end", stopStream);
+  es.onerror = stopStream;
+}
+
+async function refreshQueue() {
+  const r = await fetch("/queue");
+  const { runs } = await r.json();
+  if (!runs.length) {
+    $("queue").innerHTML = '<div class="muted">No runs yet.</div>';
+  } else {
+    $("queue").innerHTML = runs.map(run => `
+      <div style="border-top:1px solid #2a2e3d; padding:8px 0">
+        <div><b>Run ${run.id}</b> ${statusBadge(run.status)} <button class="log-btn" data-run="${run.id}">log</button> <span class="muted">${run.created_at}</span></div>
+        ${run.error ? `<div class="error">${run.error}</div>` : ""}
+        <div style="margin-left:1rem">${run.builds.map(b => buildCell(run.id, b, run.per_build[b] || {status:"?"})).join("")}</div>
+      </div>
+    `).join("");
+  }
+  document.querySelectorAll(".log-btn").forEach(btn =>
+    btn.addEventListener("click", () => { autoFollow = false; showLog(btn.dataset.run); })
+  );
+  document.querySelectorAll(".stdout-link").forEach(btn =>
+    btn.addEventListener("click", () => { autoFollow = false; showLog(btn.dataset.run, btn.dataset.build); })
+  );
+  const active = runs.find(r => r.status === "queued" || r.status === "running");
+  if (autoFollow && active && currentLog.runId !== active.id) showLog(active.id);
+}
+
+async function enqueue(builds) {
+  const r = await fetch("/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runs: builds }),
+  });
+  const body = await r.json();
+  if (!r.ok) { $("enqueue-msg").textContent = body.detail || JSON.stringify(body); return; }
+  $("enqueue-msg").textContent = "";
+  refreshQueue();
+}
+
+$("enqueue").addEventListener("click", () => {
+  const picks = [...$("builds").selectedOptions].map(o => o.value);
+  if (picks.length) enqueue([picks]);
+});
+$("enqueue-separate").addEventListener("click", () => {
+  const picks = [...$("builds").selectedOptions].map(o => o.value);
+  if (picks.length) enqueue(picks.map(p => [p]));
+});
+$("enqueue-raw").addEventListener("click", async () => {
+  try { JSON.parse($("raw").value); } catch (e) {
+    $("enqueue-msg").textContent = "Invalid JSON"; return;
+  }
+  const r = await fetch("/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: $("raw").value,
+  });
+  const body = await r.json();
+  if (!r.ok) { $("enqueue-msg").textContent = body.detail || JSON.stringify(body); return; }
+  $("enqueue-msg").textContent = "";
+  refreshQueue();
+});
+
+refreshBuilds();
+refreshQueue();
+setInterval(refreshQueue, 5000);
+</script>
+</body>
+</html>

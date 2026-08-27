@@ -1,0 +1,15 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: qwen3.6-35b-a3b-gguf:latest @ localhost:11439                         │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Engine: ollama (explicit --engine)  Models: ['glm-4.7-flash-gguf:latest', 
+'qwen3.6-27b-gguf:latest', 'qwen3.6-35b-a3b-gguf:latest', 
+'gemma-4-26b-a4b-gguf:latest']
+Prefill contexts (explicit): ['8k', '16k', '32k']
+Generating padding texts (run=sunzcbxuxqdr, up to 64k)...
+Done.
+

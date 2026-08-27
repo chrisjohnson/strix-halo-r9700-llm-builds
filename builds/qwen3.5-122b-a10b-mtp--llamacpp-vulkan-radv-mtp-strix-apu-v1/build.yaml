@@ -1,0 +1,13 @@
+name: qwen3.5-122b-a10b-mtp--llamacpp-vulkan-radv-mtp-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Qwen3.5-122B-A10B (MTP)
+  params: 122B
+  active_params: 10B
+  quant: Q5_K_XL
+  mtp: true
+  dflash: false
+  notes: >-
+    --spec-type draft-mtp --spec-draft-n-max 3 per llama.cpp PR; MTP-tensor-
+    bearing GGUF.

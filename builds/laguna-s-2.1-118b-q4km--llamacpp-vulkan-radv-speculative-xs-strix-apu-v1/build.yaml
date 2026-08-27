@@ -1,0 +1,13 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-speculative-xs-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 + Laguna-XS-2.1 (speculative-xs)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Classic speculative decoding with the XS draft. Measured negative (does
+    not beat the plain baseline).

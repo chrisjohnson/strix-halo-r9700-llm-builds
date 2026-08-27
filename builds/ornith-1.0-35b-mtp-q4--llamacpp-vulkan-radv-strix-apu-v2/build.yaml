@@ -1,0 +1,22 @@
+name: ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v2
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: ornith-1.0 (MTP-Q4_K_M)
+  params: 35B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  notes: >-
+    Serving-config-only change vs v1: quantize the MTP draft model's own
+    KV cache (--spec-draft-type-k/-v q8_0, was unset/f16 default) in
+    addition to the main model's KV cache (already q8_0 on v1). Real test
+    (2026-08-21, direct :8136): no memory win - real GTT was 23.37GB,
+    slightly *higher* than v1's known 22.6GB baseline (within noise, but
+    certainly not a reduction). Speed/quality unaffected (81.6 tok/s mean,
+    same range as v1). Likely explanation: this build's MTP uses an
+    internal draft head within the same model (no separate -md draft
+    model file), so there may not be a large distinct draft KV buffer to
+    quantize in the first place - unlike classic two-model speculative
+    decoding. Not promoted; v1 remains the standing endpoint. See M-126.

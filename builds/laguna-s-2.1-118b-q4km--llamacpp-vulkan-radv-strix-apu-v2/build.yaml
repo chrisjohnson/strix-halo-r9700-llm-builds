@@ -1,0 +1,18 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v2
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 (UD-Q4_K_M)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Serving-config-only change vs v1 (same engine recipe, same model).
+    Superseded by v4 (2026-08-21, explicit -np 4 --kv-unified - same
+    behavior as this build's unset-np/4-slot default, just explicit) as
+    the standing planner endpoint - purely for self-documentation, so a
+    future -np edit can't silently disable --kv-unified the way it broke
+    v3 (see v3's build.yaml). Functionally this build and v4 are
+    equivalent. Kept defined here for reference.

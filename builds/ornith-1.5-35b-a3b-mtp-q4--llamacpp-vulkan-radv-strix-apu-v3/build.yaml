@@ -1,0 +1,42 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    p-min tuning follow-up to v2 (n-max=1, real full sweep 49.3-65.6
+    tok/s at p-min=0.6). Quick smoke-test sweep (single ~300-token real
+    request each) across p-min 0.3/0.5/0.6/0.7/0.9, holding n-max=1:
+    p-min=0.3 79.00 tok/s (119/162 draft accepted, ~73%), p-min=0.5
+    74.89 tok/s (~75%), p-min=0.6 (v2's own smoke-test baseline) 70.87
+    tok/s (~82%), p-min=0.7 76.53 tok/s (~90%), p-min=0.9 71.79 tok/s
+    (~93%) - non-monotonic: lower p-min accepts less strictly per-shot
+    but takes more shots overall, and that trade wins here. p-min=0.3
+    is the clear winner, beating even the plain sibling's real
+    full-sweep numbers (53.0-65.7 tok/s) in this quick test. This build
+    changes ONLY --spec-draft-p-min: 0.6 -> 0.3 vs v2 (n-max stays 1).
+
+    Real llm-inference-bench sweep (2026-08-22, run 115, full matrix
+    concurrency 1/2/4/8 x context 0/16k/32k/64k) CONFIRMS it: aggregate
+    throughput 52.2-67.0 tok/s. Beats the plain sibling at ctx=0 (67.0
+    vs 64.6, +3.7%), ctx=16k (66.3 vs 65.7, +0.9%), and ctx=32k (64.1
+    vs 62.9, +1.9%); only marginally behind at ctx=64k (57.2 vs 58.4,
+    -2.1%). This is the first MTP config that genuinely beats plain
+    decoding for Ornith 1.5, not just a smoke-test artifact. Promoted
+    2026-08-22 as the new standing medium-moe endpoint, superseding
+    the plain build.
+
+    Promoted to full standard treatment same day (Chris's explicit
+    directive): restart:always + always-up, now that this config is
+    confirmed via real sweep rather than still under active validation.
+    See docker-compose.yml's comment on this block for the accepted
+    trade-off (reintroduces the always-up-sharing-a-GPU-with-
+    benchmarkable-siblings exposure the qwen3.8-27b-q6kl incident
+    found - but strix-apu already carries that exact risk via laguna
+    v4, so this isn't new exposure for this GPU).

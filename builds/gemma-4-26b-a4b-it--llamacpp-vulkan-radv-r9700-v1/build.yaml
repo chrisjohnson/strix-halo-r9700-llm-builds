@@ -1,0 +1,25 @@
+name: gemma-4-26b-a4b-it--llamacpp-vulkan-radv-r9700-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Gemma-4-26B-A4B-it (Q4_K_M)
+  params: 26B
+  active_params: 4B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    First r9700 build for a Gemma model - GGUF already downloaded
+    (unsloth Q4_K_M, shared with the existing strix-apu llama.cpp build
+    gemma-4-26b-a4b-it--llamacpp-vulkan-radv-strix-apu-v1, same file, no
+    new download needed for this one). Sparse MoE, 26B total / 4B
+    active. Real file size 16,947,541,728 bytes (~15.78 GiB) - very
+    comfortable fit on the r9700's 29.80 GiB actual VRAM, well short of
+    even needing careful KV-cache math the way qwen3.8-27b-q6kl did.
+    -c 131072 chosen to match this repo's established r9700 default
+    (not pushed to the model's full 262144 native context - that would
+    need the same kind of real KV-cache validation q6kl required, not
+    done here). Same generic flags as every other r9700 GGUF build
+    (-fa 1 -ngl 999 -ctk/-ctv q8_0 --cache-ram 2048). Not yet
+    benchmarked.

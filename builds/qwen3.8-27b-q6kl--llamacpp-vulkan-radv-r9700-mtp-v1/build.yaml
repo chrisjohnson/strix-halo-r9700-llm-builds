@@ -1,0 +1,73 @@
+name: qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-27B
+  params: 27.32B
+  active_params: null
+  quant: Q6_K_L
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    Third quant data point for the quality-vs-context tradeoff flagged
+    but unresolved in M-125. -c 262144 (full native context, vs 131072
+    on the q4km/q8 builds) with -ctk q4_0 -ctv q4_0 (vs q8_0 on every
+    other build here) - real math worked out before downloading: at
+    q8_0 KV cache, full 256K needs 8.0 GiB, more than the 7.37 GiB left
+    after Q6_K_L's 22.43 GiB weights on this card's 29.80 GiB actual
+    VRAM; q4_0 halves that to 4.0 GiB, which fits.
+
+    Confirmed live 2026-08-22, TWICE, with a genuinely different result
+    each time depending on GPU contention - important enough to record
+    both. First test ran concurrently with the standing medium-dense
+    build (qwen3.8-27b-q4km-mtp-v3) still loaded on the same r9700:
+    VRAM sat at 31.82/31.86 GiB used (~45 MiB free), load took ~2
+    minutes, and real requests degraded to 6-8 tok/s on PROMPT
+    PROCESSING (should be far faster than generation, not slower) and
+    timed out - not usable. Retested clean, with medium-dense stopped
+    first: loaded in 36.5s, settled at 28.01/31.86 GiB used (3.85 GiB
+    genuinely free, matching the pre-download math closely), and a real
+    request completed in 3.4s at 35.28 tok/s generation / 103.79 tok/s
+    prefill with MTP draft acceptance 52/90 (~58%) - healthy, comparable
+    to the q4km-mtp sibling's 41-52 tok/s.
+
+    Conclusion: Q6_K_L + full 256K context + q4_0 KV cache genuinely
+    holds and performs well - but ONLY with sole use of the r9700; it
+    does not have enough headroom to coexist with another qwen3.8-27b
+    build loaded concurrently on the same GPU. Not yet benchmarked: the
+    actual quality cost of q4_0 vs q8_0 KV cache on this model, and
+    behavior with prompts that actually approach the 256K ceiling
+    (tested only with small prompts so far - the VRAM footprint is
+    already fully reserved upfront regardless of prompt size, so this
+    doesn't affect the fit/headroom finding, but real long-context
+    generation quality is still unverified).
+
+    Promoted 2026-08-22 (Chris's directive) as the new medium-dense
+    production endpoint, superseding qwen3.8-27b-q4km-mtp (v1/v3) -
+    litellm role flipped via scripts/set-role.sh (live-verified),
+    dsh/dsh-home-seed/settings.yaml's medium-dense contextWindow bumped
+    131072 -> 262144 to match. Cannot coexist with another qwen3.8-27b
+    build on this GPU (see contention finding above).
+
+    restart:always/always-up removed 2026-08-22: making this always-up
+    (matching every other standing role's pattern) made it the ONLY
+    always-up service on r9700 while every sibling qwen3.8-27b build
+    stays plain-exclusive, and llm-inference-bench's exclusivity logic
+    at the time only stopped non-always-up services on a shared GPU - so
+    it silently blocked every other r9700 build from ever being
+    benchmarked (confirmed live: a same-GPU run loaded alongside it
+    instead of replacing it, degrading both to ~unusable). Without
+    restart:always this went down twice more that session (once for ~9
+    hours unnoticed) when a benchmark run stopped it and nothing
+    restarted it.
+
+    restart:always/always-up RE-ADDED 2026-08-23 (Chris's directive):
+    the orchestrator itself is the better fix - it now stops every model
+    build sharing a GPU regardless of always-up status (see
+    docker/llm-inference-bench/app/orchestrator.py's
+    _establish_exclusivity), so the original blocking problem is fixed
+    at its actual source. This no longer needs to trade away self-
+    healing to get that. Not restored automatically after a benchmark
+    stops it (deliberate) - restart:always is for crashes/reboots, not
+    a benchmark's deliberate stop.

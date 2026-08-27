@@ -1,0 +1,13 @@
+name: qwen3.6-27b--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Qwen3.6-27B
+  params: 27B
+  active_params: null
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    Standing vLLM service. No toolbox table entry for this exact model — flags
+    chosen conservatively.

@@ -1,0 +1,17 @@
+name: gemma-4-26b-a4b-it--ollama-vulkan-0177-strix-apu-v1
+status: BROKEN
+derived:
+  engine: ollama-vulkan-0177-v1
+  model: Gemma-4-26B-A4B-it
+  params: 25.2B
+  active_params: 4B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Registration succeeded (ollama create fine) but generation is
+    broken/impractical on this engine (catalog BROKEN). Bench targets the
+    shared ollama_data store.
+bench:
+  model: gemma-4-26b-a4b-gguf:latest
+  engine: ollama

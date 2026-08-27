@@ -1,0 +1,42 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Next-gen medium-moe candidate, using the standing Ornith-1.0 build
+    (ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3) as the
+    config basis - same GPU pin (Vulkan1), context/output size (-c 131072
+    -n 8192), KV cache precision (q8_0), and cache-ram starting point
+    (2048, matching 1.0's ORIGINAL value before the M-126 bump to 4096 -
+    not yet re-validated for 1.5's real memory headroom). Real
+    architecture change from 1.0: 1.0 was dense 35.5B with no native MTP
+    head; 1.5 is a genuine sparse MoE (36B total, 256 routed experts + 1
+    shared, ~3B active per token, hybrid attention) with a NATIVE MTP
+    head from ornith-ai's own release this time (mtp_num_hidden_layers:
+    1, its own full 256-expert head, ~822M params) - no third-party graft
+    needed (unlike 1.0's --spec-type draft-mtp, which relied on
+    singulared's repo splicing Qwen3.6's MTP head onto a model that
+    shipped without one). --spec-draft-n-max 4 --spec-draft-p-min 0.6
+    carried over unchanged from 1.0 as a starting point - not yet
+    re-tuned for 1.5's real acceptance behavior.
+
+    Real llm-inference-bench sweep (2026-08-22, run 113, full matrix
+    concurrency 1/2/4/8 x context 0/16k/32k/64k): aggregate throughput
+    45.4-58.5 tok/s. Genuinely surprising result vs the plain (no
+    speculative decoding) sibling
+    (ornith-1.5-35b-a3b-q4--llamacpp-vulkan-radv-strix-apu-v1, 53.0-65.7
+    tok/s across the same matrix): MTP is CONSISTENTLY SLOWER here,
+    ~10-17% depending on context (ctx=0: 58.5 vs 64.6, -9%; ctx=16k: 56.8
+    vs 65.7, -14%; ctx=32k: 52.2 vs 62.9, -17%; ctx=64k: 49.6 vs 58.4,
+    -15%) - the opposite of Ornith 1.0, where MTP was a clear win.
+    Untuned --spec-draft-n-max/-p-min inherited from 1.0 are the likely
+    culprit (never re-validated against 1.5's real MoE draft-acceptance
+    behavior), but not yet root-caused. Not promoted - the plain sibling
+    is the better standing candidate as-is.

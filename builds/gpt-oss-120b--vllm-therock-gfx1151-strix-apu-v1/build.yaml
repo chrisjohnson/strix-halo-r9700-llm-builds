@@ -1,0 +1,12 @@
+name: gpt-oss-120b--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: GPT-OSS-120B
+  params: 120B
+  active_params: 5.1B
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    First real serve/benchmark of this model in any form on this box.

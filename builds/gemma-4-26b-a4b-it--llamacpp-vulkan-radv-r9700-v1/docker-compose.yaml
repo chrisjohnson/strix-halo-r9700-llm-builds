@@ -1,0 +1,20 @@
+name: docker
+services:
+  gemma-4-26b-a4b-it--llamacpp-vulkan-radv-r9700-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: gemma-4-26b-a4b-it--llamacpp-vulkan-radv-r9700-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/ollama-gemma-4-26b-a4b-it:/models:ro
+    command: 'llama-server -m /models/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf -dev Vulkan0
+      -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --cache-ram 2048
+      --host 0.0.0.0 --port 8080 -a gemma-4-26b-a4b-it-r9700 --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8147:8080

@@ -1,0 +1,19 @@
+name: docker
+services:
+  ds4-deepseek-v4-flash-iq2xxs--ds4-strix-halo-strix-apu-v1:
+    image: kyuz0/strix-halo-ds4-toolbox:rocm-7.14
+    container_name: ds4-deepseek-v4-flash-iq2xxs--ds4-strix-halo-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/ds4-deepseek-v4-flash-iq2xxs:/models:ro
+    command: 'ds4-server -m /models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2.gguf
+      --ctx 128000 --prefill-chunk 1024 --host 0.0.0.0 --port 8080
+
+      '
+    ports:
+    - 127.0.0.1:8127:8080

@@ -1,0 +1,32 @@
+name: gemma-4-31b-it-mtp--llamacpp-vulkan-radv-r9700-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Gemma-4-31B-it (Q5_K_M)
+  params: 31B
+  active_params: null
+  quant: Q5_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    MTP sibling of gemma-4-31b-it--llamacpp-vulkan-radv-r9700-v1 (plain,
+    real sweep 16.0-21.7 tok/s). Uses unsloth's own MTP drafter
+    (unsloth/gemma-4-31B-it-GGUF, MTP/mtp-gemma-4-31B-it-Q8_0.gguf,
+    514,687,104 bytes) - a real, unsloth-trained head, not a
+    third-party graft. Genuinely different situation from DFlash2:
+    this is a MERGED llama.cpp feature (PR ggml-org/llama.cpp#23398,
+    2026-06-07), and confirmed live the STOCK
+    kyuz0/amd-strix-halo-toolboxes:vulkan-radv image (build 10524)
+    already supports it - no custom engine build needed.
+
+    Real live tests before landing (2026-08-22): first at a smaller
+    -c 8192 smoke config (46.65 tok/s, 68/117 draft accepted ~58%),
+    then at the REAL -c 163840 (160K) target config: loaded
+    successfully, VRAM 28.53 GiB used (3.33 GiB genuinely free, a bit
+    tighter than the plain sibling's 4.04 GiB but still comfortable),
+    real generation 40.84 tok/s / 61.37 tok/s prefill, draft
+    acceptance 202/379 (~53%). This is roughly a 2x speedup over the
+    plain sibling's 16.0-21.7 tok/s range - MTP is a clear, real win
+    here unlike Ornith 1.5's mixed result. Not yet run through the
+    full llm-inference-bench matrix - that's queued next.

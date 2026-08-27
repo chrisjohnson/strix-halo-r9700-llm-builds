@@ -1,0 +1,13 @@
+name: north-mini-code-1.0-w4a16--vllm-therock-gfx1151-strix-apu-v1
+status: BROKEN
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: North-Mini-Code-1.0
+  params: 30B
+  active_params: 3B
+  quant: w4a16
+  mtp: false
+  dflash: false
+  notes: >-
+    Smoke-tested 2026-07-27 via real docker run; fails to serve/benchmark
+    cleanly (catalog BROKEN).

@@ -1,0 +1,25 @@
+name: qwen3.8-27b-q4km--llamacpp-vulkan-radv-r9700-mtp-v3
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-27B (Q4_K_M)
+  params: 27B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    Serving-config-only change vs v1: --cache-ram raised 2048 -> 4096
+    (2026-08-21, M-126). Same rationale as ornith-v3 - real live usage
+    under sustained triple-model real work showed ~11.2GB headroom
+    holding rock-steady with the 2GB caps in place; doubling both
+    budgets together costs at most +2GB more each in the worst case,
+    leaving ~7GB genuine safety margin.
+
+    Was manually run as the live medium-dense backend for a time (the
+    docker-compose.yml restart:always promotion from v1 was never
+    finished/committed - found and fixed as drift during the 2026-08-22
+    swap below). Superseded 2026-08-22 by
+    qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1 (Q6_K_L, full
+    262144 context) as the standing medium-dense endpoint.

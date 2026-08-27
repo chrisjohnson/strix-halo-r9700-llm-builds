@@ -1,0 +1,44 @@
+name: ornith-1.5-35b-a3b-q4--llamacpp-vulkan-radv-strix-apu-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Plain (no speculative decoding) sibling of
+    ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1 - same
+    GGUF, same GPU pin/context/output config, MTP flags omitted entirely.
+    Exists as the real baseline to measure the native-MTP head's actual
+    speedup against, the same way qwen3.8-27b-q4km--llamacpp-vulkan-radv-
+    r9700-v1 (plain) serves as the baseline for its own -mtp sibling.
+
+    Real llm-inference-bench sweep (2026-08-22, run 110, full matrix
+    concurrency 1/2/4/8 x context 0/16k/32k/64k): aggregate throughput
+    53.0-65.7 tok/s. Genuinely surprising result: this plain build
+    OUTPERFORMS its own -mtp-q4 sibling by ~10-17% across every context
+    tested (see that build's build.yaml for the full comparison) - the
+    opposite of Ornith 1.0, where MTP was the clear win. This is
+    currently the better real candidate for the medium-moe slot as-is,
+    not the -mtp sibling, until the MTP underperformance is root-caused
+    (likely untuned --spec-draft-n-max/-p-min inherited from 1.0, not
+    yet re-validated for 1.5's real MoE draft-acceptance behavior). MTP
+    tuning (v2, n-max 4->1) closed most of the gap but only reached
+    near-parity - still not a clear win over this plain build.
+
+    Promoted 2026-08-22 (Chris's directive) as the new standing
+    medium-moe production endpoint, superseding ornith-1.0-35b-mtp-q4 -
+    litellm role flipped via scripts/set-role.sh. Deliberately NOT
+    restart:always/always-up - see docker-compose.yml's comment on this
+    block for why (the qwen3.8-27b-q6kl always-up incident this same
+    session).
+
+    Superseded again same day: v3's p-min tuning (n-max=1, p-min=0.3)
+    found a real MTP win over this build - real sweep 52.2-67.0 tok/s
+    vs this build's 53.0-65.7, ahead at ctx=0/16k/32k, only marginally
+    behind at ctx=64k. ornith-1.5-35b-a3b-mtp-q4-v3 is now the standing
+    medium-moe endpoint instead.

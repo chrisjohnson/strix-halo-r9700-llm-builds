@@ -1,0 +1,13 @@
+name: glm-4.7-flash-awq--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: GLM-4.7-Flash
+  params: 30B
+  active_params: 3B
+  quant: AWQ
+  mtp: false
+  dflash: false
+  notes: >-
+    AWQ-quantized serving tier. Healthy in ~190s at startup; best concurrency
+    headroom of any model tested.

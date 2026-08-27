@@ -1,0 +1,13 @@
+name: deepseek-v4-flash-iq2xxs--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: DeepSeek-V4-Flash (IQ2_XXS imatrix)
+  params: 284B
+  active_params: 13B
+  quant: IQ2_XXS
+  mtp: false
+  dflash: false
+  notes: >-
+    Best-effort standing service for a build previously run via llama-bench
+    only. Not yet run as a server on this box.

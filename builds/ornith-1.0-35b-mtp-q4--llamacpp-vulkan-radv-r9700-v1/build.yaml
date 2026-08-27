@@ -1,0 +1,16 @@
+name: ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-r9700-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.0-35B-MTP
+  params: 35.51B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    R9700 counterpart to the standing strix-apu production build
+    (ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1), same MTP
+    flags. Plain baseline pp512 2835.67, tg128 100.15 tok/s; live MTP
+    timing generation 106.09 tok/s, draft acceptance 0.85654.

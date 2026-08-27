@@ -1,0 +1,13 @@
+name: qwen3.5-122b-a10b-awq4bit--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Qwen3.5-122B-A10B
+  params: 122B
+  active_params: 10B
+  quant: AWQ
+  mtp: false
+  dflash: false
+  notes: >-
+    Swapped in via swap_model_start.sh with SWAP_ENV_VARS (AWQ variant of the
+    122B-A10B vLLM tier).

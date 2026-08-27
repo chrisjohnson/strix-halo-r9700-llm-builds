@@ -1,0 +1,24 @@
+name: qwen3.6-27b--ollama-vulkan-0177-strix-apu-v1
+status: WORKING
+derived:
+  engine: ollama-vulkan-0177-v1
+  model: Qwen3.6-27B
+  params: 26.9B
+  active_params: null
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Single /api/generate request measured (eval_count 613). Bench targets the
+    shared ollama_data store.
+bench:
+  model: qwen3.6-27b-gguf:latest
+  engine: ollama
+  timeout_s: 14400
+  prefill_contexts: "8192,16384,32768"
+  notes: >-
+    Prefill capped at 32k and build timeout raised to 4h (default 2h): the
+    64k-context decode cells still need a 64k-token prefill warmup each on
+    ollama/Vulkan (~13 tok/s decode, dense 27B), which exceeds 7200s — runs
+    90 and 92 both timed out at 7200s. Decode matrix unchanged
+    (0-64k x C1-8), so comparison stays apples-to-apples.

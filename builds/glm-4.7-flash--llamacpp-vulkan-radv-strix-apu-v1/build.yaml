@@ -1,0 +1,13 @@
+name: glm-4.7-flash--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: GLM-4.7-Flash
+  params: 30B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    81.3 tok/s prompt processing, 70.1 tok/s generation (256-token context).
+    Served as glm-4.7-flash-judge.

@@ -1,0 +1,14 @@
+name: ds4-deepseek-v4-flash-iq2xxs-imatrix--ds4-strix-halo-strix-apu-v1
+status: WORKING
+derived:
+  engine: ds4-strix-halo-v1
+  model: DeepSeek-V4-Flash (DS4/DwarfStar, IQ2XXS, imatrix)
+  params: 284B
+  active_params: 13B
+  quant: IQ2XXS
+  mtp: false
+  dflash: true
+  notes: >-
+    M-051 corrected re-run on the recommended imatrix GGUF (STRIXHALO.md).
+    Standing service is best-effort; --prefill-chunk 1024 works around the
+    antirez/ds4 #359 allocator OOM at --ctx 128000.

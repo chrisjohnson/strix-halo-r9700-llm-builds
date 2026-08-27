@@ -1,0 +1,15 @@
+name: qwen3.6-27b--llamacpp-vulkan-radv-r9700-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.6-27B
+  params: 26.9B
+  active_params: null
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    R9700 counterpart to qwen3.6-27b--llamacpp-vulkan-radv-strix-apu-v1
+    (llama-bench measured pp512 1050.30, tg128 28.98 tok/s vs the
+    strix-apu baseline).

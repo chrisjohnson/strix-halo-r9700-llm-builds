@@ -1,0 +1,84 @@
+0.00.246.745 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.249.144 W srv  llama_server: -----------------
+0.00.249.145 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.249.146 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.249.146 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.249.146 W srv  llama_server: -----------------
+0.00.250.733 I srv    load_model: loading model '/models/UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf'
+5.06.407.282 W resolve_fused_ops: layer 2 is assigned to device Vulkan0 but Lightning Indexer is assigned to device CPU (usually due to missing support)
+5.06.407.286 W resolve_fused_ops: Lightning Indexer not supported, set to disabled
+5.06.409.857 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC pre is assigned to device CPU (usually due to missing support)
+5.06.409.859 W resolve_fused_ops: fused DeepSeek V4 HC pre not supported, set to disabled
+5.06.412.833 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC comb is assigned to device CPU (usually due to missing support)
+5.06.412.834 W resolve_fused_ops: fused DeepSeek V4 HC comb not supported, set to disabled
+5.06.423.203 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC post is assigned to device CPU (usually due to missing support)
+5.06.423.207 W resolve_fused_ops: fused DeepSeek V4 HC post not supported, set to disabled
+5.06.482.253 W ggml_vulkan: Failed to allocate pinned memory (Requested buffer size exceeds device buffer size limit: ErrorOutOfDeviceMemory)
+5.06.482.277 W ggml_vulkan: Failed to allocate pinned memory (Requested buffer size exceeds device buffer size limit: ErrorOutOfDeviceMemory)
+radv/amdgpu: Not enough memory for command submission.
+/lib64/libggml-base.so.0(+0x4825) [0x768ea0a30825]
+/lib64/libggml-base.so.0(ggml_print_backtrace+0x1eb) [0x768ea0a30bfb]
+/lib64/libggml-base.so.0(+0x182b9) [0x768ea0a442b9]
+/lib64/libstdc++.so.6(+0x1ea1c) [0x768ea01a5a1c]
+/lib64/libstdc++.so.6(_ZSt10unexpectedv+0x0) [0x768ea018fcfc]
+/lib64/libstdc++.so.6(+0x1ecc8) [0x768ea01a5cc8]
+/lib64/libggml-vulkan.so.0(_ZN28vk_queue_handle_synchronized6submitEN2vk10ArrayProxyIKNS0_10SubmitInfoEEENS0_5FenceE+0x442) [0x768ea0d3b192]
+/lib64/libggml-vulkan.so.0(+0x812c2) [0x768ea0b7a2c2]
+/lib64/libggml-vulkan.so.0(+0x82256) [0x768ea0b7b256]
+/lib64/libggml-vulkan.so.0(+0x82560) [0x768ea0b7b560]
+/lib64/libggml-base.so.0(ggml_backend_sched_graph_compute_async+0x3b2) [0x768ea0a4d672]
+/lib64/libllama.so.0(_ZN13llama_context13graph_computeEP11ggml_cgraphb+0xa0) [0x768ea3df1910]
+/lib64/libllama.so.0(_ZN13llama_context14process_ubatchERK12llama_ubatch14llm_graph_typeP22llama_memory_context_iR11ggml_status+0xeb) [0x768ea3df559b]
+/lib64/libllama.so.0(_ZN13llama_context6decodeERK11llama_batch+0x368) [0x768ea3dfbea8]
+/lib64/libllama.so.0(llama_decode+0xe) [0x768ea3dfdaae]
+/lib64/libllama-common.so.0(_Z23common_init_from_paramsR13common_paramsb+0x368) [0x768ea438e518]
+/lib64/libllama-server-impl.so(_ZN19server_context_impl10load_modelER13common_params+0x877) [0x768ea47d7df7]
+/lib64/libllama-server-impl.so(_Z12llama_serverR13common_paramsiPPc+0x3d86) [0x768ea47085b6]
+/lib64/libllama-server-impl.so(_Z12llama_serveriPPc+0x1002) [0x768ea470a622]
+/lib64/libc.so.6(+0x35b5) [0x768e9fe745b5]
+/lib64/libc.so.6(__libc_start_main+0x88) [0x768e9fe74668]
+llama-server() [0x4003b5]
+terminate called after throwing an instance of 'vk::DeviceLostError'
+  what():  vk::Queue::submit: ErrorDeviceLost
+0.00.271.331 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.272.483 W srv  llama_server: -----------------
+0.00.272.484 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.272.484 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.272.485 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.272.485 W srv  llama_server: -----------------
+0.00.273.719 I srv    load_model: loading model '/models/UD-IQ2_XXS/DeepSeek-V4-Flash-UD-IQ2_XXS-00001-of-00003.gguf'
+5.26.158.067 W resolve_fused_ops: layer 2 is assigned to device Vulkan0 but Lightning Indexer is assigned to device CPU (usually due to missing support)
+5.26.158.070 W resolve_fused_ops: Lightning Indexer not supported, set to disabled
+5.26.160.601 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC pre is assigned to device CPU (usually due to missing support)
+5.26.160.603 W resolve_fused_ops: fused DeepSeek V4 HC pre not supported, set to disabled
+5.26.163.569 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC comb is assigned to device CPU (usually due to missing support)
+5.26.163.571 W resolve_fused_ops: fused DeepSeek V4 HC comb not supported, set to disabled
+5.26.173.901 W resolve_fused_ops: layer 0 is assigned to device Vulkan0 but fused DeepSeek V4 HC post is assigned to device CPU (usually due to missing support)
+5.26.173.905 W resolve_fused_ops: fused DeepSeek V4 HC post not supported, set to disabled
+5.26.231.102 W ggml_vulkan: Failed to allocate pinned memory (Requested buffer size exceeds device buffer size limit: ErrorOutOfDeviceMemory)
+5.26.231.125 W ggml_vulkan: Failed to allocate pinned memory (Requested buffer size exceeds device buffer size limit: ErrorOutOfDeviceMemory)
+radv/amdgpu: Not enough memory for command submission.
+/lib64/libggml-base.so.0(+0x4825) [0x79e88bab1825]
+/lib64/libggml-base.so.0(ggml_print_backtrace+0x1eb) [0x79e88bab1bfb]
+/lib64/libggml-base.so.0(+0x182b9) [0x79e88bac52b9]
+/lib64/libstdc++.so.6(+0x1ea1c) [0x79e88b226a1c]
+/lib64/libstdc++.so.6(_ZSt10unexpectedv+0x0) [0x79e88b210cfc]
+/lib64/libstdc++.so.6(+0x1ecc8) [0x79e88b226cc8]
+/lib64/libggml-vulkan.so.0(_ZN28vk_queue_handle_synchronized6submitEN2vk10ArrayProxyIKNS0_10SubmitInfoEEENS0_5FenceE+0x442) [0x79e88bdbc192]
+/lib64/libggml-vulkan.so.0(+0x812c2) [0x79e88bbfb2c2]
+/lib64/libggml-vulkan.so.0(+0x82256) [0x79e88bbfc256]
+/lib64/libggml-vulkan.so.0(+0x82560) [0x79e88bbfc560]
+/lib64/libggml-base.so.0(ggml_backend_sched_graph_compute_async+0x3b2) [0x79e88bace672]
+/lib64/libllama.so.0(_ZN13llama_context13graph_computeEP11ggml_cgraphb+0xa0) [0x79e88ee72910]
+/lib64/libllama.so.0(_ZN13llama_context14process_ubatchERK12llama_ubatch14llm_graph_typeP22llama_memory_context_iR11ggml_status+0xeb) [0x79e88ee7659b]
+/lib64/libllama.so.0(_ZN13llama_context6decodeERK11llama_batch+0x368) [0x79e88ee7cea8]
+/lib64/libllama.so.0(llama_decode+0xe) [0x79e88ee7eaae]
+/lib64/libllama-common.so.0(_Z23common_init_from_paramsR13common_paramsb+0x368) [0x79e88f40f518]
+/lib64/libllama-server-impl.so(_ZN19server_context_impl10load_modelER13common_params+0x877) [0x79e88f858df7]
+/lib64/libllama-server-impl.so(_Z12llama_serverR13common_paramsiPPc+0x3d86) [0x79e88f7895b6]
+/lib64/libllama-server-impl.so(_Z12llama_serveriPPc+0x1002) [0x79e88f78b622]
+/lib64/libc.so.6(+0x35b5) [0x79e88aef55b5]
+/lib64/libc.so.6(__libc_start_main+0x88) [0x79e88aef5668]
+llama-server() [0x4003b5]
+terminate called after throwing an instance of 'vk::DeviceLostError'
+  what():  vk::Queue::submit: ErrorDeviceLost

@@ -1,0 +1,12 @@
+name: minimax-m2.7--llamacpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: MiniMax-M2.7
+  params: 228.7B
+  active_params: null
+  quant: Q3_K_S
+  mtp: false
+  dflash: false
+  notes: >-
+    Not yet measured locally; reference figure from kyuz0's raw results.

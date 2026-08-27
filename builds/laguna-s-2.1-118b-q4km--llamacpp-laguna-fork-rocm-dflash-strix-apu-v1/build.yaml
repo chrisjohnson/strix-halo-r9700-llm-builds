@@ -1,0 +1,14 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-laguna-fork-rocm-dflash-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-laguna-fork-rocm-v1
+  model: Laguna-S-2.1 + DFlash (poolside fork, ROCm 7.14)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  notes: >-
+    M-055 control build: never got past loading on this box (draft ctx create
+    fails; plain load stalls ~51GiB RSS). -fa 0 required (no rocWMMA on
+    7.14/gfx1151).

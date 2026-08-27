@@ -1,0 +1,13 @@
+name: qwen2.5-vl-7b-instruct--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Qwen2.5-VL-7B-Instruct
+  params: 7B
+  active_params: null
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    No Qwen3 tool-call parser used (older generation, different tool-call
+    mechanism).

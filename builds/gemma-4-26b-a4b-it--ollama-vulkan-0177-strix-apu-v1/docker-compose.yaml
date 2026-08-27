@@ -1,0 +1,24 @@
+name: docker
+services:
+  gemma-4-26b-a4b-it--ollama-vulkan-0177-strix-apu-v1:
+    image: ollama/ollama:0.17.7
+    container_name: gemma-4-26b-a4b-it--ollama-vulkan-0177-strix-apu-v1
+    environment:
+    - OLLAMA_VULKAN=1
+    - HIP_VISIBLE_DEVICES=-1
+    - ROCR_VISIBLE_DEVICES=-1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    ports:
+    - 127.0.0.1:11435:11434
+    volumes:
+    - ollama_data:/root/.ollama
+    - /var/lib/ai-models:/gguf-source:ro
+volumes:
+  ollama_data:
+    external: true
+    name: docker_ollama_data

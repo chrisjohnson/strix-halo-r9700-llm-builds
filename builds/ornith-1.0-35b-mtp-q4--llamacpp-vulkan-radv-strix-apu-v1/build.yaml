@@ -1,0 +1,21 @@
+name: ornith-1.0-35b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Ornith-1.0-35B-MTP (Q4_K_M)
+  params: 35.5B
+  active_params: null
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  notes: >-
+    M-089 smoke test + benchmark, 2026-08-06. Download confirmed.
+    Superseded by v3 (2026-08-21, --cache-ram 2048 -> 4096) as the
+    standing endpoint. See M-126.
+
+    Superseded 2026-08-22 by ornith-1.5-35b-a3b-q4--llamacpp-vulkan-radv-
+    strix-apu-v1 (plain, no speculative decoding) as the standing
+    medium-moe endpoint - real llm-inference-bench sweep confirmed
+    1.5's plain build beats its own MTP sibling, and even the best MTP
+    tuning tried only reached near-parity. restart:always/always-up
+    removed here.

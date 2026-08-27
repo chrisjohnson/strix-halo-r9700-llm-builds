@@ -1,0 +1,12 @@
+name: kat-coder-v2.5-dev-q8--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: KAT-Coder-V2.5-Dev (Q8_0)
+  params: 34.7B
+  active_params: 3B
+  quant: Q8_0
+  mtp: false
+  dflash: false
+  notes: >-
+    bartowski Q8_0 conversion, ~34.4 GiB confirmed.

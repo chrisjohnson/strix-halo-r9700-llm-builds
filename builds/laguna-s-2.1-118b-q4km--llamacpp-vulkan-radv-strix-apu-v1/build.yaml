@@ -1,0 +1,13 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 (UD-Q4_K_M)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    First of two plain-llamacpp laguna variants; v2 (8108) is the standing
+    planner. poolside/Laguna-S-2.1.

@@ -1,0 +1,20 @@
+name: docker
+services:
+  qwen3.5-122b-a10b--llamacpp-vulkan-radv-strix-apu-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: qwen3.5-122b-a10b--llamacpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/llamacpp-qwen3.5-122b-a10b:/models:ro
+    command: 'llama-server -m /models/UD-Q5_K_XL/Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 -c 131072 --host 0.0.0.0 --port 8080 -a qwen3.5-122b-a10b
+      --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8104:8080

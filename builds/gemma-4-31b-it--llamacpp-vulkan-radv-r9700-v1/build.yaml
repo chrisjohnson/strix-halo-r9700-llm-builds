@@ -1,0 +1,36 @@
+name: gemma-4-31b-it--llamacpp-vulkan-radv-r9700-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Gemma-4-31B-it (Q5_K_M)
+  params: 31B
+  active_params: null
+  quant: Q5_K_M
+  mtp: false
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    Dense 31B, quant bumped Q4_K_M -> Q5_K_M after checking real
+    headroom (Q4_K_M left 12.74 GiB spare, way more than needed - see
+    configuration.nix's download-entry comment for the full quant
+    comparison, including why Q6_K/Q8_0 were ruled out).
+
+    Real architecture fact driving the -c choice: Gemma 4 uses hybrid
+    sliding-window attention (config.json: only 10/60 layers are
+    full_attention, the other 50 are sliding_attention with
+    sliding_window: 1024 - a BOUNDED KV cost regardless of total
+    context length, same "most layers have constant-size state"
+    pattern as Qwen3.8's Mamba layers). Confirmed LIVE, not just in
+    theory: loaded successfully at -c 163840 with real VRAM usage
+    27.82 GiB (4.04 GiB genuinely free) - a naive non-windowed
+    calculation would have needed ~68.75 GiB (impossible on this
+    card), so this proves llama.cpp's allocator actually honors the
+    sliding-window bound here, not just a hopeful estimate. Real
+    generation test: coherent output, 21.1 tok/s, 50 tok/s prefill.
+
+    -c 163840 (160K) chosen as comfortably above the requested 150K+
+    floor while keeping real margin (the -c 200000/262144 alternatives
+    were considered but would have left thinner or negative headroom
+    against this same real measurement - not tested at those exact
+    values, this one is the confirmed-working point). Not yet run
+    through the full llm-inference-bench matrix - that's queued next.

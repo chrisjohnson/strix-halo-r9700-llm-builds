@@ -1,0 +1,58 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v3
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Laguna-S-2.1 (UD-Q4_K_M)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    Serving-config-only change vs v2: explicit -np 2 (v2 left -np unset,
+    which defaulted to n_slots=4 - pure overhead given the HAProxy queue
+    was serializing to 1 request at a time anyway, before M-126 found
+    that serialization was net-negative and removed it).
+
+    CRITICAL bug caught before this went live (2026-08-21): explicitly
+    setting -np disables llama-server's default-enabled --kv-unified
+    (only auto-enabled when slot count is auto/unset), silently splitting
+    the -c 131072 context budget across slots instead of sharing it -
+    startup log showed "n_slots = 2, n_ctx_slot = 65536, kv_unified =
+    'false'" vs v2's "n_slots = 4, n_ctx_slot = 131072, kv_unified =
+    'true'". Every request would have been capped at 64K context instead
+    of the full 128K Chris explicitly requires. Caught because litellm's
+    big-moe role still pointed at v2's port during testing - v3 never
+    actually served real traffic in the broken state. Fixed by adding
+    --kv-unified explicitly alongside -np 2, restoring full 131072 per
+    slot. All A/B numbers below were measured BEFORE this fix (i.e.
+    under the broken 65536-context config) and need re-verification
+    under the corrected --kv-unified config before being trusted as
+    representative of what's actually live.
+
+    Real A/B test (2026-08-21, direct-port, bypassing HAProxy) against
+    v2 (-np 4, same session, same conditions) - PRE-FIX NUMBERS, may not
+    hold post-fix:
+    solo: v3 25.9 tok/s vs v2 24.7 tok/s (no meaningful difference).
+    2-concurrent: v3 40.8 tok/s aggregate (12.3s wall, 20.4 tok/s each)
+    vs v2 37.7 tok/s aggregate (11.0s wall). 4-concurrent: only possible
+    on v2 (4 slots) - 51.1 tok/s aggregate. Memory: real GTT was 80.22GB
+    (v3, broken config) vs 84.26GB (v2) - v3 used ~4GB less, but this
+    was measured under the non-unified/halved-context bug, not the
+    fixed config - needs re-measurement.
+
+    RESOLVED 2026-08-21, post-fix re-measurement: with --kv-unified
+    correctly applied, real GTT is 84.27GB - essentially identical to
+    v2's 84.26GB. The ~4GB "savings" above was entirely an artifact of
+    the context-halving bug (less memory allocated because context was
+    incorrectly halved to 64K), not a real slot-count effect. Once both
+    configs are correctly unified, -np has ZERO memory cost. Re-tested
+    4-concurrent post-fix: 38.2 tok/s aggregate, degraded (19.1/19.2 vs
+    12.0/10.5 tok/s per-request - 2 of the 4 requests queue behind this
+    build's only 2 real slots) vs v2's clean 51.1 tok/s aggregate across
+    4 real slots.
+
+    Superseded by v4 (explicit -np 4 --kv-unified) - with memory no
+    longer a differentiator, -np 4 is strictly better (same cost, more
+    real capacity). Kept defined here for reference - this build is not
+    recommended for standing use. See M-126.

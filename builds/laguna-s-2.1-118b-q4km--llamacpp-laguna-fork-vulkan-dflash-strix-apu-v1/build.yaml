@@ -1,0 +1,13 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-laguna-fork-vulkan-dflash-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-laguna-fork-vulkan-v1
+  model: Laguna-S-2.1 + DFlash (poolside fork, Vulkan)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  notes: >-
+    M-053: acceptance collapse to 10-19% vs community's 73-91% claim; does not
+    beat baseline.

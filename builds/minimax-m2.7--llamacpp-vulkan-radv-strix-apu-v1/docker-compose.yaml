@@ -1,0 +1,20 @@
+name: docker
+services:
+  minimax-m2.7--llamacpp-vulkan-radv-strix-apu-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: minimax-m2.7--llamacpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/llamacpp-minimax-m2.7:/models:ro
+    command: 'llama-server -m /models/UD-Q3_K_S/MiniMax-M2.7-UD-Q3_K_S-00001-of-00003.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host
+      0.0.0.0 --port 8080 -a minimax-m2.7 --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8117:8080

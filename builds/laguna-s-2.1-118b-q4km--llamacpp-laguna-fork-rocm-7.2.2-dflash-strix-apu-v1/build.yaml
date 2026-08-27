@@ -1,0 +1,14 @@
+name: laguna-s-2.1-118b-q4km--llamacpp-laguna-fork-rocm-7.2.2-dflash-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-laguna-fork-rocm-7.2.2-v1
+  model: Laguna-S-2.1 + DFlash (poolside fork, ROCm 7.2.2)
+  params: 118B
+  active_params: 8B
+  quant: Q4_K_M
+  mtp: false
+  dflash: true
+  notes: >-
+    M-086 retry: server loads and serves (unlike rocm-7.14) but acceptance
+    11-52% by block size; raw throughput never beats the 30.0 tok/s plain
+    baseline.

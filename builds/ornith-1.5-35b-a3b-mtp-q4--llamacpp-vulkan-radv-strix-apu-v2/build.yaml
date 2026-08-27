@@ -1,0 +1,36 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v2
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Tuning follow-up to v1: v1 carried --spec-draft-n-max 4
+    --spec-draft-p-min 0.6 straight over from Ornith 1.0 unexamined, and
+    the real sweep (run 113) showed that was actively hurting - 10-17%
+    SLOWER than no speculation at all. Quick smoke-test sweep (single
+    ~300-token real request each, not a full orchestrator sweep) across
+    n-max 1/2/3/4 with p-min held at 0.6: n-max=1 70.87 tok/s (91/111
+    draft accepted, ~82%), n-max=2 67.08 tok/s (~80%), n-max=3 67.66
+    tok/s (~80%), n-max=4 (v1's real full-sweep result) 45.4-58.5 tok/s.
+    n-max=1 wins clearly and consistently - shorter speculation depth
+    suits this model's real draft-acceptance behavior far better than
+    the value inherited from 1.0. This build changes ONLY
+    --spec-draft-n-max: 4 -> 1, everything else identical to v1.
+
+    Real llm-inference-bench sweep (2026-08-22, run 114, full matrix
+    concurrency 1/2/4/8 x context 0/16k/32k/64k): aggregate throughput
+    49.3-65.6 tok/s. Major improvement over v1's 45.4-58.5 tok/s (now
+    only ~0-8% behind the plain sibling's 53.0-65.7 tok/s at most
+    contexts, and actually slightly AHEAD at ctx=0: 65.6 vs 64.6).
+    Genuinely close to parity now, but plain remains marginally the
+    better real choice overall in this data. p-min not yet tuned (held
+    at 0.6 throughout this sweep) - a real next step if pursuing this
+    further, but diminishing-returns territory: even the best n-max
+    tested doesn't clearly beat plain decoding for this model on this
+    hardware. Not promoted over the plain sibling.

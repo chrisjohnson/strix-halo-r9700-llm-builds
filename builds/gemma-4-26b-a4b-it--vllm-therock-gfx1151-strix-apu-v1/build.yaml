@@ -1,0 +1,13 @@
+name: gemma-4-26b-a4b-it--vllm-therock-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: vllm-therock-gfx1151-v1
+  model: Gemma-4-26B-A4B-it
+  params: 26B
+  active_params: 4B
+  quant: bf16
+  mtp: false
+  dflash: false
+  notes: >-
+    Strongest combined speed + coding result of any vLLM-served model this
+    session.

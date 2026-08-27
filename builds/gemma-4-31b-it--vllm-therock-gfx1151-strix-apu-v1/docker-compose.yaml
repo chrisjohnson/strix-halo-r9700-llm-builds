@@ -1,0 +1,30 @@
+name: docker
+services:
+  gemma-4-31b-it--vllm-therock-gfx1151-strix-apu-v1:
+    image: docker.io/kyuz0/vllm-therock-gfx1151:latest
+    container_name: gemma-4-31b-it--vllm-therock-gfx1151-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    volumes:
+    - /var/lib/ai-models:/models
+    - vllm-gemma-4-31b-it-cache:/root/.cache/vllm
+    command: 'vllm serve /models/gemma-4-31b-it --served-model-name gemma-4-31b-it
+      --host 0.0.0.0 --port 8000 --tensor-parallel-size 1 --gpu-memory-utilization
+      0.90 --dtype auto --trust-remote-code --enable-prefix-caching --max-model-len
+      65536 --enable-auto-tool-choice --tool-call-parser gemma4 --reasoning-parser
+      gemma4
+
+      '
+    ports:
+    - 127.0.0.1:8009:8000
+volumes:
+  vllm-gemma-4-31b-it-cache:
+    external: true
+    name: docker_vllm-gemma-4-31b-it-cache

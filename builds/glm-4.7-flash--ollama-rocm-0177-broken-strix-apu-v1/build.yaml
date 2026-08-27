@@ -1,0 +1,17 @@
+name: glm-4.7-flash--ollama-rocm-0177-broken-strix-apu-v1
+status: BROKEN
+derived:
+  engine: ollama-rocm-0177-broken
+  model: GLM-4.7-Flash
+  params: 30B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  notes: >-
+    GPU detection at startup looked correct, but the first real request
+    crashes the -rocm tag on gfx1151 (catalog BROKEN). Config preserved
+    verbatim.
+bench:
+  model: glm-4.7-flash-gguf:latest
+  engine: ollama

@@ -1,0 +1,21 @@
+name: docker
+services:
+  laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v2:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v2
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/laguna-s-2.1-118b-q4km:/models:ro
+    command: 'llama-server -m /models/UD-Q4_K_M/Laguna-S-2.1-UD-Q4_K_M-00001-of-00003.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 --swa-full --reasoning-format deepseek -n 8192 -c
+      131072 -ctk q8_0 -ctv q8_0 --cache-ram 2048 --host 0.0.0.0 --port 8080 -a laguna-s-2.1-118b-q4km
+      --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8108:8080

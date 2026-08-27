@@ -1,0 +1,13 @@
+name: gpt-oss-120b--llamacpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: GPT-OSS-120B (MXFP4)
+  params: 120B
+  active_params: 5.1B
+  quant: MXFP4
+  mtp: false
+  dflash: false
+  notes: >-
+    kyuz0 MXFP4 repack; reference figure from kyuz0's own results.json on the
+    same hardware.
