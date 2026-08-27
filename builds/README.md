@@ -1,20 +1,18 @@
-# builds/ — llm-inference-bench stack (M-101)
+# builds/ — model-engine build catalog
 
 > ## 📊 Interactive model comparison dashboard
 >
-> **→ [local-ai-machine interactive dashboard](https://chrisjohnson.github.io/local-ai-machine/interactive-dashboard.html)**
+> **→ [interactive dashboard](https://chrisjohnson.github.io/strix-halo-r9700-llm-builds/)**
 >
 > This directory's benchmark results feed an interactive, artificialanalysis.ai-style
 > dashboard: bar chart of output tokens/s per build, "best build per model" + engine /
 > dense-MoE / context / concurrency filters, and a per-model detail view with every build's
 > notes, full benchmark matrix, and docker-compose. Regenerate it after a new sweep with
-> `python3 scripts/generate_interactive_dashboard.py`.
+> `python3 scripts/generate_interactive_dashboard.py` (CI regenerates and republishes it
+> automatically on every push to main).
 
-This top-level directory is the benchmark stack (formerly deliberately
-separate from `catalog/`, the old stack's catalog — that stack and its
-`scripts/benchmark_orchestrator.py` were deleted 2026-08-20; this is the
-only one now). One directory per build, named exactly after the build's
-docker-compose service name:
+One directory per build, named exactly after the build's docker-compose
+service name:
 
 ```
 builds/
@@ -28,28 +26,59 @@ builds/
         <timestamp>-crash.log  # docker logs from a twice-crashed container
 ```
 
-## Layout invariants (M-102)
+## Ports
 
-The **global** `docker/docker-compose.yml` and the per-build files are **1:1**:
-every build directory has a `build.yaml` **and** a `docker-compose.yaml`, and
-every model service in the global compose has a build directory (and vice
-versa). If a service name changes or a build is added, update BOTH the global
-compose and the build directory.
+Per-engine-family, sequential within family:
 
-`builds/<name>/docker-compose.yaml` is the *verbatim* service block from the
-global compose (same service name, same container_name, same image, command,
-ports, volumes) wrapped in a project header. It is directly executable:
+- vLLM builds: 8000-8099
+- llama.cpp-server: 8100-8199
+- Ollama: 11434 (single shared instance, model switch via API) plus
+  dedicated per-build instances above 11434 for benchmarking
+- Everything binds to 127.0.0.1 only
+
+## `docker-compose.yaml` — each build is its own standalone compose project
+
+`builds/<name>/docker-compose.yaml` is directly executable, and is the
+**sole** source of truth for that build — there is no shared/global
+compose file duplicating it, and nothing here gets "generated from"
+anything else. `modelctl` and `llm-inference-bench`'s own orchestrator
+both operate on these files directly, one project per build:
 
 ```
-docker compose -f builds/<name>/docker-compose.yaml up -d
+docker compose -p <name-with-periods-replaced-by-underscores> -f builds/<name>/docker-compose.yaml up -d
 ```
 
-The project name is pinned to `docker` (the same project the global stack
-uses), and any named volumes it references are declared `external` with their
-full `docker_<volume>` names — so running a build file standalone attaches the
-*same* volumes the global stack uses (model stores, vLLM cache dirs). The
-per-build files are machine-generated from the global compose so they cannot
-drift; treat the global compose as the source of truth.
+The `-p` override matters: every build's compose file declares `name:
+docker` (a leftover from when a single project actually was shared across
+every build), so without an explicit `-p` per invocation, every build
+would collide into one Compose project and its default network — see
+`modelctl`'s own `project_name_for()` for the exact transform (periods
+become underscores; Compose's project-name validator rejects periods
+outright, and build ids commonly carry version-number periods like
+"qwen3.8"). Any named volume a build references is declared `external:
+true` with its real fixed name (e.g. `docker_vllm-gpt-oss-120b-cache`) —
+`external: true` bypasses project-name prefixing entirely, so this still
+resolves to the same real volume regardless of which project name control
+this build through.
+
+Two builds — the same three build.yaml `status:` builds currently in the
+standing set — additionally carry `restart: always` plus a
+`com.local-ai-machine.always-up: "true"` label, so they self-heal and are
+recognized as "don't cycle for GPU exclusivity, just health-check"
+targets by `llm-inference-bench`'s orchestrator. See `local-ai-machine`'s
+own `standing-models.txt` and `configuration.nix`'s
+`standing-models-boot` unit for how the boot-time set is actually chosen
+and brought up — that policy lives there, not here.
+
+## GPU co-residency
+
+At most one vLLM + one llama.cpp-server build can usually co-reside on
+one GPU without contention; Ollama's footprint is small enough to be safe
+alongside either. `--gpu-memory-utilization`: judge-sized models (roughly
+<25B, the ones almost always run co-resident alongside a larger candidate
+model) should carry an explicit low cap (e.g. 0.20) so they don't starve
+whatever they're running alongside — vLLM's default (0.90) assumes it
+owns the whole GPU, which is only true for a standalone candidate.
 
 ## build.yaml
 
