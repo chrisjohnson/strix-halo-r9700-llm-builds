@@ -95,7 +95,14 @@ cmd_up_one() {
   local id="$1"
   preflight_up "$id" || return 1
   echo "modelctl: starting $id"
-  docker compose -f "$(compose_file_for "$id")" up -d
+  # -p is mandatory, not cosmetic: every build's compose file declares
+  # `name: docker` (matching the global base-stack compose file's own
+  # project name), so without an explicit override every build and the
+  # base stack share one Compose project and its default network. -p
+  # <build-id> is guaranteed unique (build directory names are unique)
+  # and gives each build its own isolated project, independent of every
+  # other build and of the base stack.
+  docker compose -p "$id" -f "$(compose_file_for "$id")" up -d
 }
 
 cmd_up() {
@@ -154,7 +161,9 @@ cmd_down() {
     echo "modelctl: stopping $id"
     # One build failing to stop must not abort the rest of the loop -
     # the no-args form is meant to reliably sweep every build directory.
-    docker compose -f "$f" down || failures=$((failures + 1))
+    # Same -p reasoning as cmd_up_one - without it this would resolve to
+    # the "docker" project shared with the base stack.
+    docker compose -p "$id" -f "$f" down || failures=$((failures + 1))
   done
   if [ "$failures" -gt 0 ]; then
     echo "modelctl: $failures build(s) failed to stop cleanly" >&2
