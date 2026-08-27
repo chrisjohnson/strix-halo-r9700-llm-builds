@@ -113,6 +113,36 @@ model_dir_for() {
   return 1
 }
 
+port_for() {
+  local f="$1"
+  grep -oE '127\.0\.0\.1:[0-9]+' "$f" | head -1 | cut -d: -f2
+}
+
+# Polls a build's port until it answers or WAIT_HEALTHY_TIMEOUT_S elapses.
+# Tries /health, /, then /v1/models in turn per attempt - covers vLLM/
+# llama-server (/health), ollama (/ answers "Ollama is running"), and
+# ds4-server (only ever answers /v1/models) without needing to know which
+# engine a given build actually is.
+wait_healthy() {
+  local id="$1"
+  local port="$2"
+  local timeout="${WAIT_HEALTHY_TIMEOUT_S:-1200}"
+  local deadline=$(( $(date +%s) + timeout ))
+  local path
+  echo "modelctl: waiting for $id to become healthy on :$port ..." >&2
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    for path in /health / /v1/models; do
+      if curl -sf -o /dev/null -m 5 "http://localhost:$port$path" 2>/dev/null; then
+        echo "modelctl: $id healthy on :$port" >&2
+        return 0
+      fi
+    done
+    sleep 5
+  done
+  echo "modelctl: warning - $id did not become healthy on :$port within ${timeout}s, continuing anyway" >&2
+  return 1
+}
+
 preflight_up() {
   local id="$1"
   local f
@@ -206,10 +236,28 @@ cmd_up() {
     fi
   fi
 
+  # When starting more than one build, each one waits until healthy
+  # before the next one starts - all of them loading model weights into
+  # the shared unified-memory pool at once is a real, confirmed-live way
+  # to OOM the box, regardless of list order. A single explicit `up
+  # <id>` skips the wait (nothing queued behind it to protect).
+  local wait_between=0
+  [ "${#ids[@]}" -gt 1 ] && wait_between=1
+
   local failures=0
-  local id
+  local id f port
   for id in "${ids[@]}"; do
-    cmd_up_one "$id" || failures=$((failures + 1))
+    if cmd_up_one "$id"; then
+      if [ "$wait_between" -eq 1 ]; then
+        f="$(compose_file_for "$id")"
+        port="$(port_for "$f")"
+        if [ -n "$port" ]; then
+          wait_healthy "$id" "$port" || true
+        fi
+      fi
+    else
+      failures=$((failures + 1))
+    fi
   done
   if [ "$failures" -gt 0 ]; then
     echo "modelctl: $failures build(s) failed to start" >&2
