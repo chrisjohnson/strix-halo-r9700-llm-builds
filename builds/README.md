@@ -61,14 +61,18 @@ true` with its real fixed name (e.g. `docker_vllm-gpt-oss-120b-cache`) —
 resolves to the same real volume regardless of which project name control
 this build through.
 
-Two builds — the same three build.yaml `status:` builds currently in the
-standing set — additionally carry `restart: always` plus a
-`com.local-ai-machine.always-up: "true"` label, so they self-heal and are
-recognized as "don't cycle for GPU exclusivity, just health-check"
-targets by `llm-inference-bench`'s orchestrator. See `local-ai-machine`'s
-own `standing-models.txt` and `configuration.nix`'s
-`standing-models-boot` unit for how the boot-time set is actually chosen
-and brought up — that policy lives there, not here.
+The three builds currently in the standing set additionally carry a
+`com.local-ai-machine.always-up: "true"` label, so they're recognized as
+"don't cycle for GPU exclusivity, just health-check" targets by
+`llm-inference-bench`'s orchestrator. They deliberately do NOT carry
+`restart: always` (removed 2026-08-27): Docker's own restart policy
+brings a container back the instant `docker.service` starts, which races
+ahead of and defeats `standing-models-boot`'s sequential, health-gated
+bring-up order on a real reboot — ordering is preferred over instant
+crash self-heal for these three. See `local-ai-machine`'s own
+`standing-models.txt` and `configuration.nix`'s `standing-models-boot`
+unit for how the boot-time set is actually chosen and brought up — that
+policy lives there, not here.
 
 ## GPU co-residency
 

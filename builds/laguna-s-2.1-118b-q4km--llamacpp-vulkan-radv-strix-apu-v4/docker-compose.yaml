@@ -3,7 +3,6 @@ services:
   laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v4:
     image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
     container_name: laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v4
-    restart: always
     labels:
       com.local-ai-machine.always-up: "true"
     devices:

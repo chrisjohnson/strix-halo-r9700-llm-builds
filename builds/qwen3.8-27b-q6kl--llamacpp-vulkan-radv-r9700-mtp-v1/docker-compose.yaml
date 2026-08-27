@@ -3,7 +3,6 @@ services:
   qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1:
     image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
     container_name: qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1
-    restart: always
     labels:
       com.local-ai-machine.always-up: "true"
     devices:

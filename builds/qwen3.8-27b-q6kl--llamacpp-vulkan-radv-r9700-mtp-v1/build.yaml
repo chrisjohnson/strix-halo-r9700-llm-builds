@@ -71,3 +71,16 @@ derived:
     healing to get that. Not restored automatically after a benchmark
     stops it (deliberate) - restart:always is for crashes/reboots, not
     a benchmark's deliberate stop.
+
+    restart:always removed again 2026-08-27 (Chris's directive), for a
+    third and different reason than either change above: confirmed live
+    on a real reboot that Docker's own restart policy brings this
+    container back the instant docker.service starts, independently of
+    and racing ahead of standing-models-boot's sequential, health-gated
+    bring-up order - defeating the "GPU model loads first, then APU
+    models" ordering this whole mechanism exists for. Chris's call:
+    prefer strict ordering over instant self-heal-on-crash; a different
+    self-healing approach may replace this later. The always-up label
+    stays - it's independent of restart policy, still needed so the
+    benchmark orchestrator treats this as a standing endpoint rather
+    than a benchmarkable target.

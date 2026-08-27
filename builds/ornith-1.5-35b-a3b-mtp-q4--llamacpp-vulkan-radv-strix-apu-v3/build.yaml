@@ -40,3 +40,14 @@ derived:
     benchmarkable-siblings exposure the qwen3.8-27b-q6kl incident
     found - but strix-apu already carries that exact risk via laguna
     v4, so this isn't new exposure for this GPU).
+
+    restart:always removed 2026-08-27 (Chris's directive): confirmed
+    live on a real reboot that Docker's own restart policy brings this
+    container back the instant docker.service starts, racing ahead of
+    standing-models-boot's sequential, health-gated bring-up order -
+    defeating the "GPU model loads first, then APU models" ordering
+    that mechanism exists for. Prefer strict ordering over instant
+    self-heal-on-crash; a different self-healing approach may replace
+    this later. The always-up label stays - independent of restart
+    policy, still needed for the benchmark orchestrator's exclusivity
+    logic.
