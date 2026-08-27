@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# Controls individual model-engine builds under builds/<id>/docker-compose.yaml
+# directly - each build is its own standalone compose project, never routed
+# through a shared global compose file. Safe to run against a read-only
+# checkout: every subcommand only ever reads files under builds/ and talks to
+# the host's docker daemon, nothing here writes into this repo's checkout.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+BUILDS_DIR="$HERE/builds"
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  modelctl up [<build-id>...]
+  modelctl up --standing <path-to-standing-list>
+  modelctl down [<build-id>...]
+  modelctl logs [<build-id>...]
+
+up with no arguments and no --standing is an error - it never guesses which
+builds to start. down and logs with no arguments act on everything
+(down: every build directory; logs: every currently-running build container).
+EOF
+  exit 1
+}
+
+compose_file_for() {
+  echo "$BUILDS_DIR/$1/docker-compose.yaml"
+}
+
+all_build_ids() {
+  local dir
+  for dir in "$BUILDS_DIR"/*/; do
+    [ -f "$dir/docker-compose.yaml" ] || continue
+    basename "$dir"
+  done
+}
+
+# A build's model directory is wherever its compose file mounts model
+# weights from under /var/lib/ai-models - checked for a .download-complete
+# marker before ever starting the container. Two conventions exist across
+# the engines actually in use here:
+#   - a specific subdirectory mounted directly (llama.cpp/ds4-style:
+#     "/var/lib/ai-models/<name>:/models:ro") - the mount source IS the
+#     model directory.
+#   - the whole /var/lib/ai-models tree mounted, with the specific model
+#     referenced only inside `command:` (vLLM-style: "vllm serve
+#     /models/<name> ...") - the model directory has to be reconstructed
+#     from that command argument.
+# A third convention (Ollama-style: the whole tree mounted read-only as
+# /gguf-source, with model selection happening out-of-band via `ollama
+# create` after the container is already up) has no compose-file-visible
+# reference to a specific model directory at all - model_dir_for returns
+# nothing for these, and the preflight check below degrades to a warning
+# instead of a hard refusal, since there's nothing here to verify against.
+model_dir_for() {
+  local f="$1"
+  local mount
+  mount="$(grep -oE '/var/lib/ai-models/[^:[:space:]]+' "$f" | head -1 || true)"
+  if [ -n "$mount" ]; then
+    echo "$mount"
+    return
+  fi
+  if grep -q '/var/lib/ai-models:/models' "$f"; then
+    local rel
+    rel="$(grep -oE '/models/[^ '\''"[:space:]]+' "$f" | head -1 || true)"
+    if [ -n "$rel" ]; then
+      echo "/var/lib/ai-models${rel#/models}"
+      return
+    fi
+  fi
+  return 1
+}
+
+preflight_up() {
+  local id="$1"
+  local f
+  f="$(compose_file_for "$id")"
+  if [ ! -f "$f" ]; then
+    echo "modelctl: refusing to start '$id' - no such build (missing $f)" >&2
+    return 1
+  fi
+  local model_dir
+  if model_dir="$(model_dir_for "$f")"; then
+    if [ ! -f "$model_dir/.download-complete" ]; then
+      echo "modelctl: refusing to start '$id' - download not complete (missing $model_dir/.download-complete)" >&2
+      return 1
+    fi
+  else
+    echo "modelctl: warning - '$id' has no compose-file-visible model directory (Ollama-style build); skipping download-completion check" >&2
+  fi
+}
+
+cmd_up_one() {
+  local id="$1"
+  preflight_up "$id" || return 1
+  echo "modelctl: starting $id"
+  docker compose -f "$(compose_file_for "$id")" up -d
+}
+
+cmd_up() {
+  local ids=()
+  if [ "${1:-}" = "--standing" ]; then
+    local list_path="${2:-}"
+    if [ -z "$list_path" ]; then
+      echo "modelctl: --standing requires a path" >&2
+      exit 1
+    fi
+    if [ ! -f "$list_path" ]; then
+      echo "modelctl: standing list not found: $list_path" >&2
+      exit 1
+    fi
+    local line
+    while IFS= read -r line; do
+      line="${line%%#*}"
+      line="$(echo "$line" | xargs || true)"
+      [ -z "$line" ] && continue
+      ids+=("$line")
+    done <"$list_path"
+  elif [ "$#" -gt 0 ]; then
+    ids=("$@")
+  else
+    echo "modelctl up: no build ids given and no --standing <path> supplied" >&2
+    usage
+  fi
+
+  local failures=0
+  local id
+  for id in "${ids[@]}"; do
+    cmd_up_one "$id" || failures=$((failures + 1))
+  done
+  if [ "$failures" -gt 0 ]; then
+    echo "modelctl: $failures build(s) failed to start" >&2
+    exit 1
+  fi
+}
+
+cmd_down() {
+  local ids=("$@")
+  if [ "${#ids[@]}" -eq 0 ]; then
+    ids=()
+    local bid
+    while IFS= read -r bid; do
+      ids+=("$bid")
+    done < <(all_build_ids)
+  fi
+  local id f failures=0
+  for id in "${ids[@]}"; do
+    f="$(compose_file_for "$id")"
+    if [ ! -f "$f" ]; then
+      echo "modelctl: no such build '$id' (missing $f)" >&2
+      continue
+    fi
+    echo "modelctl: stopping $id"
+    # One build failing to stop must not abort the rest of the loop -
+    # the no-args form is meant to reliably sweep every build directory.
+    docker compose -f "$f" down || failures=$((failures + 1))
+  done
+  if [ "$failures" -gt 0 ]; then
+    echo "modelctl: $failures build(s) failed to stop cleanly" >&2
+    exit 1
+  fi
+}
+
+cmd_logs() {
+  local ids=("$@")
+  if [ "${#ids[@]}" -eq 0 ]; then
+    ids=()
+    local bid
+    while IFS= read -r bid; do
+      if docker ps --format '{{.Names}}' | grep -qx "$bid"; then
+        ids+=("$bid")
+      fi
+    done < <(all_build_ids)
+  fi
+  if [ "${#ids[@]}" -eq 0 ]; then
+    echo "modelctl: no build containers currently running" >&2
+    exit 1
+  fi
+
+  # docker logs only ever follows one container per invocation - run one
+  # per requested id in parallel, prefixed so interleaved output stays
+  # attributable. A single id skips the prefix/background dance entirely.
+  if [ "${#ids[@]}" -eq 1 ]; then
+    exec docker logs -f "${ids[0]}"
+  fi
+  local pids=()
+  local id
+  for id in "${ids[@]}"; do
+    (docker logs -f "$id" 2>&1 | sed "s/^/[$id] /") &
+    pids+=("$!")
+  done
+  wait "${pids[@]}"
+}
+
+case "${1:-}" in
+  up)
+    shift
+    cmd_up "$@"
+    ;;
+  down)
+    shift
+    cmd_down "$@"
+    ;;
+  logs)
+    shift
+    cmd_logs "$@"
+    ;;
+  *)
+    usage
+    ;;
+esac
