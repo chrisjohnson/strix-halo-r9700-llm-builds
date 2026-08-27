@@ -16,6 +16,9 @@ Usage:
   modelctl up --standing <path-to-standing-list> [--exclusive]
   modelctl down [<build-id>...]
   modelctl logs [<build-id>...]
+  modelctl list
+  modelctl ps
+  modelctl exec <build-id> [<cmd>...]
 
 up with no arguments and no --standing is an error - it never guesses which
 builds to start. down and logs with no arguments act on everything
@@ -24,6 +27,10 @@ builds to start. down and logs with no arguments act on everything
 --standing without --exclusive refuses to start anything at all if a build
 outside the standing list is already running, leaving the decision to the
 caller. --exclusive stops those first instead of refusing.
+
+list shows every build in the catalog (running or not); ps shows only
+currently-running ones, like `docker compose ps`. exec defaults to `sh`
+if no command is given.
 EOF
   exit 1
 }
@@ -274,6 +281,64 @@ cmd_logs() {
   wait "${pids[@]}"
 }
 
+always_up_for() {
+  local f="$1"
+  grep -q 'com\.local-ai-machine\.always-up: "true"' "$f"
+}
+
+cmd_list() {
+  printf '%-14s %-9s %-6s %s\n' "STATUS" "STANDING" "DOWNLOADED" "BUILD"
+  local id f running standing downloaded
+  local running_ids=()
+  local rid
+  while IFS= read -r rid; do
+    running_ids+=("$rid")
+  done < <(running_build_ids)
+  while IFS= read -r id; do
+    f="$(compose_file_for "$id")"
+    if contains "$id" "${running_ids[@]:-}"; then running="RUNNING"; else running="stopped"; fi
+    if always_up_for "$f"; then standing="yes"; else standing="-"; fi
+    local model_dir
+    if model_dir="$(model_dir_for "$f")"; then
+      if [ -f "$model_dir/.download-complete" ]; then downloaded="yes"; else downloaded="no"; fi
+    else
+      downloaded="?"
+    fi
+    printf '%-14s %-9s %-6s %s\n' "$running" "$standing" "$downloaded" "$id"
+  done < <(all_build_ids)
+}
+
+cmd_ps() {
+  local ids=()
+  local bid
+  while IFS= read -r bid; do
+    ids+=("$bid")
+  done < <(running_build_ids)
+  if [ "${#ids[@]}" -eq 0 ]; then
+    echo "modelctl: no build containers currently running" >&2
+    return
+  fi
+  docker ps --filter "name=^($( IFS='|'; echo "${ids[*]}" ))$" \
+    --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+}
+
+cmd_exec() {
+  local id="${1:-}"
+  if [ -z "$id" ]; then
+    echo "modelctl exec: requires a build id" >&2
+    usage
+  fi
+  shift
+  if ! docker ps --format '{{.Names}}' | grep -qx "$id"; then
+    echo "modelctl: '$id' is not currently running" >&2
+    exit 1
+  fi
+  if [ "$#" -eq 0 ]; then
+    exec docker exec -it "$id" sh
+  fi
+  exec docker exec -it "$id" "$@"
+}
+
 case "${1:-}" in
   up)
     shift
@@ -286,6 +351,16 @@ case "${1:-}" in
   logs)
     shift
     cmd_logs "$@"
+    ;;
+  list)
+    cmd_list
+    ;;
+  ps)
+    cmd_ps
+    ;;
+  exec)
+    shift
+    cmd_exec "$@"
     ;;
   *)
     usage
