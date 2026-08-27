@@ -32,6 +32,17 @@ compose_file_for() {
   echo "$BUILDS_DIR/$1/docker-compose.yaml"
 }
 
+# Compose project names are far stricter than build directory names: only
+# lowercase alphanumerics, hyphens, and underscores, must start with a
+# letter or digit. Build ids commonly carry version-number periods (e.g.
+# "qwen3.8-27b-..."), which `docker compose -p` rejects outright -
+# confirmed live, this is not a hypothetical. Periods become underscores;
+# every build id here already starts with a letter or digit and is
+# already lowercase, so nothing else needs handling.
+project_name_for() {
+  echo "${1//./_}"
+}
+
 all_build_ids() {
   local dir
   for dir in "$BUILDS_DIR"/*/; do
@@ -121,11 +132,11 @@ cmd_up_one() {
   # -p is mandatory, not cosmetic: every build's compose file declares
   # `name: docker` (matching the global base-stack compose file's own
   # project name), so without an explicit override every build and the
-  # base stack share one Compose project and its default network. -p
-  # <build-id> is guaranteed unique (build directory names are unique)
-  # and gives each build its own isolated project, independent of every
-  # other build and of the base stack.
-  docker compose -p "$id" -f "$(compose_file_for "$id")" up -d
+  # base stack share one Compose project and its default network.
+  # project_name_for(id) is guaranteed unique (build directory names are
+  # unique) and gives each build its own isolated project, independent
+  # of every other build and of the base stack.
+  docker compose -p "$(project_name_for "$id")" -f "$(compose_file_for "$id")" up -d
 }
 
 cmd_up() {
@@ -210,7 +221,7 @@ cmd_down_one() {
   echo "modelctl: stopping $id"
   # Same -p reasoning as cmd_up_one - without it this would resolve to
   # the "docker" project shared with the base stack.
-  docker compose -p "$id" -f "$f" down
+  docker compose -p "$(project_name_for "$id")" -f "$f" down
 }
 
 cmd_down() {
