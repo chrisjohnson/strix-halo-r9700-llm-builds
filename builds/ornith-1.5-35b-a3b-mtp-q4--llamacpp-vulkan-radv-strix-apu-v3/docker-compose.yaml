@@ -3,6 +3,9 @@ services:
   ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3:
     image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
     container_name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3
+    restart: always
+    labels:
+      com.local-ai-machine.always-up: "true"
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri

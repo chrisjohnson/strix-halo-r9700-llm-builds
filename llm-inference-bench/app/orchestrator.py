@@ -194,7 +194,7 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def services(self) -> dict:
-        return dc.load_compose_services(self.config.docker_dir / "docker-compose.yml")
+        return dc.load_all_build_services(self.config.checkout_dir / "builds")
 
     def _always_up_benchmarkable(self, build: str) -> bool:
         # Always-up services that are benchmark targets: they carry a
@@ -525,7 +525,7 @@ class Orchestrator:
         hung = []
         for name in stoppable:
             try:
-                result = dc.compose(["stop", name], self.config.docker_dir, check=False, timeout=120)
+                result = dc.compose(name, ["stop"], self.config.checkout_dir / "builds", check=False, timeout=120)
                 if result.returncode != 0:
                     hung.append(name)
                     log.line(f"[exclusivity] WARNING: stop {name} returned {result.returncode}: {result.stdout[-400:]}")
@@ -544,7 +544,7 @@ class Orchestrator:
                 self._wait_healthy(build, info, already_up=True)
             else:
                 log.line(f"[health] bringing up {build} ...")
-                dc.compose(["up", "-d", build], self.config.docker_dir, timeout=600)
+                dc.compose(build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600)
                 self._wait_healthy(build, info, already_up=False)
 
     def _wait_healthy(self, build: str, info: dict, already_up: bool):
@@ -604,7 +604,7 @@ class Orchestrator:
                     break
                 if attempt < max_attempts:
                     log.line(f"[bench] {build} crashed during attempt {attempt} — restarting and re-running once")
-                    dc.compose(["up", "-d", build], self.config.docker_dir, timeout=600)
+                    dc.compose(build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600)
                     self._wait_healthy(build, info, already_up=False)
                 else:
                     self._save_crash_log(build, crash_log)

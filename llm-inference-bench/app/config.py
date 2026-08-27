@@ -20,7 +20,6 @@ def _env_float(name, default):
 @dataclass
 class Config:
     checkout_dir: Path = Path(os.environ.get("BENCH_CHECKOUT", "/bench"))
-    docker_dir: Path = Path(os.environ.get("BENCH_DOCKER_DIR", "/bench/docker"))
     repo_url: str = os.environ.get(
         "BENCH_REPO_URL", "git@github.com:chrisjohnson/strix-halo-r9700-llm-builds.git"
     )
