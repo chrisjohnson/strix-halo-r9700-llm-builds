@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 builds/.orchestrator/
 docs/interactive-dashboard.html
+.fleet/worktrees
