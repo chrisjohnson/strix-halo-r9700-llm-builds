@@ -5,14 +5,13 @@ per-run state persist to builds/.orchestrator/queue.json inside the mounted
 checkout (gitignored, see root .gitignore) so the orchestrator's own
 container restart resumes pending runs instead of losing them.
 
-Run lifecycle (per the M-101 refined design):
+Run lifecycle:
   1. hard-reset the mounted checkout to origin/main (compose defs + build.yaml
      are current before anything else touches the box's model services)
   2. stop every OTHER model build on the SAME GPU as this run's targets,
-     except the targets themselves (GPU-scoped since 2026-08-20, M-125
-     dual-GPU follow-up — a run's exclusivity no longer touches standing
-     services on a GPU it never uses; see _establish_exclusivity). As of
-     2026-08-23 (Chris's directive) this includes always-up standing
+     except the targets themselves (a run's exclusivity is scoped to the
+     GPU it uses and never touches standing services on a GPU it doesn't
+     touch; see _establish_exclusivity). This includes always-up standing
      models too, not just non-always-up ones - a benchmark taking a GPU
      is expected to have it to itself, full stop; always-up INFRA
      (litellm, db, monitoring, dsh, ...) is unaffected either way.
@@ -21,10 +20,9 @@ Run lifecycle (per the M-101 refined design):
      under builds/<build>/benchmarks/llm-inference-bench/
   5. on success: git pull --rebase + add + commit + push straight to main
   6. leave targets up; every other same-GPU model build stays stopped -
-     deliberately NOT restored (Chris: "It doesn't even need to restore
-     them afterward, I didn't say it should do that") - each standing
-     model's own restart:always policy is what's expected to matter,
-     and only for crashes/reboots, not a benchmark's deliberate stop
+     deliberately NOT restored - each standing model's own restart:always
+     policy is what's expected to matter, and only for crashes/reboots,
+     not a benchmark's deliberate stop
 
 Failure modes adopted from the existing stack (OPERATIONS.md +
 benchmark_orchestrator.py): hard-fail on empty/no-completions results (never
@@ -32,7 +30,7 @@ trust bogus data); health-wait before every bench; bounded-but-generous whole
 build timeout; no service cycling mid-run (2026-07-29 full-system hang);
 crash = restart once + re-run once, second crash = docker logs + fail.
 Download pausing is explicitly out of scope for v1 (container can't
-sudo -n systemctl) and documented in the card.
+sudo -n systemctl).
 """
 
 from __future__ import annotations
@@ -388,8 +386,8 @@ class Orchestrator:
             f"- **kind**: {kind}\n"
             f"- **detail**: {detail}\n"
             f"- **raw log**: `{rel}`\n\n"
-            f"Classified automatically by the llm-inference-bench orchestrator "
-            f"(M-106 failure-diagnosis).\n"
+            f"Classified automatically by the llm-inference-bench orchestrator's "
+            f"failure-diagnosis logic.\n"
         )
 
     def _fail_known_broken(self, run_id: str, targets: list) -> list:
@@ -482,36 +480,28 @@ class Orchestrator:
     def _establish_exclusivity(self, targets: list, services: dict):
         """Stop every OTHER model build ON THE SAME GPU(S) as this run's
         targets, except the targets themselves, freeing that GPU's budget.
-        GPU-scoped since 2026-08-20 (M-125 dual-GPU follow-up) — a run's
-        exclusivity doesn't touch standing services on a GPU it never
-        uses.
+        Exclusivity is scoped to the GPU(s) the targets actually use — it
+        doesn't touch standing services on a GPU it never uses.
 
-        2026-08-23 (Chris's directive): previously exempted always-up
-        services from this entirely, only ever stopping non-always-up
-        ones. That exemption caused a real, repeated incident: an
-        always-up standing model (qwen3.8-27b-q6kl) sharing the r9700
-        with a benchmark target wasn't stopped, silently contending for
-        VRAM instead of being freed — real requests degraded to 6-8
-        tok/s, ~45 MiB free out of ~30 GiB. Chris: "If I am triggering a
-        benchmark, I want it to manage the models on my machine. It's
-        definitely not desirable that I leave laguna and ornith running
-        while ALSO trying to benchmark another model" (both are
-        always-up and, like q6kl, tuned to use ~100% of their GPU's
-        capacity on their own). Always-up INFRA is unaffected — the
-        has-build.yaml test in _is_model_build is what actually draws
-        that line, not the always-up label, which no longer factors in
-        at all. Deliberately NOT restored afterward (Chris: "It doesn't
-        even need to restore them afterward, I didn't say it should do
-        that") - each standing model's own restart:always policy is
-        what's expected to matter here, and only for crashes/reboots,
-        not a benchmark's deliberate stop.
+        This includes always-up standing services, not just non-always-up
+        ones: leaving an always-up standing model sharing a GPU with a
+        benchmark target running is a real, repeated failure mode — it
+        silently contends for VRAM instead of being freed, degrading real
+        requests to single-digit tok/s with the GPU nearly out of free
+        memory. A benchmark taking a GPU is expected to have it entirely to
+        itself; always-up INFRA (litellm, db, monitoring, dsh, ...) is
+        unaffected — the has-build.yaml test in _is_model_build is what
+        actually draws the stoppable/not-stoppable line, not the always-up
+        label. Deliberately NOT restored afterward - each standing model's
+        own restart:always policy is what's expected to matter here, and
+        only for crashes/reboots, not a benchmark's deliberate stop.
 
         Containers are stopped ONE AT A TIME (check=False): a single hung
-        container (GPU process stuck in an unkillable state — see the
-        nemotron incident, 2026-08-08) must not abort the whole run's
-        exclusivity step. Each failed stop is logged and skipped; the bench
-        proceeds and the hung container surfaces as a health/OOM failure on
-        the target instead of killing every queued run in one batch."""
+        container (GPU process stuck in an unkillable state) must not abort
+        the whole run's exclusivity step. Each failed stop is logged and
+        skipped; the bench proceeds and the hung container surfaces as a
+        health/OOM failure on the target instead of killing every queued
+        run in one batch."""
         target_gpus = {self._target_gpu(t) for t in targets}
         log.line(f"[exclusivity] this run's targets are on GPU(s): {sorted(target_gpus)}")
         stoppable = [
@@ -564,7 +554,7 @@ class Orchestrator:
         # /health first (vLLM, llama-server); fall back to / for servers that
         # only answer at the root (ollama returns "Ollama is running" on /).
         # /v1/models last: OpenAI-compat servers that expose neither health nor
-        # root endpoints (ds4-server answers only /v1/models — M-106 run 75).
+        # root endpoints (ds4-server answers only /v1/models).
         for path in ("/health", "/", "/v1/models"):
             result = dc.run(["curl", "-sf", "-o", "/dev/null", "-w", "%{http_code}", f"http://localhost:{port}{path}"], check=False)
             if result.returncode == 0 and result.stdout.strip() == "200":

@@ -115,13 +115,13 @@ bench:                 # optional overrides; all keys optional
   model: qwen3.6-27b    # override the tool's auto-detected model id if needed
 ```
 
-The `compose:` inline block that older build.yamls carried was removed in
-M-102 — that definition now lives in `docker-compose.yaml` in the same
-directory. `status:` is a first-class field so that BROKEN / other-machine
-builds can stay in the catalog and in the compose stack without looking
-healthy. Ollama builds set `bench.model` to the registered ollama model name
-(it differs from the service name); the shared `ollama_data` volume carries
-the model store across all dedicated per-build ollama instances.
+build.yaml has no `compose:` inline block — that definition lives in
+`docker-compose.yaml` in the same directory. `status:` is a first-class
+field so that BROKEN / other-machine builds can stay in the catalog and in
+the compose stack without looking healthy. Ollama builds set `bench.model`
+to the registered ollama model name (it differs from the service name);
+the shared `ollama_data` volume carries the model store across all
+dedicated per-build ollama instances.
 
 Raw benchmark JSON is preserved byte-for-byte as written by the tool ("raw
 untainted"). The orchestrator's own run/commit context is the only place the

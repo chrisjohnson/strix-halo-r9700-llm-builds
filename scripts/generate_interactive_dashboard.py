@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the interactive model comparison dashboard (M-108).
+"""Generate the interactive model comparison dashboard.
 
 Reads the new build stack under builds/ and emits a self-contained
 interactive HTML page to docs/interactive-dashboard.html.
@@ -9,11 +9,9 @@ Data sources per build:
   builds/<name>/docker-compose.yaml                     the build's compose def
   builds/<name>/benchmarks/llm-inference-bench/*.json   llm-inference-bench results
 
-Multi-GPU (M-125, R9700 bring-up 2026-08-20): builds/<name>/build.yaml has
-no `target_gpu` field at all -- this legacy build stack (distinct from
-catalog/builds/*.yaml, which got the field backfilled on every historical
-benchmark_runs[] entry, see that migration's own commit) predates the
-R9700 entirely, and every build.yaml here was captured before that date.
+Multi-GPU: builds/<name>/build.yaml has no `target_gpu` field at all --
+this legacy build stack (distinct from catalog/builds/*.yaml, which has
+the field on every benchmark_runs[] entry) predates the R9700 entirely.
 gpu_of() below reads `derived.target_gpu` if a future build.yaml ever adds
 one, defaulting to DEFAULT_TARGET_GPU (strix-apu) otherwise -- same
 default-with-no-guessing convention scripts/benchmark_orchestrator.py uses
@@ -63,10 +61,10 @@ ENGINE_COLOR = {
     "unknown": "#9aa4b2",
 }
 
-# M-125 (R9700 bring-up, 2026-08-20): catalog/hardware.yaml GPU ids ->
-# dashboard label/color, same keying convention as ENGINE_LABEL/ENGINE_COLOR
-# above so the client-side template treats GPU exactly like engine family --
-# one more built-in filter/legend dimension, not a bolted-on afterthought.
+# catalog/hardware.yaml GPU ids -> dashboard label/color, same keying
+# convention as ENGINE_LABEL/ENGINE_COLOR above so the client-side template
+# treats GPU exactly like engine family -- one more built-in filter/legend
+# dimension, not a bolted-on afterthought.
 DEFAULT_TARGET_GPU = "strix-apu"
 GPU_LABEL = {
     "r9700-egpu-dock": "R9700",

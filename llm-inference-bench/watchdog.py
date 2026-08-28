@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless sweep watchdog for llm-inference-bench (M-101).
+"""Headless sweep watchdog for llm-inference-bench.
 
 Self-heals a weekend benchmark sweep so it reaches a terminal state without
 manual intervention:
@@ -203,7 +203,7 @@ def main(once: bool):
         # A stale 'running' run with NO queued work is also an orphan: the
         # worker can only hold a run open while executing it, and with nothing
         # queued there is nothing for it to be wedged on. Close it so the
-        # sweep ends with zero running leftovers (M-106 run 66 case).
+        # sweep ends with zero running leftovers.
         if active is not None and not queued and now - run_log_mtime(active["id"]) > STALE_S:
             close_runs([active["id"]], "stale-running with no queued work (worker never resumes it)")
             active = None

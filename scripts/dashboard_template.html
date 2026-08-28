@@ -110,7 +110,7 @@
 <div class="wrap">
   <header class="page">
     <h1>local-ai-machine — Interactive Model Comparison</h1>
-    <div class="sub">llm-inference-bench sweep · output tokens/s · multi-GPU since 2026-08-20 (M-125) — see GPU filter/badges below for which physical GPU produced each result</div>
+    <div class="sub">llm-inference-bench sweep · output tokens/s · multi-GPU — see GPU filter/badges below for which physical GPU produced each result</div>
     <div class="meta">
       <span>Generated <code id="gen-ts"></code></span>
       <span><code id="meta-counts"></code></span>
@@ -166,11 +166,11 @@ const state = {
 const ENGINES = [...new Set(DATA.builds.map(b => b.engine_cat))].sort();
 const ARCHS = [...new Set(DATA.builds.map(b => b.arch))].sort();
 const MODELS = [...new Set(DATA.builds.map(b => b.model_key))].sort();
-// M-125 (R9700 bring-up, 2026-08-20): which physical GPU produced each
-// result, same filter/legend/badge treatment as engine family above --
-// every build predates the R9700 unless its own target_gpu says otherwise
-// (see gpu_of() in generate_interactive_dashboard.py for the resolution +
-// default-with-no-guessing rule).
+// Which physical GPU produced each result, same filter/legend/badge
+// treatment as engine family above -- every build defaults to the
+// pre-R9700 GPU unless its own target_gpu says otherwise (see gpu_of() in
+// generate_interactive_dashboard.py for the resolution + default-with-no-
+// guessing rule).
 const GPUS = [...new Set(DATA.builds.map(b => b.target_gpu))].sort();
 const ALL_CTX = [...new Set(DATA.builds.flatMap(b => b.ctx_lengths))].sort((a, b) => a - b);
 const ALL_CONC = [...new Set(DATA.builds.flatMap(b => b.conc_levels))].sort((a, b) => a - b);
