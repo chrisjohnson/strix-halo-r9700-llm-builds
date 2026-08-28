@@ -62,6 +62,13 @@ jobs:
 
       - run: python3 scripts/generate_interactive_dashboard.py
 
+      # GitHub Pages serves index.html as the default document at the site
+      # root - without this, the deploy step succeeds and reports a healthy
+      # environment_url, but the root URL itself 404s (confirmed live: the
+      # uploaded artifact only ever contained interactive-dashboard.html and
+      # benchmark-api.md, no index.html).
+      - run: cp docs/interactive-dashboard.html docs/index.html
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
