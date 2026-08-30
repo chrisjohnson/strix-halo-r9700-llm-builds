@@ -242,21 +242,29 @@ class Orchestrator:
     def _write_sps_override(self, build: str) -> Path | None:
         """For spec-decode (MTP) targets only: write a docker-compose
         override file that appends `-sps 0` (--slot-prompt-similarity 0) to
-        the service's command, so this run's decode benchmark doesn't
-        silently disable MTP's speculative drafting.
+        the service's command, giving each decode-test cell a clean,
+        unshared-prefix slot instead of reusing whatever the previous
+        (differently-sized) cell left cached.
 
-        Root cause (confirmed live, not theorized - see local-ai-machine's
-        fleet card M-138, 2026-08-30): llama-server's default
-        --slot-prompt-similarity (0.10) reuses a slot's cached KV prefix via
-        "selected slot by LCP similarity" whenever a new request's prompt
-        overlaps enough with what's cached. This decode benchmark's own
-        methodology (repeated single/few-slot requests at varying,
-        mismatched context depths across its concurrency x context sweep)
-        triggers that reuse constantly, and speculative drafting silently
-        stops engaging after the first reuse (0 further "draft acceptance"
-        log lines for the rest of the run in the reproduction case). -sps 0
-        forces fresh (LRU) slot selection instead, which live-reproduction
-        confirmed restores drafting on every request.
+        NOTE, corrected 2026-08-30 (see local-ai-machine's fleet card M-138
+        for the full story): this was originally written believing
+        --slot-prompt-similarity's LCP-based reuse was silently disabling
+        MTP's speculative drafting entirely. Direct C++ instrumentation
+        (a real debug build of the target fork, not log inference) later
+        proved that theory wrong - drafting was never broken, with or
+        without this flag. The actual reason "draft acceptance" log lines
+        looked absent for most of a benchmark run is architectural:
+        llama-server's print_timings() (the only place that line is
+        printed) is only called on a *natural* stop condition; the
+        SERVER_TASK_TYPE_CANCEL handler releases the slot directly and
+        never calls it - so any cancelled request (the majority in this
+        benchmark's duration-bounded cells, by design) never gets its
+        drafting stats logged, regardless of whether drafting worked.
+        -sps 0 is kept anyway because it's still a real, harmless
+        improvement to benchmark methodology (isolates each cell's
+        measurement from a differently-sized previous cell's leftover
+        cache/checkpoint state), just not a "fix" for anything that was
+        actually broken.
 
         This is a BENCHMARK-ONLY change: it returns None (no override
         written, nothing changes) for any target whose build.yaml doesn't
@@ -265,9 +273,8 @@ class Orchestrator:
         plain `docker compose up` launch of the same build never sees this
         flag and keeps the default prefix-cache reuse, which is the right
         behavior for genuine multi-turn conversations (their prefix grows by
-        appending, it doesn't jump between mismatched depths the way this
-        benchmark's sweep does, and MTP was independently confirmed working
-        fine under the default -sps setting in real multi-turn testing).
+        appending, not jumping between mismatched depths the way this
+        benchmark's sweep does).
 
         Returns the override file path, or None if this target doesn't need
         one (not spec-decode, not a llama-server command, or the build
