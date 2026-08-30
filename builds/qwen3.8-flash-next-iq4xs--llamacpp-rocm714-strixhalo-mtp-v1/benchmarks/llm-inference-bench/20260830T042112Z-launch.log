@@ -1,0 +1,19 @@
+0.00.042.291 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.045.078 W srv  llama_server: -----------------
+0.00.045.079 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.045.079 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.045.079 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.045.079 W srv  llama_server: -----------------
+0.00.046.735 I srv    load_model: loading model '/models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf'
+0.52.138.081 I cmn          init: llama threadpool init, n_threads = 4
+0.52.324.196 I common_speculative_init_result: loading draft model '/models-mtp/mtp-Qwen3.8-Flash-Next-Q8_0.gguf'
+0.52.526.500 W model has unused tensor blk.48.indexer.q_proj.weight (size = 2621440 bytes) -- ignoring
+0.52.526.505 W model has unused tensor blk.48.indexer.k_proj.weight (size = 655360 bytes) -- ignoring
+0.52.526.506 W model has unused tensor blk.48.indexer.q_norm.weight (size = 512 bytes) -- ignoring
+0.52.526.507 W model has unused tensor blk.48.indexer.k_norm.weight (size = 512 bytes) -- ignoring
+0.54.987.342 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 262144, kv_unified = 'false'
+0.55.257.348 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.55.257.519 I srv  llama_server: model loaded
+0.55.257.527 I srv  llama_server: listening on http://0.0.0.0:8080
+0.55.257.528 W srv  llama_server: NOTICE: server default port will be changed to :9931 in a future release
+0.55.257.531 W srv  llama_server:         ref: https://github.com/ggml-org/llama.cpp/pull/26508
