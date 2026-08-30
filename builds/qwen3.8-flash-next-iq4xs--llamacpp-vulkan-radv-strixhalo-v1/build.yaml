@@ -1,0 +1,40 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-vulkan-radv-strixhalo-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-138. Different lineage from qwen3.8-27b despite the shared vendor family
+    name - MoE, 512 experts, 6B active/token, plus a 51B-param "n-gram
+    embedding" table that stays disk-backed via page cache rather than living
+    in GPU memory (~177B total on disk, mainline llama.cpp's own toolbox
+    image, no custom build needed - confirmed its bundled commit is after
+    the qwen4exp architecture merge, PR #27742).
+
+    Base-model-only config, no MTP (mainline llama.cpp has no merged
+    qwen4exp MTP draft-head support as of this writing - neither PR #27836
+    nor #27842 is merged; the same MTP flags on this build silently no-op
+    rather than erroring - see the ROCm/HIP MTP sibling build for the
+    working variant). -c 32768, deliberately conservative given the model +
+    llama.cpp support are both ~2-3 days old at build time.
+
+    Validated 2026-08-29/30: correctness confirmed on single-turn, 4-turn
+    multi-turn (correct recall/arithmetic, no garbling), and a 2739-token
+    long-context needle-in-haystack test. Neither of two open gfx1151/
+    qwen4exp GitHub issues reproduces here: #27856 (suspected HIP-specific
+    ~3.5-4x decode cliff beyond ~1K context) and #27797 (multi-turn output
+    degrading to garbled text on gfx1151). Real organic-prompt decode:
+    27.8 tok/s short-context, 23.2 tok/s at 2739 tokens - both well above
+    the 11-23 tok/s range found in community reports during research.
+
+    Does NOT coexist with the standing Laguna+Ornith Strix-Halo-APU models
+    on the shared 128GB unified memory pool - on-demand only, not part of
+    the standing set. See the ROCm/HIP MTP sibling build
+    (qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v1) for the
+    better-performing variant with working speculative decoding.

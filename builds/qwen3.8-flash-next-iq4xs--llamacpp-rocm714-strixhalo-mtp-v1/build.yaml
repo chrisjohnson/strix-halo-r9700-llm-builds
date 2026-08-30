@@ -1,0 +1,67 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v1
+status: WORKING
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-138. Same base model as the Vulkan sibling build
+    (qwen3.8-flash-next-iq4xs--llamacpp-vulkan-radv-strixhalo-v1), but with
+    real, working MTP speculative decoding - mainline llama.cpp has no
+    merged qwen4exp MTP support yet, so this is built from a third-party
+    fork (github.com/Aristo94/EngramHalo.cpp, branch strix-halo-qwen4exp,
+    17 stars, explicitly confirmed by Chris before building/running this
+    third-party code - see docker/qwen4exp-strix-halo-mtp/Dockerfile.rocm-7.14's
+    own provenance header) with dedicated Strix-Halo gfx1151 kernel patches,
+    ROCm/HIP only by design (the fork's own docs report Vulkan as a net loss
+    for MTP on this chip; confirmed independently here too - the same MTP
+    flags on the Vulkan sibling build silently no-op rather than erroring).
+
+    -dev ROCm0 (this build's HIP device numbering is the OPPOSITE of the
+    Vulkan build's Vulkan1=APU convention - ROCm0=Strix Halo APU,
+    ROCm1=R9700, confirmed via --list-devices, do not assume they match).
+
+    Validated 2026-08-30 with real draft-acceptance logging (not assumed -
+    the server prints `draft acceptance = ...` per request): 100% on a short
+    single-turn reply, 84.5% on a 369-token code generation (31.4 tok/s vs.
+    the Vulkan sibling's 27.8 tok/s baseline, +13%), 88.5%/81.25% on
+    multi-turn and long-context requests. Long-context (2739 tokens) decode
+    actually beat the Vulkan baseline (27.4 vs 23.2 tok/s) and prefill
+    nearly doubled (394 vs 248 tok/s) - this fork's kernel patches fix a
+    real CPU-fallback bug in long-context decode, separate from MTP itself.
+
+    Confirmed to coexist with the standing Ornith model (medium-moe) on the
+    shared 128GB unified memory pool via real concurrent load testing (16
+    simultaneous requests split across both servers, 0 failures) - a real
+    candidate for the `big-moe` role (currently Laguna), though that swap
+    decision is still open and needs Chris's explicit go-ahead (does NOT
+    coexist with Laguna).
+
+    Context-ceiling ladder (2026-08-30, Ornith running throughout every
+    step): clean up to and including the model's full native 262144
+    context, with real completions at every rung, including BOTH previously
+    flagged deadlock-risk context sizes from the fork's own docs (143360,
+    163840 - neither hangs on this build/commit, a genuinely new finding
+    beyond what upstream documented). ~16GiB of real system memory headroom
+    remained even at 262144.
+
+    YaRN extension beyond native 262144 required a real workaround: mainline
+    llama-server's `n_ctx_slot()` unconditionally caps slot context to
+    `llama_model_n_ctx_train()` regardless of --rope-scaling/--yarn-* flags
+    (confirmed by reading tools/server/server-context.cpp directly, not
+    guessed) - `--override-kv qwen4exp.context_length=int:<large>` (keeping
+    `--yarn-orig-ctx 262144` accurate so YaRN's own math still knows the
+    true original training context) bypasses this cap. Production/committed
+    config here stays at the fully-validated native 262144 (no YaRN/
+    override-kv) - the extended-context config is experimental and
+    documented separately, not the default launch profile, until its own
+    quality/stability is further validated.
+
+    Default launch config uses -c 262144 (not the smaller values tried
+    during the ladder). Does NOT coexist with the standing Laguna model
+    (memory), does coexist with standing Ornith.
