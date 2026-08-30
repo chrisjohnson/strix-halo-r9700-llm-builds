@@ -1,0 +1,12 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: Qwen3.5 @ localhost:8151                                              │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Cannot connect to server at http://localhost:8151: All connection attempts 
+failed
+Make sure SGLang or vLLM is running and the port is correct.
+No results collected.
