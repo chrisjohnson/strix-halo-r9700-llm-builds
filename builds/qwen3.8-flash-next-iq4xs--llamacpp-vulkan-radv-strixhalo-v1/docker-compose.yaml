@@ -1,0 +1,42 @@
+name: docker
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-vulkan-radv-strixhalo-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-vulkan-radv-strixhalo-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    mem_limit: 115g
+    volumes:
+    - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+    # M-138 (research card): new MoE model, different lineage from the
+    # existing dense qwen3.8-27b builds despite the shared vendor family
+    # name - 512 experts, 6B active/token, Strix-Halo-APU target (the
+    # R9700's 32GB can't hold any usable quant). -dev Vulkan1 targets the
+    # Strix Halo APU specifically (Vulkan0 is the R9700 eGPU per this
+    # repo's own set-role.sh GPU_HINT mapping - do not swap these).
+    # First-pass smoke-test config, deliberately conservative:
+    # - No --no-mmap: the model's 51B-param "n-gram embedding" table is
+    #   designed to stream from disk via page cache; forcing it into
+    #   anonymous memory will OOM (confirmed by multiple independent GGUF
+    #   authors, see research notes).
+    # - No MTP spec-decode flags yet (base model correctness/perf first,
+    #   MTP sidecar is a fast-follow once this loads and behaves).
+    # - -c 32768 (not the full 262144 native context): llama.cpp support
+    #   for this architecture (qwen4exp) merged only 2026-08-27, two days
+    #   before this build - GitHub issue #27856 (open, unconfirmed on
+    #   Vulkan, suspected HIP-specific) reports a severe decode-rate cliff
+    #   beyond ~1K context depth on gfx1151, and #27797 (open) reports
+    #   multi-turn prompts degrading to garbled output on gfx1151 (single-
+    #   turn reported fine). Starting small and specifically testing for
+    #   both symptoms during validation, not assuming either applies here.
+    command: 'llama-server -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 -np 1 -c 32768 -ctk q8_0 -ctv q8_0 --host 0.0.0.0
+      --port 8080 -a qwen3.8-flash-next-iq4xs-strixhalo --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8151:8080
