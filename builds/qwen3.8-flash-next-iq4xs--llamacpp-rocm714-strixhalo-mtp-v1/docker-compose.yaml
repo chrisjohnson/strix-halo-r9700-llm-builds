@@ -28,12 +28,19 @@ services:
     # backend, same underlying "MTP isn't real here" conclusion.
     # "Config B" launch profile from the fork's own docs (long-context
     # capable, engram table SSD-backed via mmap, not RAM-pinned) - chosen
-    # over their faster "config A" (RAM mode, -lm none) for a first real
-    # test since it's the more production-realistic mode and doesn't pin
-    # ~27GB of RAM just for the n-gram table. -c 32768 (not the full
-    # 262144) for this first test - deliberately NOT using -c 143360 or
-    # -c 163840, which the fork's own docs flag as a previously-reproduced
-    # first-request deadlock risk, not yet re-tested on this build.
+    # over their faster "config A" (RAM mode, -lm none) since it's the more
+    # production-realistic mode and doesn't pin ~27GB of RAM just for the
+    # n-gram table. -c 262144 = the model's full native training context -
+    # a real context-ceiling ladder (32768 through 262144, see M-138's
+    # decision log) validated every rung clean with real completions,
+    # including both context sizes the fork's own docs flag as a
+    # previously-reproduced first-request deadlock risk (143360, 163840 -
+    # neither hangs on this build). Going past native 262144 requires YaRN
+    # + an --override-kv workaround for a hardcoded llama-server cap (see
+    # M-138's decision log for the full mechanism) - tried, and a real
+    # ~310K-token request crashed with a ROCm kernel error 82% through
+    # processing. Not reliable enough to be the default; native 262144 is
+    # the production/committed config.
     # -dev ROCm0: confirmed via --list-devices that THIS build's HIP
     # device numbering is the OPPOSITE of Vulkan's (ROCm0 = Strix Halo
     # APU/126976 MiB, ROCm1 = R9700/32624 MiB) - do not assume it matches
@@ -42,7 +49,7 @@ services:
       HIP_VISIBLE_DEVICES: "0"
     command: 'llama-server -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
       -dev ROCm0 -ngl 999 -fa on -ctk q8_0 -ctv q8_0 -lm mmap --tensor-read-lazy
-      on -c 32768 -b 8192 -ub 2048 -t 4 --parallel 1 -md /models-mtp/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+      on -c 262144 -b 8192 -ub 2048 -t 4 --parallel 1 -md /models-mtp/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
       --spec-type draft-mtp,ngram-mod --spec-draft-n-max 4 --spec-draft-p-min
       0.75 --host 0.0.0.0 --port 8080 -a qwen3.8-flash-next-iq4xs-strixhalo-mtp
       --metrics
