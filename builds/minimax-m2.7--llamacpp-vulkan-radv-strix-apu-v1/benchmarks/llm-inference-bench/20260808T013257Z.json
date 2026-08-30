@@ -405,5 +405,26 @@
       "4": 14.859710302183199,
       "8": 14.285656417014138
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/minimax-m2.7--llamacpp-vulkan-radv-v1/docker-compose.yaml as committed at 159a2351a8a3d4b699c1a599ac193fb96ef26b66 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "159a2351a8a3d4b699c1a599ac193fb96ef26b66",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/UD-Q3_K_S/MiniMax-M2.7-UD-Q3_K_S-00001-of-00003.gguf -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host 0.0.0.0 --port 8080 -a minimax-m2.7 --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

@@ -405,5 +405,26 @@
       "4": 0.09340943670742069,
       "8": 0.0738348205245466
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/glm-4.7-flash--llamacpp-vulkan-radv-v1/docker-compose.yaml as committed at 15bde7cd0697d22093dec37d90bc8fe0c4c74c50 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "15bde7cd0697d22093dec37d90bc8fe0c4c74c50",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/GLM-4.7-Flash-Q4_K_M.gguf -ngl 999 -fa 1 -lm none -c 65536 --host 0.0.0.0 --port 8080 -a glm-4.7-flash-judge --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

@@ -405,5 +405,26 @@
       "4": 0.0,
       "8": 0.0
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/laguna-xs-2.1-33b-q4km--llamacpp-vulkan-radv-v1/docker-compose.yaml as committed at 2e24c765cd0d935a69901b0c291400661806e20f (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "2e24c765cd0d935a69901b0c291400661806e20f",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/Laguna-XS-2.1-Q4_K_M.gguf -ngl 999 -fa 1 -c 262144 --host 0.0.0.0 --port 8080 -a laguna-xs-2.1-33b-q4km --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

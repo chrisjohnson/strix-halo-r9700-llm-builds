@@ -405,5 +405,26 @@
       "4": 0.0,
       "8": 0.0
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (strix-halo-r9700-llm-builds) - builds/qwen3.8-flash-next-iq4xs--llamacpp-vulkan-radv-strixhalo-v1/docker-compose.yaml as committed at efdf976e02cdcbfca0c7c97835780b9fd67b2f45 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "efdf976e02cdcbfca0c7c97835780b9fd67b2f45",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -dev Vulkan1 -ngl 999 -fa 1 -np 1 -c 32768 -ctk q8_0 -ctv q8_0 --host 0.0.0.0 --port 8080 -a qwen3.8-flash-next-iq4xs-strixhalo --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": "115g"
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

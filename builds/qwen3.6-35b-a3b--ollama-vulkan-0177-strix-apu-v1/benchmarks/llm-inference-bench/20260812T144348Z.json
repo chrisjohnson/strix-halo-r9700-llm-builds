@@ -397,5 +397,30 @@
       "4": 0.0,
       "8": 0.0
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/qwen3.6-35b-a3b--ollama-vulkan-0177-v1/docker-compose.yaml as committed at dc5a4c17de56445c8ced65b91c658af035b87b82 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "dc5a4c17de56445c8ced65b91c658af035b87b82",
+    "compose": {
+      "image": "ollama/ollama:0.17.7",
+      "cmd": null,
+      "env": [
+        "OLLAMA_VULKAN=1",
+        "HIP_VISIBLE_DEVICES=-1",
+        "ROCR_VISIBLE_DEVICES=-1"
+      ],
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

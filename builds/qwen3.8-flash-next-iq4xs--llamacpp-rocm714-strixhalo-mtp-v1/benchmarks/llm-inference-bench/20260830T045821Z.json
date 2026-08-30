@@ -405,5 +405,28 @@
       "4": 12.71633993852439,
       "8": 11.191488743676027
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (strix-halo-r9700-llm-builds) - builds/qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v1/docker-compose.yaml as committed at d6354edb2750f4f526ce3eca23a333bc91d723fc (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "d6354edb2750f4f526ce3eca23a333bc91d723fc",
+    "compose": {
+      "image": "strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14",
+      "cmd": "llama-server -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf -dev ROCm0 -ngl 999 -fa on -ctk q8_0 -ctv q8_0 -lm mmap --tensor-read-lazy on -c 262144 -b 8192 -ub 2048 -t 4 --parallel 1 -md /models-mtp/mtp-Qwen3.8-Flash-Next-Q8_0.gguf --spec-type draft-mtp,ngram-mod --spec-draft-n-max 4 --spec-draft-p-min 0.75 --host 0.0.0.0 --port 8080 -a qwen3.8-flash-next-iq4xs-strixhalo-mtp --metrics\n",
+      "env": [
+        "HIP_VISIBLE_DEVICES=0"
+      ],
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": "115g"
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

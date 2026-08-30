@@ -405,5 +405,26 @@
       "4": 24.20307915962415,
       "8": 23.021396017773732
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/qwen3.8-27b-q4km--llamacpp-vulkan-radv-r9700-v1/docker-compose.yaml as committed at e91b10a689fa47026f69479b02bd12b27d7b9f2b (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "e91b10a689fa47026f69479b02bd12b27d7b9f2b",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/Qwen3.8-27B-Q4_K_M.gguf -dev Vulkan0 -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host 0.0.0.0 --port 8080 -a qwen3.8-27b-q4km-r9700 --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

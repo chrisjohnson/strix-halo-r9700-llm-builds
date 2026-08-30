@@ -405,5 +405,26 @@
       "4": 46.506338933793735,
       "8": 45.40364969342944
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1/docker-compose.yaml as committed at 53b63f857b0f9d9c3004c3391b585dad735d11b9 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "53b63f857b0f9d9c3004c3391b585dad735d11b9",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/Ornith-1.5-35B-A3B-Q4_K_M.gguf -dev Vulkan1 -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.6 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --cache-ram 2048 --host 0.0.0.0 --port 8080 -a ornith-1.5-35b-a3b-mtp-q4 --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

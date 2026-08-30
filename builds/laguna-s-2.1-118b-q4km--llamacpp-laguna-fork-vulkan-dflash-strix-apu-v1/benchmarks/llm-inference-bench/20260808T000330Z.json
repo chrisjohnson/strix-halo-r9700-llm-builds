@@ -405,5 +405,26 @@
       "4": 5.090183466252724,
       "8": 4.750433482040833
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/laguna-s-2.1-118b-q4km--llamacpp-laguna-fork-vulkan-dflash-v1/docker-compose.yaml as committed at bfc7a1114726b086326b7f6489dff93576d2ffda (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "bfc7a1114726b086326b7f6489dff93576d2ffda",
+    "compose": {
+      "image": "local-ai-machine/llamacpp-laguna-fork:vulkan-radv",
+      "cmd": "/build/build/bin/llama-server -m /models/UD-Q4_K_M/Laguna-S-2.1-UD-Q4_K_M-00001-of-00003.gguf -md /models-draft/laguna-s-2.1-DFlash-BF16.gguf --spec-type draft-dflash --spec-draft-n-max 15 -ngl 999 -fa 1 --swa-full --reasoning-format deepseek -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host 0.0.0.0 --port 8080 -a laguna-dflash-vulkan --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

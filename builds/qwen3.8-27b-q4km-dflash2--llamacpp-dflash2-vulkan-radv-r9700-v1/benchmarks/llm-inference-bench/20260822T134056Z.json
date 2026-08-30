@@ -405,5 +405,26 @@
       "4": 27.833481298187124,
       "8": 28.735904272958518
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/qwen3.8-27b-q4km-dflash2--llamacpp-dflash2-vulkan-radv-r9700-v1/docker-compose.yaml as committed at 364c63491c8206488f2e873ff7bd40b101721dcb (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "364c63491c8206488f2e873ff7bd40b101721dcb",
+    "compose": {
+      "image": "local-ai-machine/llamacpp-dflash2:vulkan-radv",
+      "cmd": "./build/bin/llama-server -m /models/Qwen3.8-27B-Q4_K_M.gguf -md /draft/Qwen3.8-27B-DFlash2-Q4_K_M.gguf --spec-type draft-dflash --spec-draft-n-max 7 -dev Vulkan0 -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 --host 0.0.0.0 --port 8080 -a qwen3.8-27b-q4km-dflash2-r9700 --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

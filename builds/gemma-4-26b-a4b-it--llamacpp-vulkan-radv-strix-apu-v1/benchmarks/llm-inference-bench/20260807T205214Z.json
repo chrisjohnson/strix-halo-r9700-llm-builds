@@ -405,5 +405,26 @@
       "4": 37.097058108211925,
       "8": 36.67996772708437
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/gemma-4-26b-a4b-it--llamacpp-vulkan-radv-v1/docker-compose.yaml as committed at b2cc72ca3263b199bd87807e3935bcb5c64efc3d (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "b2cc72ca3263b199bd87807e3935bcb5c64efc3d",
+    "compose": {
+      "image": "docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv",
+      "cmd": "llama-server -m /models/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf -ngl 999 -fa 1 -np 1 -c 131072 -n 8192 -ctk q8_0 -ctv q8_0 --host 0.0.0.0 --port 8080 -a gemma-4-26b-a4b-it --metrics\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

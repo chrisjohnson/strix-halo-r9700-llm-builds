@@ -405,5 +405,30 @@
       "4": 18.262030655006537,
       "8": 17.997842983794456
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/glm-4.7-flash--ollama-vulkan-0177-v1/docker-compose.yaml as committed at daadcd5f1a092ae9b83fc9c3a59ebab046d2934b (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "daadcd5f1a092ae9b83fc9c3a59ebab046d2934b",
+    "compose": {
+      "image": "ollama/ollama:0.17.7",
+      "cmd": null,
+      "env": [
+        "OLLAMA_VULKAN=1",
+        "HIP_VISIBLE_DEVICES=-1",
+        "ROCR_VISIBLE_DEVICES=-1"
+      ],
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

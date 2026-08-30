@@ -401,5 +401,26 @@
       "4": 14.897305735704611,
       "8": 68.88986002111115
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/gpt-oss-20b--vllm-therock-gfx1151-v1/docker-compose.yaml as committed at 276b503bcfdfefe772b3bf0598a38e900d68df55 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "276b503bcfdfefe772b3bf0598a38e900d68df55",
+    "compose": {
+      "image": "docker.io/kyuz0/vllm-therock-gfx1151:latest",
+      "cmd": "vllm serve /models/gpt-oss-20b --served-model-name gpt-oss-20b --host 0.0.0.0 --port 8000 --tensor-parallel-size 1 --gpu-memory-utilization 0.90 --dtype auto --trust-remote-code --enable-prefix-caching --max-model-len 131072 --enable-auto-tool-choice --tool-call-parser openai --reasoning-parser openai_gptoss\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "video",
+        "render"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

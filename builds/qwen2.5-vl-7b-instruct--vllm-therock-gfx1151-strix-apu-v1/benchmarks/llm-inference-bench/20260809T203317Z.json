@@ -393,5 +393,26 @@
       "4": 0.0,
       "8": 0.0
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/qwen2.5-vl-7b-instruct--vllm-therock-gfx1151-v1/docker-compose.yaml as committed at d85806315b24205ead9e33a87a5192c63c05ed1b (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "d85806315b24205ead9e33a87a5192c63c05ed1b",
+    "compose": {
+      "image": "docker.io/kyuz0/vllm-therock-gfx1151:latest",
+      "cmd": "vllm serve /models/qwen2.5-vl-7b-instruct --served-model-name qwen2.5-vl-7b-instruct --host 0.0.0.0 --port 8000 --tensor-parallel-size 1 --gpu-memory-utilization 0.20 --dtype auto --trust-remote-code --enable-prefix-caching --max-model-len 32768\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "video",
+        "render"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

@@ -405,5 +405,26 @@
       "4": 0.0,
       "8": 0.0
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/ds4-deepseek-v4-flash-iq2xxs-imatrix--ds4-strix-halo-v1/docker-compose.yaml as committed at 032ad79be042ae396e5465a25566405110777338 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "032ad79be042ae396e5465a25566405110777338",
+    "compose": {
+      "image": "kyuz0/strix-halo-ds4-toolbox:rocm-7.14",
+      "cmd": "ds4-server -m /models/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf --ctx 128000 --prefill-chunk 1024 --host 0.0.0.0 --port 8080\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

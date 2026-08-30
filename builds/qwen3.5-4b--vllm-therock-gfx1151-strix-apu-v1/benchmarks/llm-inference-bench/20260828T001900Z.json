@@ -129,5 +129,26 @@
       "1": 21.846830813127383,
       "2": 41.681749078927936
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (strix-halo-r9700-llm-builds) - builds/qwen3.5-4b--vllm-therock-gfx1151-strix-apu-v1/docker-compose.yaml as committed at 09bae0b5e46c647fe2830507f8e5f0267fb92479 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "09bae0b5e46c647fe2830507f8e5f0267fb92479",
+    "compose": {
+      "image": "docker.io/kyuz0/vllm-therock-gfx1151:latest",
+      "cmd": "vllm serve /models/qwen3.5-4b --served-model-name qwen3.5-4b-judge --host 0.0.0.0 --port 8000 --tensor-parallel-size 1 --gpu-memory-utilization 0.20 --dtype auto --trust-remote-code --max-num-seqs 64 --enable-prefix-caching --max-model-len 131072 --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser qwen3\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "video",
+        "render"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }

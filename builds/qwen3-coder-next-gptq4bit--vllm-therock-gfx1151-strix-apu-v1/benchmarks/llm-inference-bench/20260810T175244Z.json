@@ -401,5 +401,26 @@
       "4": 11.904300636915913,
       "8": 15.887155362987016
     }
-  }
+  },
+  "target_launch_config": {
+    "reconstructed": true,
+    "source": "git archaeology (local-ai-machine (pre-extraction)) - builds/qwen3-coder-next-gptq4bit--vllm-therock-gfx1151-v1/docker-compose.yaml as committed at a2a913041c013435e0893b5cdf3ed2ca314178c3 (the commit immediately preceding this benchmark result's own commit, i.e. the orchestrator's HEAD at run time). NOT a live docker inspect - reflects the compose file's declared command/image/env, not the resolved runtime state (env expansion, exact image digest pulled at the time).",
+    "build_repo_commit": "a2a913041c013435e0893b5cdf3ed2ca314178c3",
+    "compose": {
+      "image": "docker.io/kyuz0/vllm-therock-gfx1151:latest",
+      "cmd": "vllm serve /models/qwen3-coder-next-gptq4bit --served-model-name qwen3-coder-next-gptq4bit --host 0.0.0.0 --port 8000 --tensor-parallel-size 1 --gpu-memory-utilization 0.60 --dtype auto --trust-remote-code --enable-prefix-caching --max-model-len 131072 --enable-auto-tool-choice --tool-call-parser qwen3_coder\n",
+      "env": null,
+      "devices": [
+        "/dev/kfd:/dev/kfd",
+        "/dev/dri:/dev/dri"
+      ],
+      "group_add": [
+        "video",
+        "render"
+      ],
+      "mem_limit": null
+    }
+  },
+  "server_props": null,
+  "bench_tool_commit": null
 }
