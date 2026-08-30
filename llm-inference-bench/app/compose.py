@@ -99,7 +99,7 @@ def load_all_build_services(builds_dir: Path) -> dict:
     return services
 
 
-def compose(build_id: str, args, builds_dir: Path, check=True, timeout=None):
+def compose(build_id: str, args, builds_dir: Path, check=True, timeout=None, extra_compose_files=None):
     """docker compose <args> against one build's own standalone compose
     project - never a shared file, never a shared project name. Same -p
     isolation modelctl uses (see its own comment for why this is
@@ -107,11 +107,22 @@ def compose(build_id: str, args, builds_dir: Path, check=True, timeout=None):
     docker`, matching the always-up base stack's own compose project
     name, so without an explicit override every build and the base stack
     would share one Compose project and its default network.
+
+    extra_compose_files: optional list of additional `-f` files layered on
+    top of the build's own compose file (later files win on conflicting
+    keys, standard Compose merge semantics). Used by the orchestrator to
+    apply benchmark-only overrides (e.g. -sps 0 for spec-decode targets,
+    see orchestrator.py's _write_sps_override) without ever touching the
+    build's own committed docker-compose.yaml - a plain `docker compose up`
+    or modelctl launch never sees these files and is unaffected.
     """
     build_dir = builds_dir / build_id
     compose_file = build_dir / "docker-compose.yaml"
+    f_args = ["-f", str(compose_file)]
+    for extra in (extra_compose_files or []):
+        f_args += ["-f", str(extra)]
     return run(
-        ["docker", "compose", "-p", project_name_for(build_id), "-f", str(compose_file), *args],
+        ["docker", "compose", "-p", project_name_for(build_id), *f_args, *args],
         cwd=str(build_dir),
         check=check,
         timeout=timeout,

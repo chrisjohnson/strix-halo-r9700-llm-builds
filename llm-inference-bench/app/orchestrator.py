@@ -226,6 +226,78 @@ class Orchestrator:
             return self.DEFAULT_TARGET_GPU
         return (data.get("derived") or {}).get("target_gpu") or self.DEFAULT_TARGET_GPU
 
+    def _is_spec_decode(self, build: str) -> bool:
+        """True if builds/<build>/build.yaml declares derived.mtp: true -
+        the existing catalog field for "this build has a speculative-decode
+        draft head wired up", already maintained per-build for the dashboard.
+        Reused here (not a new field) to decide which targets need the
+        benchmark-only -sps override - see _write_sps_override."""
+        path = self.config.checkout_dir / "builds" / build / "build.yaml"
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            return False
+        return bool((data.get("derived") or {}).get("mtp"))
+
+    def _write_sps_override(self, build: str) -> Path | None:
+        """For spec-decode (MTP) targets only: write a docker-compose
+        override file that appends `-sps 0` (--slot-prompt-similarity 0) to
+        the service's command, so this run's decode benchmark doesn't
+        silently disable MTP's speculative drafting.
+
+        Root cause (confirmed live, not theorized - see local-ai-machine's
+        fleet card M-138, 2026-08-30): llama-server's default
+        --slot-prompt-similarity (0.10) reuses a slot's cached KV prefix via
+        "selected slot by LCP similarity" whenever a new request's prompt
+        overlaps enough with what's cached. This decode benchmark's own
+        methodology (repeated single/few-slot requests at varying,
+        mismatched context depths across its concurrency x context sweep)
+        triggers that reuse constantly, and speculative drafting silently
+        stops engaging after the first reuse (0 further "draft acceptance"
+        log lines for the rest of the run in the reproduction case). -sps 0
+        forces fresh (LRU) slot selection instead, which live-reproduction
+        confirmed restores drafting on every request.
+
+        This is a BENCHMARK-ONLY change: it returns None (no override
+        written, nothing changes) for any target whose build.yaml doesn't
+        declare derived.mtp: true, and it never touches the build's own
+        committed docker-compose.yaml - a real end user's `modelctl` or
+        plain `docker compose up` launch of the same build never sees this
+        flag and keeps the default prefix-cache reuse, which is the right
+        behavior for genuine multi-turn conversations (their prefix grows by
+        appending, it doesn't jump between mismatched depths the way this
+        benchmark's sweep does, and MTP was independently confirmed working
+        fine under the default -sps setting in real multi-turn testing).
+
+        Returns the override file path, or None if this target doesn't need
+        one (not spec-decode, not a llama-server command, or the build
+        already sets -sps/--slot-prompt-similarity explicitly - never
+        second-guess an explicit per-build choice)."""
+        if not self._is_spec_decode(build):
+            return None
+        compose_path = self.config.checkout_dir / "builds" / build / "docker-compose.yaml"
+        try:
+            data = yaml.safe_load(compose_path.read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            return None
+        svc = (data.get("services") or {}).get(build) or {}
+        cmd = svc.get("command")
+        if not cmd:
+            return None
+        cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
+        if "llama-server" not in cmd_str:
+            return None
+        if "-sps" in cmd_str or "--slot-prompt-similarity" in cmd_str:
+            log.line(f"[bench] {build} already sets -sps explicitly - not overriding")
+            return None
+        override_path = (
+            self.config.checkout_dir / "builds" / ".orchestrator" / "runs" / f"{build}-sps-override.yaml"
+        )
+        override_path.parent.mkdir(parents=True, exist_ok=True)
+        override_cmd = cmd_str.rstrip() + " -sps 0"
+        override_path.write_text(yaml.safe_dump({"services": {build: {"command": override_cmd}}}))
+        return override_path
+
     # ------------------------------------------------------------------
     # Run lifecycle
     # ------------------------------------------------------------------
@@ -529,12 +601,30 @@ class Orchestrator:
         for build in targets:
             info = services[build]
             if info["always_up"]:
-                # Always-up targets (ollama) are already up — just confirm healthy.
+                # Always-up targets (ollama, and any standing model) are
+                # already up — just confirm healthy. KNOWN LIMITATION: this
+                # means the -sps benchmark override below never applies to
+                # an always-up spec-decode target (e.g. a standing MTP
+                # model) - recreating it here to apply the override would
+                # mean a real restart of a container serving live traffic,
+                # which is a production-impact decision this orchestrator
+                # doesn't make unilaterally. Its decode-throughput numbers
+                # keep the known slot-reuse-vs-MTP limitation documented in
+                # M-138 until/unless that tradeoff is explicitly decided.
                 log.line(f"[health] {build} is always-up, confirming reachable ...")
                 self._wait_healthy(build, info, already_up=True)
             else:
                 log.line(f"[health] bringing up {build} ...")
-                dc.compose(build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600)
+                override = self._write_sps_override(build)
+                if override:
+                    log.line(
+                        f"[health] {build} is spec-decode (build.yaml derived.mtp: true) - "
+                        f"applying benchmark-only -sps 0 override ({override}, see M-138)"
+                    )
+                dc.compose(
+                    build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600,
+                    extra_compose_files=[override] if override else None,
+                )
                 self._wait_healthy(build, info, already_up=False)
 
     def _wait_healthy(self, build: str, info: dict, already_up: bool):
@@ -579,7 +669,8 @@ class Orchestrator:
         stdout_log = out_dir / f"{raw_json.stem}-stdout.log"
         crash_log = out_dir / f"{raw_json.stem}-crash.log"
 
-        bench_cmd = self._bench_command(port, overrides, raw_json)
+        launch_config_path = self._capture_launch_config(run_id, build)
+        bench_cmd = self._bench_command(port, overrides, raw_json, launch_config_path)
         timeout_s = int(overrides.get("timeout_s", self.config.build_timeout_s))
 
         try:
@@ -628,7 +719,92 @@ class Orchestrator:
                     log.line(f"[bench] {build} FAILED-artifact commit skipped: {commit_err}")
             raise
 
-    def _bench_command(self, port: int, overrides: dict, raw_json: Path) -> list:
+    def _capture_launch_config(self, run_id: str, build: str) -> Path | None:
+        """Capture everything needed to reproduce this benchmark's target
+        from data in the builds dir alone: the container's actual resolved
+        launch state (docker inspect - not the compose YAML, the real
+        thing that was running, which can differ via env expansion/
+        defaults/the -sps override above), the exact build-repo commit this
+        run's compose files came from, and host-level facts (kernel,
+        docker version, arch) that a same-hardware reviewer would need.
+        Written to the gitignored .orchestrator scratch dir and passed to
+        llm_decode_bench.py via --launch-config; the bench script (not this
+        method) is what actually writes it into the committed result JSON -
+        see save_results() in llm_decode_bench.py. Best-effort throughout:
+        any single facet failing (e.g. docker inspect on an already-gone
+        container) must not abort the benchmark - returns None only if
+        nothing at all could be captured."""
+        info: dict = {}
+
+        try:
+            container = json.loads(
+                dc.run(["docker", "inspect", build], check=False).stdout or "[]"
+            )
+            if container:
+                c = container[0]
+                cfg = c.get("Config", {})
+                host_cfg = c.get("HostConfig", {})
+                info["container"] = {
+                    "id": c.get("Id"),
+                    "image": cfg.get("Image"),
+                    "cmd": cfg.get("Cmd"),
+                    "entrypoint": cfg.get("Entrypoint"),
+                    "env": cfg.get("Env"),
+                    "devices": host_cfg.get("Devices"),
+                    "group_add": host_cfg.get("GroupAdd"),
+                    "memory_limit_bytes": host_cfg.get("Memory"),
+                    "created": c.get("Created"),
+                }
+                image_ref = cfg.get("Image")
+                if image_ref:
+                    img = json.loads(
+                        dc.run(["docker", "image", "inspect", image_ref], check=False).stdout or "[]"
+                    )
+                    if img:
+                        info["image"] = {
+                            "id": img[0].get("Id"),
+                            "repo_tags": img[0].get("RepoTags"),
+                            "repo_digests": img[0].get("RepoDigests"),
+                            "created": img[0].get("Created"),
+                        }
+        except Exception as e:  # noqa: BLE001
+            log.line(f"[bench] {build} launch-config: docker inspect failed (non-fatal): {e}")
+
+        try:
+            commit = dc.run(
+                ["git", "rev-parse", "HEAD"], cwd=str(self.config.checkout_dir), check=False
+            ).stdout.strip()
+            if commit:
+                info["build_repo_commit"] = commit
+        except Exception as e:  # noqa: BLE001
+            log.line(f"[bench] {build} launch-config: git rev-parse failed (non-fatal): {e}")
+
+        try:
+            host = {}
+            kernel = dc.run(["uname", "-r"], check=False).stdout.strip()
+            if kernel:
+                host["kernel"] = kernel
+            docker_info = json.loads(dc.run(["docker", "info", "--format", "{{json .}}"], check=False).stdout or "{}")
+            for k in ("OperatingSystem", "OSType", "Architecture", "NCPU", "MemTotal", "ServerVersion", "KernelVersion"):
+                if k in docker_info:
+                    host[k] = docker_info[k]
+            if host:
+                info["host"] = host
+        except Exception as e:  # noqa: BLE001
+            log.line(f"[bench] {build} launch-config: host facts failed (non-fatal): {e}")
+
+        if not info:
+            return None
+
+        info["captured_at"] = utcnow_iso()
+        info["source"] = "live docker inspect + git rev-parse at benchmark launch time (orchestrator)"
+
+        path = self.config.checkout_dir / "builds" / ".orchestrator" / "runs" / f"{run_id}-{build}-launch-config.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(info, indent=2))
+        return path
+
+    def _bench_command(self, port: int, overrides: dict, raw_json: Path, launch_config_path: Path | None = None) -> list:
         cmd = [
             "python3", str(self.config.bench_script),
             "--host", "localhost",
@@ -640,6 +816,8 @@ class Orchestrator:
             "--kv-budget", str(overrides.get("kv_budget", self.config.default_kv_budget)),
             "--output", str(raw_json),
         ]
+        if launch_config_path is not None:
+            cmd += ["--launch-config", str(launch_config_path)]
         prefill_contexts = overrides.get("prefill_contexts")
         if prefill_contexts:
             cmd += ["--prefill-contexts", str(prefill_contexts)]

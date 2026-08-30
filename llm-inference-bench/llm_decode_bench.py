@@ -15,6 +15,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import string
@@ -969,6 +970,24 @@ async def _detect_engine(check_client, base_url: str, model_ids: list, console, 
             return ENGINE_SGLANG, None, None
 
 
+async def fetch_server_props(client: httpx.AsyncClient, base_url: str) -> Optional[dict]:
+    """GET /props from the live target - llama-server's own self-report of
+    its generation defaults, n_ctx, model path, chat template, and build
+    version. A second, server-sourced fact set independent of whatever the
+    orchestrator captured via docker inspect (and the only source at all
+    when this script is run standalone, without an orchestrator). Not every
+    engine implements /props (vLLM/SGLang/Ollama don't) - failure here is
+    expected and must never abort the benchmark, so any error just means
+    "not available", not a real problem."""
+    try:
+        resp = await client.get(f"{base_url}/props", timeout=10.0)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
 async def run_benchmark(args):
     concurrency_levels = [int(x) for x in args.concurrency.split(",")]
     context_lengths = [int(x) for x in args.contexts.split(",")]
@@ -984,6 +1003,7 @@ async def run_benchmark(args):
     server_context_length = 0
     max_running = None
     engine = ENGINE_SGLANG
+    server_props = None
     async with httpx.AsyncClient() as check_client:
         try:
             resp = await check_client.get(f"{base_url}/v1/models", timeout=10.0)
@@ -999,7 +1019,11 @@ async def run_benchmark(args):
         except Exception as e:
             console.print(f"[red]Cannot connect to server at {base_url}: {e}[/red]")
             console.print("Make sure SGLang or vLLM is running and the port is correct.")
-            return [], {}, engine
+            return [], {}, engine, server_props
+
+        server_props = await fetch_server_props(check_client, base_url)
+        global _server_props
+        _server_props = server_props
 
         # Detect engine: explicit --engine skips detection entirely; otherwise
         # try SGLang's /get_server_info first, then vLLM's /version, then
@@ -1298,7 +1322,7 @@ async def run_benchmark(args):
                     # Brief pause between cells to let server settle
                     await asyncio.sleep(2.0)
 
-    return all_results, state.prefill_results, engine
+    return all_results, state.prefill_results, engine, server_props
 
 
 # ---------------------------------------------------------------------------
@@ -1403,7 +1427,8 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
     console.print(table3)
 
 
-def save_results(results: list, args, filepath: str, prefill_results: dict = None, engine: str = ""):
+def save_results(results: list, args, filepath: str, prefill_results: dict = None, engine: str = "",
+                  server_props: Optional[dict] = None):
     concurrency_levels = [int(x) for x in args.concurrency.split(",")]
     context_lengths = [int(x) for x in args.contexts.split(",")]
 
@@ -1425,7 +1450,25 @@ def save_results(results: list, args, filepath: str, prefill_results: dict = Non
                 "tok_per_sec": round(pr["tok_per_sec"], 0),
             }
 
+    # target_launch_config: written by the orchestrator (docker inspect +
+    # git rev-parse at the moment it started this benchmark's target - see
+    # orchestrator.py's _capture_launch_config) and handed to us as a file
+    # path, because the orchestrator is the only thing that knows what it
+    # actually launched. This script's only job is reading that file and
+    # putting its contents in the result, verbatim - never hand-edited.
+    # Absent (None) when this script is run standalone, without an
+    # orchestrator - that's expected, not an error.
+    target_launch_config = None
+    launch_config_path = getattr(args, "launch_config", "") or ""
+    if launch_config_path:
+        try:
+            with open(launch_config_path) as f:
+                target_launch_config = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            target_launch_config = {"error": f"could not read --launch-config {launch_config_path}: {e}"}
+
     output = {
+        "schema_version": 2,
         "metadata": {
             "engine": engine,
             "model": args.model,
@@ -1437,6 +1480,17 @@ def save_results(results: list, args, filepath: str, prefill_results: dict = Non
             "concurrency_levels": concurrency_levels,
             "context_lengths": context_lengths,
         },
+        # bench_tool_commit: the exact git commit of the llm-inference-bench
+        # tool that PRODUCED this result (as opposed to target_launch_config's
+        # build_repo_commit, which is the commit the TARGET's compose file
+        # came from - the two are usually the same commit since both live in
+        # this repo, but can differ if the deployed image lags a builds/-only
+        # push). Baked in at image-build time by the CI workflow via
+        # --build-arg GIT_SHA - see Dockerfile/BENCH_GIT_SHA. None if run
+        # from a non-CI-built image (e.g. a manual local build).
+        "bench_tool_commit": os.environ.get("BENCH_GIT_SHA") or None,
+        "target_launch_config": target_launch_config,
+        "server_props": server_props,
         "prefill": prefill_summary,
         "results": [asdict(r) for r in actual_results],
         "summary_table": summary,
@@ -1506,15 +1560,24 @@ def parse_args():
         help="Inference engine (default: auto-detect). Use 'ollama' for Ollama servers, "
              "which expose no SGLang/vLLM detection endpoints."
     )
+    parser.add_argument(
+        "--launch-config", default="", metavar="PATH",
+        help="Path to a JSON file (written by the orchestrator via docker inspect + "
+             "git rev-parse at launch time) describing exactly how the target server "
+             "was started - image, resolved command, env, git commit. Embedded verbatim "
+             "into the output under target_launch_config for reproducibility. Optional - "
+             "omitted when running this script standalone, without an orchestrator."
+    )
     return parser.parse_args()
 
 
 _partial_results: list = []
 _prefill_results: dict = {}
+_server_props: Optional[dict] = None
 
 
 def main():
-    global _partial_results, _prefill_results
+    global _partial_results, _prefill_results, _server_props
     args = parse_args()
     console = Console()
 
@@ -1535,16 +1598,18 @@ def main():
 
     engine = ""
     try:
-        results, prefill_results, engine = asyncio.run(run_benchmark(args))
+        results, prefill_results, engine, server_props = asyncio.run(run_benchmark(args))
         _prefill_results = prefill_results
+        _server_props = server_props
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user. Saving partial results...[/yellow]")
         results = _partial_results
         prefill_results = _prefill_results
+        server_props = _server_props
 
     if results or prefill_results:
         print_final_results(results, concurrency_levels, context_lengths, console, prefill_results)
-        save_results(results, args, args.output, prefill_results, engine=engine)
+        save_results(results, args, args.output, prefill_results, engine=engine, server_props=server_props)
         console.print(f"\n[green]Results saved to {args.output}[/green]")
     else:
         console.print("[red]No results collected.[/red]")
