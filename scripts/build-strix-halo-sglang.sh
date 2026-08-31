@@ -11,5 +11,13 @@ docker build \
   docker/
 
 echo "BUILD_OK"
-docker run --rm strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151 \
+# `import sglang` eagerly touches the GPU via aiter/Triton driver init, so
+# unlike a plain --version check this smoke test needs real device access -
+# without it, Triton's driver probe fails with "0 active drivers", not a
+# build problem.
+docker run --rm \
+  --device /dev/kfd --device /dev/dri \
+  --group-add video --group-add render \
+  --security-opt seccomp=unconfined \
+  strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151 \
   python3 -c "import sglang; print('sglang import OK')"
