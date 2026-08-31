@@ -1,0 +1,60 @@
+name: ornith-1.5-35b-a3b-int4-autoround-mtp--vllm-therock-gfx1151-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: vllm-therock-v1
+  model: Ornith-1.5-35B-A3B
+  params: 35B
+  active_params: 3B
+  quant: INT4-W4A16-AutoRound
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-08-31, overnight performance sweep). Real experiment: does
+    vLLM's continuous batching + prefix caching beat our current
+    medium-moe llama.cpp build
+    (ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3, -np 1)
+    while keeping real, working MTP speculative decoding? Quant:
+    biMEMO/Ornith-1.5-35B-A3B-int4-AutoRound-MTP (AutoRound W4A16,
+    genuinely keeps a working MTP head per its own README, ~85-92% draft
+    acceptance claimed on code).
+
+    **TESTED_NOT_VIABLE - confirmed dead end, not a config mistake.**
+    vLLM refuses to load this checkpoint on ROCm with a hard, explicit
+    validation error from pydantic's ModelConfig: "inc quantization is
+    currently not supported in rocm". "inc" = the internal quant-method
+    identifier vLLM uses for AutoRound-format checkpoints (AutoRound was
+    developed under Intel's Neural Compressor/INC toolkit). Confirmed via
+    a real web search of vLLM's own current ROCm-supported quantization
+    method list (awq, awq_marlin, gptq, gptq_marlin, fp8,
+    compressed-tensors, fbgemm_fp8, gguf, quark, ptpc_fp8, mxfp4,
+    petit_nvfp4, torchao) - "inc"/AutoRound is genuinely absent from that
+    list. This is a real, current (not version-specific/fixable-by-flag)
+    limitation in vLLM's ROCm platform code, confirmed by the actual crash
+    happening during model_config validation - before any GPU/device
+    targeting or engine init even runs.
+
+    Two real, separate lessons captured along the way (useful for any
+    future vLLM build in this catalog, regardless of this dead end):
+    1. vLLM's Ray-based accelerator manager requires HIP_VISIBLE_DEVICES,
+       not ROCR_VISIBLE_DEVICES (crashed hard with a clear error the first
+       time this build used ROCR_VISIBLE_DEVICES) - use HIP_VISIBLE_DEVICES
+       for any future vLLM build on this box.
+    2. On this box, inside the kyuz0/vllm-therock-gfx1151 image, `rocm-smi
+       --showproductname` confirmed GPU[0]=R9700 (AMD Radeon AI PRO
+       R9700), GPU[1]=Strix APU (AMD Radeon 8060S) - none of the existing
+       vLLM builds in this catalog set HIP_VISIBLE_DEVICES/
+       ROCR_VISIBLE_DEVICES explicitly, so it's genuinely unclear which
+       physical GPU they land on by default - worth a separate,
+       deliberate check if that ever matters (out of scope for M-139).
+
+    Weights deleted (20GB reclaimed, disk was down to 19GB free) - this
+    exact quant has no other use on this box (nothing else here
+    understands "inc"/AutoRound format). If MTP-preserving vLLM serving
+    for Ornith is worth pursuing later, MIRALABS/Ornith-1.5-35B-A3B-W4A16-SYM
+    (compressed-tensors format - IS on vLLM's supported list) is a real,
+    found-but-untried candidate, though it's unclear from its own tags
+    whether it preserves MTP the way this one did - would need its own
+    fresh check. Not pursued further this session (disk/time budget spent
+    on Qwen3.8-27B's AWQ quant instead, which uses two vLLM-ROCm-supported
+    formats at once: awq and quark).

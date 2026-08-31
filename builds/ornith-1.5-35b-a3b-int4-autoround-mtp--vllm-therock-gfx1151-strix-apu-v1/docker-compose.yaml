@@ -1,0 +1,32 @@
+name: docker
+services:
+  ornith-1.5-35b-a3b-int4-autoround-mtp--vllm-therock-gfx1151-strix-apu-v1:
+    image: docker.io/kyuz0/vllm-therock-gfx1151:latest
+    container_name: ornith-1.5-35b-a3b-int4-autoround-mtp--vllm-therock-gfx1151-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      HIP_VISIBLE_DEVICES: "1"
+    volumes:
+    - /var/lib/ai-models:/models
+    - vllm-ornith-int4-mtp-cache:/root/.cache/vllm
+    command: >-
+      vllm serve /models/ornith-1.5-35b-a3b-int4-autoround-mtp --served-model-name
+      ornith-1.5-35b-a3b-int4-mtp --host 0.0.0.0 --port 8000 --tensor-parallel-size
+      1 --gpu-memory-utilization 0.90 --dtype auto --trust-remote-code --enable-prefix-caching
+      --enable-chunked-prefill --max-model-len 131072 --kv-cache-dtype fp8_e4m3
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}' --reasoning-parser
+      qwen3
+    ports:
+    - 127.0.0.1:8153:8000
+volumes:
+  vllm-ornith-int4-mtp-cache:
+    external: true
+    name: docker_vllm-ornith-int4-mtp-cache
