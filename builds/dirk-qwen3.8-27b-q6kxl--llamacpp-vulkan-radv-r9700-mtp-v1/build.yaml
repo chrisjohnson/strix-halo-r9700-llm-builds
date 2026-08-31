@@ -1,0 +1,41 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-08-31, Chris's request: "There's also a dirk fine-tune of
+    Qwen 3.8-27b let's get a build spun up for that and start the
+    download"). NOT actually a fine-tune - checked the model card,
+    base_model_relation: quantized - same Qwen/Qwen3.8-27B weights as our
+    standing qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1 build,
+    Unsloth Dynamic 3.0 UD GGUF quants (their current generation, keeps
+    the MTP/nextn head). The only real change is the "Sharp" chat
+    template baked into GGUF metadata for terser default output - real
+    published SWE-bench-Live numbers (peculiar-ragdoll's own benchmark,
+    not independently verified yet) claim ~2.7x faster median time-to-fix
+    on the shared-solve band vs the stock template, same underlying
+    weights/quality.
+
+    Low-risk relative to tonight's other experiments (vLLM/SGLang
+    engine-compatibility dead ends): same llama.cpp/Vulkan engine, same
+    base weights, only the GGUF quant ladder + template differ. Direct,
+    same-engine comparison against our current standing build is
+    possible without any new engine-compatibility risk.
+
+    UD-Q6_K_XL (25.3 GB) chosen to match our standing build's Q6_K_L
+    tier as closely as possible for a fair comparison. Launch flags
+    mirror the standing build exactly (-np 1 -c 262144 --spec-type
+    draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.6 -ctk/-ctv q4_0)
+    since it's the same MTP-preserving quant family.
+
+    Not yet benchmarked - download in progress, build not yet brought up
+    (R9700 currently occupied by the standing qwen3.8-27b-q6kl build;
+    will test sequentially once the concurrent SGLang Qwen3.5 experiment
+    on the APU concludes, one large build at a time).
