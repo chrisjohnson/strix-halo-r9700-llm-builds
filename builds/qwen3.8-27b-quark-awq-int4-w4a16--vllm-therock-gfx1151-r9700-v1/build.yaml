@@ -1,0 +1,73 @@
+name: qwen3.8-27b-quark-awq-int4-w4a16--vllm-therock-gfx1151-r9700-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: vllm-therock-v1
+  model: Qwen3.8-27B
+  params: 27.32B
+  active_params: null
+  quant: AWQ-INT4-W4A16
+  mtp: false
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-08-31, overnight performance sweep, Chris's explicit
+    go-ahead to compile builds and experiment against the 3 standing
+    models). Real experiment: does vLLM's continuous batching + prefix
+    caching beat our current medium-dense llama.cpp build
+    (qwen3.8-27b-q6kl--llamacpp-vulkan-radv-r9700-mtp-v1, real MTP,
+    -c 262144) for concurrent/multi-request serving?
+
+    RESULT: hard dead end, real vLLM bug, not a config mistake. Root cause
+    confirmed by reading the actual site-packages source inside the
+    kyuz0/vllm-therock-gfx1151:latest image
+    (vllm==0.22.1rc1.dev499+g470229c37.d20260613) and directly inspecting
+    this checkpoint's config.json:
+
+    amd/Qwen3.8-27B-Quark-AWQ-INT4-W4A16's quantization_config.algo_config
+    is `[{...}]` - a list containing ONE dict (AWQ algorithm hyperparameter
+    metadata), which is a legitimate part of AMD Quark's export format.
+    vLLM's QuarkConfig.apply_vllm_mapper()
+    (vllm/model_executor/layers/quantization/quark/quark.py) iterates every
+    list-valued key in quant_config and unconditionally calls
+    hf_to_vllm_mapper.apply_list(v), which assumes every list element is a
+    layer-name string and calls key.startswith(prefix) on it. algo_config's
+    dict element blows up with `AttributeError: 'dict' object has no
+    attribute 'startswith'`, crashing EngineCore before any GPU/weight
+    loading happens (same failure class as the Ornith AutoRound rejection:
+    fails at model-config/quant-config validation, not runtime). Confirmed
+    via web search this isn't a previously-reported/known issue - a real,
+    fresh finding, not something fixable by a compose flag or arg.
+
+    Not something to patch: fixing it means patching vLLM's own
+    model_executor code inside a third-party pre-built image, which is out
+    of scope for a real, reproducible build entry.
+
+    Quant: AMD's own official AWQ quant (same upstream base as our standing
+    bartowski GGUF build), chosen specifically because AWQ+quark ARE on
+    vLLM's ROCm-supported quant list (confirmed via the sibling Ornith
+    AutoRound/"inc" rejection - this was meant to avoid that exact mistake,
+    but hit a different, deeper bug instead).
+
+    Launch config used: -tp 1, HIP_VISIBLE_DEVICES=0 (R9700 - GPU[0] in
+    this image's rocm-smi enumeration), --max-model-len 262144 to match our
+    current llama.cpp build's own ceiling. No quantization flag needed -
+    auto-detected from checkpoint's own quant_config (which is exactly what
+    broke).
+
+    Cleanup: 19.5GB weights deleted, container/volume/network removed,
+    standing qwen3.8-27b-q6kl llama.cpp container restarted and confirmed
+    healthy. Also deleted the sibling
+    ornith-1.5-35b-a3b-int4-autoround-mtp (20GB, already TESTED_NOT_VIABLE
+    from earlier this session) and removed both dead entries from
+    configuration.nix's declarative model-download list, so a future
+    reboot doesn't silently re-download either.
+
+    Net vLLM-on-this-box scorecard after two real attempts: AutoRound
+    ("inc") quant format unsupported on ROCm at all (Ornith); this specific
+    AMD Quark checkpoint export hits a real, unreported vLLM mapper bug
+    (this one). Both are hard blockers unrelated to our own compose
+    config. Worth trying vLLM again only if: (a) a plain fp8/gptq_marlin/
+    compressed-tensors quant of one of our 3 standing models becomes
+    available (avoids the quark/algo_config path entirely), or (b) a newer
+    vllm-therock-gfx1151 image ships with this apply_list() bug fixed
+    upstream.

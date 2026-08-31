@@ -1,0 +1,30 @@
+name: docker
+services:
+  qwen3.8-27b-quark-awq-int4-w4a16--vllm-therock-gfx1151-r9700-v1:
+    image: docker.io/kyuz0/vllm-therock-gfx1151:latest
+    container_name: qwen3.8-27b-quark-awq-int4-w4a16--vllm-therock-gfx1151-r9700-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      HIP_VISIBLE_DEVICES: "0"
+    volumes:
+    - /var/lib/ai-models:/models
+    - vllm-qwen3.8-27b-awq-cache:/root/.cache/vllm
+    command: >-
+      vllm serve /models/qwen3.8-27b-quark-awq-int4-w4a16 --served-model-name
+      qwen3.8-27b-quark-awq --host 0.0.0.0 --port 8000 --tensor-parallel-size
+      1 --gpu-memory-utilization 0.90 --dtype auto --trust-remote-code --enable-prefix-caching
+      --enable-chunked-prefill --max-model-len 262144 --reasoning-parser qwen3
+    ports:
+    - 127.0.0.1:8154:8000
+volumes:
+  vllm-qwen3.8-27b-awq-cache:
+    external: true
+    name: docker_vllm-qwen3.8-27b-awq-cache
