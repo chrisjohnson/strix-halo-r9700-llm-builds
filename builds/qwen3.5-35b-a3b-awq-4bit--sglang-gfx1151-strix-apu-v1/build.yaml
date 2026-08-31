@@ -1,0 +1,82 @@
+name: qwen3.5-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: sglang-gfx1151-v1
+  model: Qwen3.5-35B-A3B
+  params: 35B
+  active_params: 3.3B
+  quant: AWQ-4bit
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-08-31). Fallback after
+    qwen3.6-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1 hit a real
+    SGLang bug (Qwen3.6 routed through SGLang's Qwen3.5 model handler,
+    KeyError on w2_qweight expert key naming - see that build's
+    TESTED_NOT_VIABLE writeup). Chris's explicit call: "Fall back" - test
+    the fork's own proven-working checkpoint
+    (cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit, the exact model
+    docs/RUNNING_AWQ_MOE.md in the vendored fork is written against) to
+    determine whether SGLang has real merit on this hardware at all, even
+    without a directly-matching existing bench-data comparison (no
+    Qwen3.5-35B-A3B build exists in this catalog to compare against - the
+    goal here is a standalone "does this engine work and perform
+    reasonably on our hardware" signal, not a head-to-head against an
+    existing number).
+
+    Same launch config as the Qwen3.6 attempt (proven necessary there):
+    --dtype float16 (AWQ requires it, bfloat16 auto-detect fails),
+    SGLANG_AWQ_MOE_TRITON_ROCM=1 (ROCm Triton MoE dispatch, not NVIDIA
+    Marlin), --context-length 8192 --max-total-tokens 8192
+    --max-mamba-cache-size 32 --mem-fraction-static 0.55 (conservative,
+    matches the fork's own proven-safe reference for this exact
+    checkpoint per docs/RUNNING_AWQ_MOE.md).
+
+    Both Laguna AND Ornith stopped for this attempt (not just Ornith) -
+    the Qwen3.6 attempt showed ~39GB (Ornith-only-stopped) genuinely
+    wasn't enough headroom for this size-class model's loading spike, so
+    starting with the full pool this time rather than repeating the same
+    undersized attempt. R9700/Qwen3.8-27b left running throughout.
+
+    RESULT: TESTED_NOT_VIABLE - real, different failure mode than the
+    Qwen3.6 attempt, and the closest this session got to success. Weight
+    loading actually succeeded this time:
+
+    Load weight end. elapsed=46.05s, type=Qwen3_5MoeForConditionalGeneration,
+    quant=compressed-tensors, avail mem=93.50 GB, mem usage=23.64 GB.
+    Mamba Cache is allocated... KV Cache is allocated...
+    Uvicorn running on http://0.0.0.0:30000
+
+    The server came up and started listening. It then hung during its
+    own internal startup warmup request (SGLang sends itself a real
+    completion request before declaring ready) - the log shows Triton
+    JIT-compiling a kernel right before the hang (`_do_compile`), and the
+    warmup request never returned, hitting its hardcoded 600s (10 min)
+    read timeout and self-killing the whole process:
+
+    ReadTimeoutError: HTTPConnectionPool(host='127.0.0.1', port=30000):
+    Read timed out. (read timeout=600)
+
+    This looks like a genuine kernel-level hang during first real
+    inference through this AWQ MoE Triton path on gfx1151 - not a config
+    or memory issue, the same general category of problem as the
+    DS4/DeepSeek-V4-Flash dual-GPU Ds4HcMatvecPool deadlock abandoned
+    earlier this session (real hardware/kernel-level hangs on this
+    specific ROCm/gfx1151 stack are a recurring theme, not unique to
+    SGLang). Root-causing this would mean the same kind of from-source
+    C++/kernel debugging that the DS4 investigation required - a
+    significant, open-ended time investment, not attempted here.
+
+    Combined with the Qwen3.6 loader incompatibility and the earlier
+    memory-pressure findings, this is 3 real, distinct failure modes
+    across 2 checkpoints for this fork on our exact hardware. Calling
+    SGLang (JeremiahM37/strix-halo-sglang, this pinned commit) not
+    currently viable for either of our standing MoE roles without a
+    substantial additional debugging investment this session didn't have
+    runway for. The vendored Dockerfile/build script are kept in the
+    catalog (real, reproducible, working image build) in case upstream
+    fixes this or a future session wants to pick the thread back up.
+
+    Laguna and Ornith both restored and confirmed healthy immediately
+    after.
