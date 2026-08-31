@@ -1,0 +1,33 @@
+name: docker
+services:
+  qwen3.6-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1:
+    image: strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151
+    container_name: qwen3.6-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      SGLANG_FORCE_NATIVE_LAYERNORM: "1"
+      SGLANG_AWQ_MOE_TRITON_ROCM: "1"
+    volumes:
+    - /var/lib/ai-models/qwen3.6-35b-a3b-awq-4bit-cyankiwi:/models/qwen3.6-35b-a3b-awq-4bit-cyankiwi:ro
+    - sglang-qwen36-tunableop:/root/.tunableop
+    command: >-
+      python3 -m sglang.launch_server --model-path
+      /models/qwen3.6-35b-a3b-awq-4bit-cyankiwi --served-model-name
+      qwen3.6-35b-a3b-awq-4bit-sglang --host 0.0.0.0 --port 30000 --dtype
+      float16 --mem-fraction-static 0.55 --context-length 8192
+      --max-total-tokens 8192 --max-mamba-cache-size 32 --attention-backend
+      triton --disable-cuda-graph
+    ports:
+    - 127.0.0.1:8155:30000
+volumes:
+  sglang-qwen36-tunableop:
+    external: true
+    name: docker_sglang-qwen36-tunableop

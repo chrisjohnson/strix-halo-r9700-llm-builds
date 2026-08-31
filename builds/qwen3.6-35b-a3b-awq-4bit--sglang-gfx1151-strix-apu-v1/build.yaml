@@ -1,0 +1,110 @@
+name: qwen3.6-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: sglang-gfx1151-v1
+  model: Qwen3.6-35B-A3B
+  params: 35B
+  active_params: 3.3B
+  quant: AWQ-4bit
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-08-31, overnight/ongoing perf sweep, Chris's explicit
+    go-ahead to build/test SGLang after the FreeToken dead end and two
+    vLLM TESTED_NOT_VIABLE findings). Real experiment: does SGLang's
+    continuous batching + RadixAttention prefix caching beat our current
+    Ornith llama.cpp setup, using the SAME base model we already have
+    benchmark data for (Chris corrected the initial plan twice: test on
+    the APU where MoE actually runs, not R9700; and match a model we
+    already have benchmark data on, not an unrelated Qwen version).
+
+    Comparison baselines (real, existing llm-inference-bench data, same
+    box): qwen3.6-35b-a3b--llamacpp-vulkan-radv-mtp-strix-apu-v2 (MTP,
+    flat ~55-68 tps regardless of concurrency) and
+    qwen3.6-35b-a3b--vllm-therock-gfx1151-strix-apu-v1 (BF16, real
+    continuous-batching scaling 14.9->39.7 tps from 1->8 streams, but
+    slower in absolute terms due to unquantized weights). This AWQ-4bit
+    + SGLang build tests whether continuous batching AND 4-bit weights
+    together beat both.
+
+    Engine: JeremiahM37/strix-halo-sglang (Apache 2.0), vendored into
+    docker/strix-halo-sglang.dockerfile + built via
+    scripts/build-strix-halo-sglang.sh (not a live host clone/docker run -
+    Chris's explicit instruction to keep this git-tracked and
+    reproducible, no snowflakes). Patches 1-4 only (baked into the
+    default Dockerfile) - NOT patches 7+8 (dense-layer/lm_head
+    quantization), which are a separate, bigger lift not attempted yet.
+    Per the fork's own published numbers, patches-1-4-only means single-
+    stream is expected to be SLOWER than llama.cpp (their own table:
+    0.62x at 1 stream) while concurrent throughput should still show
+    real gains (~3.3x at 8 streams) - a real tradeoff, not a strict win,
+    until/unless patches 7+8 are pursued.
+
+    Quant: cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit - same trusted publisher as
+    the fork's own proven Qwen3.5 test checkpoint, but the exact model
+    version (3.6, not 3.5) matching our existing bench data. AWQ format
+    avoids the AutoRound/GPTQ-Marlin dead ends from the two vLLM
+    attempts this session.
+
+    Launch config: conservative first bring-up, NOT yet matching our
+    existing bench data's full 131072 context - SGLang has a documented
+    AMD-specific memory-sizing bug (torch.cuda.mem_get_info reports
+    GTT-inclusive total, not real-allocatable/free, so max-total-tokens
+    must be capped explicitly or it OOMs during pool init; see
+    docs/RUNNING_AWQ_MOE.md in the vendored fork). Starting at
+    --context-length 8192 --max-total-tokens 8192
+    --max-mamba-cache-size 32 --mem-fraction-static 0.55 (close to the
+    fork's own proven-safe reference config) specifically because Laguna
+    (118B, ~69GB weights) stays resident on the same shared APU memory
+    pool throughout this test, and the buggy mem_get_info total doesn't
+    account for that - raising limits before confirming a stable
+    baseline risked a real OOM crash on first bring-up. Can be raised in
+    a follow-up once this baseline is confirmed stable (real per-token
+    KV cost looks small for this hybrid attention+mamba architecture per
+    the fork's own numbers, so there may be real headroom to raise
+    context significantly - not yet attempted).
+
+    RESULT: TESTED_NOT_VIABLE, real code-level incompatibility, not a
+    config mistake and not memory pressure (both were live theories
+    ruled out along the way - see below). Real error, reproduced twice:
+
+    KeyError: 'model.layers.0.mlp.experts.w2_qweight'
+      File ".../sglang/srt/models/qwen3_5.py", line 2032, in load_weights
+
+    SGLang routes Qwen3.6-35B-A3B through its Qwen3.5 model handler (same
+    declared architecture family), but this checkpoint's AWQ-quantized
+    MoE expert weight key naming doesn't match what that loader's
+    params_dict expects. This fork (JeremiahM37/strix-halo-sglang) was
+    only ever validated against cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit - never
+    against 3.6. A real, version-specific gap in SGLang's own weight
+    loader, confirmed via full traceback, not guessed.
+
+    Two other real things fixed/ruled out along the way, useful for any
+    future SGLang attempt on this box:
+    - `--dtype auto` resolves to bfloat16 from this checkpoint's config,
+      but SGLang's AWQ quant path requires float16
+      ("torch.bfloat16 is not supported for quantization method awq").
+      Must pass `--dtype float16` explicitly.
+    - Without `SGLANG_AWQ_MOE_TRITON_ROCM=1`, first attempt with only
+      Ornith stopped (39GB free) hit a real OOM (SIGKILL, confirmed via
+      `docker inspect` OOMKilled:true) during weight loading - initially
+      suspected as a Marlin-vs-Triton dispatch issue, but a controlled
+      diagnostic (stopping Laguna too, giving the container the full
+      ~117GB pool) reproduced the SAME OOM at low memory and got PAST it
+      at high memory with the env var already set, meaning: this
+      checkpoint's loading path just needs real headroom beyond what
+      Ornith-stopped-only provides (~39GB was not enough with Laguna
+      resident) - not a code bug. The Triton-dispatch env var is still
+      correct/needed for actually serving AWQ MoE on ROCm per the fork's
+      own docs, just wasn't the fix for this specific crash.
+
+    Falling back to cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit per Chris's
+    explicit call (2026-08-31): "Fall back" - accepting the loss of a
+    directly-matching bench-data comparison in exchange for testing
+    whether SGLang has real merit on this hardware at all, using the
+    fork's own proven-working checkpoint. See sibling build
+    qwen3.5-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1.
+
+    Laguna and Ornith both restored and confirmed healthy immediately
+    after this diagnostic concluded.
