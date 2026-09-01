@@ -211,6 +211,32 @@ open(p, "w").write(t.replace(old, new))
 print("patched", p)
 PYEOF
 
+# Patch 6 (local, not upstream to this fork) — causal_conv1d_triton's init-state
+# load path infers col0..col3's dtype from the conv_states buffer (bf16), while
+# the no-prior-state branch explicitly types them via x_ptr.dtype.element_ty
+# (float16 when --dtype float16 is forced, as AWQ requires). Triton's compiler
+# can't unify a bf16 value with a fp16 value across an if/else merge and fails
+# with: "Mismatched type for col0 between then block (<[...], bf16>) and else
+# block (<[...], fp16>)" - reproduced on a real AWQ MoE checkpoint
+# (cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit) requiring --dtype float16; --mamba-ssm-
+# dtype float16 does not change conv_states' allocated dtype, so this is a
+# genuine upstream type-inference gap, not a launch-flag fix. Cast the loaded
+# state to match x_ptr's dtype, mirroring what the else-branch already does.
+RUN python3 - <<'PYEOF'
+p = "/sgl-workspace/sglang/python/sglang/srt/layers/attention/mamba/causal_conv1d_triton.py"
+t = open(p).read()
+n = 0
+for col in ("col0", "col1", "col2", "col3"):
+    old = f"{col} = tl.load(conv_states_ptrs, mask_w, 0.0)"
+    new = f"{col} = tl.load(conv_states_ptrs, mask_w, 0.0).to(x_ptr.dtype.element_ty)"
+    count = t.count(old)
+    assert count > 0, f"patch 6: anchor for {col} not found, upstream layout changed"
+    t = t.replace(old, new)
+    n += count
+open(p, "w").write(t)
+print("patched", p, f"({n} occurrences)")
+PYEOF
+
 # Compile sgl-kernel for gfx1151
 WORKDIR /sgl-workspace/sglang/sgl-kernel
 RUN AMDGPU_TARGET=gfx1151 python3 setup_rocm.py develop
