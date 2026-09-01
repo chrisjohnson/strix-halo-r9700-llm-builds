@@ -1,0 +1,16 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: Qwen3.5 @ localhost:8160                                              │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Engine: SGLang 0.0.0.dev1+gb0b8436f1.d20260901  Models: 
+['ornith-1.5-35b-a3b-w4a16-sym-p78-mtp-sglang']
+KV cache budget: 284,987 tokens
+Model context length: 262,144 tokens
+Prefill tests: ['8k', '16k', '32k', '64k', '128k']
+Generating padding texts (run=tvmpsebdzsvm, up to 128k)...
+Done.
+
