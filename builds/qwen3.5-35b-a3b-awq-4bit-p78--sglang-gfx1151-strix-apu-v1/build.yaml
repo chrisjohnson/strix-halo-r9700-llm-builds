@@ -1,5 +1,5 @@
 name: qwen3.5-35b-a3b-awq-4bit-p78--sglang-gfx1151-strix-apu-v1
-status: TESTING
+status: WORKING
 derived:
   engine: sglang-gfx1151-v1
   model: Qwen3.5-35B-A3B
@@ -53,5 +53,38 @@ derived:
     build id (not overwriting the working patches-1-6 build) so both
     remain independently reproducible/comparable.
 
-    Not yet tested - image built and checkpoint requantized, container
-    not yet brought up.
+    One real bug hit and fixed along the way: the fork's own vendored MoE
+    config JSON files include a "_comment" key (JSON has no native
+    comment syntax); our pinned sglang commit's config loader iterates
+    every key expecting an integer batch size and crashed with
+    ValueError: invalid literal for int() with base 10: '_comment'.
+    Fixed by stripping the key from our vendored copies before baking
+    them into the image.
+
+    RESULT: real success, confirmed coherent output (a real haiku, not
+    the "!!!!" uninitialized-logit garbage patch 8's own docs warn
+    about if lm_head quantization is wired wrong). Real
+    llm-inference-bench sweep (run 135, metrics-enabled, warm caches) vs.
+    the patches-1-6-only build and standing Ornith (MTP), same box:
+
+    aggregate tok/s, ctx=0:     p1-6  21/32/56/83  (c=1/2/4/8)
+                                 p7+8  31/52/82/113  (+45%/+65%/+46%/+35%)
+                                 Ornith 68/61/61/66
+    aggregate tok/s, ctx=65536: p1-6  20/32/49/78
+                                 p7+8  29/46/65/90  (+46%/+42%/+33%/+16%)
+                                 Ornith 51/54/53/48
+
+    Patches 7+8 delivered real, substantial gains across the board -
+    single-stream improved ~45%, narrowing (not fully closing) the gap
+    to Ornith's MTP; concurrent throughput at 8 streams improved further
+    on top of the already-strong patches-1-6 result, now 1.7-1.9x
+    Ornith's own numbers. Matches the qualitative direction of the
+    fork's own published numbers (their exact percentages differ - our
+    hardware/model/load combination isn't identical to theirs - but both
+    single-stream AND concurrent improved together, as claimed).
+
+    Not yet attempted: a tuned MoE config specifically for our own
+    checkpoint's post-patch-7+8 memory-traffic profile (we used the
+    fork's config as-is, tuned on their own Qwen3.5-35B-A3B setup, not
+    re-verified as optimal for ours) - real remaining headroom if
+    pursued further.
