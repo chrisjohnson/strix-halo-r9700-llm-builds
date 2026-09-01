@@ -6,12 +6,12 @@ a single shared compose file. The field-extraction logic below (port,
 served_model_name, always_up) is a straight port of the original single-
 shared-file parser; only the *source* of what gets iterated changed.
 
-The always_up field is still parsed and still means something (see
-orchestrator.py's _wait_all_healthy — an always-up run TARGET is confirmed
-reachable rather than cycled with `compose up`), but it no longer decides
-which OTHER services get stopped for GPU exclusivity - see orchestrator.py's
-_establish_exclusivity/_is_model_build for that decision (any real model
-build, always-up or not, sharing the run's GPU).
+The always_up field is still parsed and still used for two things: enqueue()
+rejects always-up services with no build.yaml (infra, not benchmarkable),
+and _run_bench_timed skips crash-probing an always-up target mid-benchmark.
+It no longer has any bearing on launch/exclusivity - modelctl owns that
+uniformly for every target now (see orchestrator.py's
+_up_targets_exclusive, 2026-09-01, M-139), regardless of always-up tags.
 """
 
 from __future__ import annotations

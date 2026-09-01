@@ -12,7 +12,7 @@ BUILDS_DIR="$HERE/builds"
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  modelctl up [<build-id>...]
+  modelctl up [<build-id>...] [--exclusive]
   modelctl up --standing <path-to-standing-list> [--exclusive]
   modelctl down [<build-id>...]
   modelctl logs [<build-id>...]
@@ -26,7 +26,17 @@ builds to start. down and logs with no arguments act on everything
 
 --standing without --exclusive refuses to start anything at all if a build
 outside the standing list is already running, leaving the decision to the
-caller. --exclusive stops those first instead of refusing.
+caller. --exclusive stops those first instead of refusing. This mode is
+global (box-wide), not GPU-scoped - --standing's whole point is guaranteeing
+a known set is running everywhere, not just on one GPU.
+
+--exclusive with plain build-id(s) (no --standing) is GPU-scoped instead:
+it stops every OTHER model build sharing a GPU with any of the given ids
+(reading each build's own build.yaml derived.target_gpu), then starts the
+given ids - regardless of any always-up tag, and regardless of whether they
+were already running. Any caller that wants a GPU to itself for a specific
+build or set of builds (the benchmark tool, or a one-off manual test) should
+use this instead of stopping things itself.
 
 list shows every build in the catalog (running or not); ps shows only
 currently-running ones, like `docker compose ps`. exec defaults to `sh`
@@ -118,6 +128,71 @@ port_for() {
   grep -oE '127\.0\.0\.1:[0-9]+' "$f" | head -1 | cut -d: -f2
 }
 
+# DEFAULT_TARGET_GPU mirrors the reasoning llm-inference-bench/app/
+# orchestrator.py used to carry itself before its own GPU-exclusivity logic
+# moved here (2026-09-01, M-139): every build.yaml predating the R9700
+# (2026-08-20) has no target_gpu field at all, and every one of those builds
+# is strix-apu in reality (vLLM builds are architecture-locked to gfx1151,
+# everything else predates the second GPU existing) - so defaulting a
+# missing/unreadable target_gpu to strix-apu is a real fact about this box's
+# current builds, not a guess.
+DEFAULT_TARGET_GPU="strix-apu"
+
+is_model_build() {
+  [ -f "$BUILDS_DIR/$1/build.yaml" ]
+}
+
+# Which GPU (catalog/hardware.yaml id) a build targets, read from its own
+# build.yaml (derived.target_gpu) via a targeted grep rather than a real
+# YAML parser - same style as model_dir_for/port_for above, and this file's
+# structure (a flat, 2-space-indented `key: value` line directly under
+# `derived:`) is simple enough that a real parser buys nothing. Falls back
+# to DEFAULT_TARGET_GPU for any build.yaml missing the field, or any build
+# with no build.yaml at all (never called for those - see
+# stop_other_builds_on_same_gpu, which only calls this for ids that pass
+# is_model_build).
+target_gpu_for() {
+  local id="$1"
+  local f="$BUILDS_DIR/$id/build.yaml"
+  local gpu=""
+  if [ -f "$f" ]; then
+    gpu="$(grep -oE '^[[:space:]]*target_gpu:[[:space:]]*[^[:space:]#]+' "$f" | head -1 | sed -E 's/^[^:]+:[[:space:]]*//')"
+  fi
+  echo "${gpu:-$DEFAULT_TARGET_GPU}"
+}
+
+# Stops every OTHER currently-running model build that targets the same
+# GPU(s) as any of the given ids - the given ids themselves are left alone
+# (cmd_up_one brings them up next). GPU-scoped so an exclusive start on one
+# GPU never disturbs a standing model on another. Ported from
+# llm-inference-bench/app/orchestrator.py's own _establish_exclusivity
+# (2026-09-01, M-139) - that tool's own copy of this logic is gone now; it
+# just calls `modelctl up <ids> --exclusive` like any other caller, so it
+# no longer needs to care whether a target is tagged always-up or already
+# running - this handles both uniformly, same as it always has for
+# non-benchmark callers.
+stop_other_builds_on_same_gpu() {
+  local ids=("$@")
+  local target_gpus=() id gpu
+  for id in "${ids[@]}"; do
+    gpu="$(target_gpu_for "$id")"
+    contains "$gpu" "${target_gpus[@]:-}" || target_gpus+=("$gpu")
+  done
+  echo "modelctl: --exclusive - target(s) are on GPU(s): ${target_gpus[*]}" >&2
+  local rid rgpu stopped_any=0
+  while IFS= read -r rid; do
+    contains "$rid" "${ids[@]}" && continue
+    is_model_build "$rid" || continue
+    rgpu="$(target_gpu_for "$rid")"
+    contains "$rgpu" "${target_gpus[@]}" || continue
+    echo "modelctl: --exclusive - stopping '$rid' (same GPU: $rgpu)" >&2
+    cmd_down_one "$rid" || echo "modelctl: warning - failed to stop '$rid', continuing" >&2
+    stopped_any=1
+  done < <(running_build_ids)
+  [ "$stopped_any" -eq 0 ] && echo "modelctl: --exclusive - no other model builds on this GPU" >&2
+  return 0
+}
+
 # Polls a build's port until it answers or WAIT_HEALTHY_TIMEOUT_S elapses.
 # Tries /health, /, then /v1/models in turn per attempt - covers vLLM/
 # llama-server (/health), ollama (/ answers "Ollama is running"), and
@@ -180,23 +255,38 @@ cmd_up() {
   local ids=()
   local standing=0
   local exclusive=0
+  local list_path=""
 
-  if [ "${1:-}" = "--standing" ]; then
-    standing=1
+  # --exclusive is valid in either position (before/after ids, with or
+  # without --standing); --standing takes its path as the very next arg.
+  # Everything left over after pulling those two out is the plain build-id
+  # list.
+  local args=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --exclusive)
+        exclusive=1
+        ;;
+      --standing)
+        standing=1
+        shift
+        list_path="${1:-}"
+        if [ -z "$list_path" ]; then
+          echo "modelctl: --standing requires a path" >&2
+          exit 1
+        fi
+        ;;
+      *)
+        args+=("$1")
+        ;;
+    esac
     shift
-    local list_path="${1:-}"
-    if [ -z "$list_path" ]; then
-      echo "modelctl: --standing requires a path" >&2
-      exit 1
-    fi
-    shift
+  done
+
+  if [ "$standing" -eq 1 ]; then
     if [ ! -f "$list_path" ]; then
       echo "modelctl: standing list not found: $list_path" >&2
       exit 1
-    fi
-    if [ "${1:-}" = "--exclusive" ]; then
-      exclusive=1
-      shift
     fi
     local line
     while IFS= read -r line; do
@@ -205,18 +295,21 @@ cmd_up() {
       [ -z "$line" ] && continue
       ids+=("$line")
     done <"$list_path"
-  elif [ "$#" -gt 0 ]; then
-    ids=("$@")
+  elif [ "${#args[@]}" -gt 0 ]; then
+    ids=("${args[@]}")
   else
     echo "modelctl up: no build ids given and no --standing <path> supplied" >&2
     usage
   fi
 
-  # --standing's whole point is guaranteeing a known set is running -
-  # something already up outside that set is exactly the ambiguous case
-  # this must never paper over silently. Refuse by default; --exclusive
-  # opts into having modelctl resolve it by stopping the extras itself.
   if [ "$standing" -eq 1 ]; then
+    # --standing's whole point is guaranteeing a known set is running,
+    # box-wide - something already up outside that set is exactly the
+    # ambiguous case this must never paper over silently. Refuse by
+    # default; --exclusive opts into having modelctl resolve it by
+    # stopping the extras itself. Deliberately NOT GPU-scoped (unlike the
+    # plain-id-list case below) - a standing-set enforcement pass means
+    # the whole box, not one GPU's worth.
     local extra=()
     local rid
     while IFS= read -r rid; do
@@ -234,6 +327,13 @@ cmd_up() {
         exit 1
       fi
     fi
+  elif [ "$exclusive" -eq 1 ]; then
+    # Plain build-id(s) + --exclusive: GPU-scoped instead of box-wide -
+    # this run's targets get their GPU(s) entirely to themselves, without
+    # disturbing anything running on a GPU none of them use. This is what
+    # llm-inference-bench's orchestrator now delegates to instead of
+    # carrying its own copy of this logic (2026-09-01, M-139).
+    stop_other_builds_on_same_gpu "${ids[@]}"
   fi
 
   # When starting more than one build, each one waits until healthy

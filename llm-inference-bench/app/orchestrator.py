@@ -8,14 +8,18 @@ container restart resumes pending runs instead of losing them.
 Run lifecycle:
   1. hard-reset the mounted checkout to origin/main (compose defs + build.yaml
      are current before anything else touches the box's model services)
-  2. stop every OTHER model build on the SAME GPU as this run's targets,
-     except the targets themselves (a run's exclusivity is scoped to the
-     GPU it uses and never touches standing services on a GPU it doesn't
-     touch; see _establish_exclusivity). This includes always-up standing
-     models too, not just non-always-up ones - a benchmark taking a GPU
-     is expected to have it to itself, full stop; always-up INFRA
-     (litellm, db, monitoring, dsh, ...) is unaffected either way.
-  3. bring up targets via named services, wait for health
+  2. bring up targets exclusively via `modelctl up <targets> --exclusive`
+     (see _up_targets_exclusive) - modelctl stops every OTHER model build
+     sharing a GPU with any target (reading each build's own build.yaml
+     derived.target_gpu) and then starts the targets, regardless of any
+     always-up tag and regardless of whether they were already running.
+     Always-up INFRA (litellm, db, monitoring, dsh, ...) has no build.yaml
+     and is never touched by modelctl either way. This orchestrator no
+     longer carries its own copy of this logic or any always-up special-
+     casing (2026-09-01, M-139) - modelctl --exclusive is the single place
+     it lives now, for every caller (benchmark, boot activation, manual use).
+  3. apply the benchmark-only -sps 0 override for spec-decode targets if
+     needed (see _write_sps_override), then wait for health
   4. per build, serially: run llm_decode_bench.py, raw JSON + stdout log saved
      under builds/<build>/benchmarks/llm-inference-bench/
   5. on success: git pull --rebase + add + commit + push straight to main
@@ -202,30 +206,6 @@ class Orchestrator:
         # monitoring, web UIs) has no build.yaml and is not a target.
         return (self.config.checkout_dir / "builds" / build / "build.yaml").exists()
 
-    # DEFAULT_TARGET_GPU mirrors scripts/generate_interactive_dashboard.py's
-    # own constant/reasoning exactly: every build.yaml predating the R9700
-    # (2026-08-20) has no target_gpu field at all, and every one of those
-    # builds is strix-apu in reality (vLLM builds are architecture-locked to
-    # gfx1151, everything else predates the second GPU existing) - so
-    # defaulting missing/unreadable target_gpu to strix-apu is a real fact
-    # about this box's current builds, not a guess.
-    DEFAULT_TARGET_GPU = "strix-apu"
-
-    def _target_gpu(self, build: str) -> str:
-        """Which GPU (catalog/hardware.yaml id) this build targets, read
-        from its own builds/<build>/build.yaml (derived.target_gpu) - the
-        same file _always_up_benchmarkable already reads to confirm a
-        build.yaml exists at all. Falls back to DEFAULT_TARGET_GPU for
-        infra services with no build.yaml (never called for those - see
-        _establish_exclusivity, which only calls this for compose services
-        that ARE builds) and for any build.yaml missing the field."""
-        path = self.config.checkout_dir / "builds" / build / "build.yaml"
-        try:
-            data = yaml.safe_load(path.read_text()) or {}
-        except (OSError, yaml.YAMLError):
-            return self.DEFAULT_TARGET_GPU
-        return (data.get("derived") or {}).get("target_gpu") or self.DEFAULT_TARGET_GPU
-
     def _is_spec_decode(self, build: str) -> bool:
         """True if builds/<build>/build.yaml declares derived.mtp: true -
         the existing catalog field for "this build has a speculative-decode
@@ -371,7 +351,6 @@ class Orchestrator:
                         self._update_run(run_id, status="done", finished_at=utcnow_iso())
                         return
 
-                    self._establish_exclusivity(targets, services)
                     self._wait_all_healthy(targets, services)
 
                     for build in targets:
@@ -546,95 +525,46 @@ class Orchestrator:
         env["GIT_COMMITTER_EMAIL"] = self.config.git_author_email
         return env
 
-    def _is_model_build(self, name: str) -> bool:
-        """True if this compose service is a real model build (has
-        builds/<name>/build.yaml) - the same has-a-build.yaml test
-        _always_up_benchmarkable already uses to separate real models from
-        always-up INFRA (litellm, db, monitoring, dsh, ...), which must
-        never be stopped regardless of GPU. A model build's own always-up
-        label is no longer relevant to whether it's stoppable - see
-        _establish_exclusivity."""
-        return (self.config.checkout_dir / "builds" / name / "build.yaml").exists()
-
-    def _establish_exclusivity(self, targets: list, services: dict):
-        """Stop every OTHER model build ON THE SAME GPU(S) as this run's
-        targets, except the targets themselves, freeing that GPU's budget.
-        Exclusivity is scoped to the GPU(s) the targets actually use — it
-        doesn't touch standing services on a GPU it never uses.
-
-        This includes always-up standing services, not just non-always-up
-        ones: leaving an always-up standing model sharing a GPU with a
-        benchmark target running is a real, repeated failure mode — it
-        silently contends for VRAM instead of being freed, degrading real
-        requests to single-digit tok/s with the GPU nearly out of free
-        memory. A benchmark taking a GPU is expected to have it entirely to
-        itself; always-up INFRA (litellm, db, monitoring, dsh, ...) is
-        unaffected — the has-build.yaml test in _is_model_build is what
-        actually draws the stoppable/not-stoppable line, not the always-up
-        label. Deliberately NOT restored afterward - each standing model's
-        own restart:always policy is what's expected to matter here, and
-        only for crashes/reboots, not a benchmark's deliberate stop.
-
-        Containers are stopped ONE AT A TIME (check=False): a single hung
-        container (GPU process stuck in an unkillable state) must not abort
-        the whole run's exclusivity step. Each failed stop is logged and
-        skipped; the bench proceeds and the hung container surfaces as a
-        health/OOM failure on the target instead of killing every queued
-        run in one batch."""
-        target_gpus = {self._target_gpu(t) for t in targets}
-        log.line(f"[exclusivity] this run's targets are on GPU(s): {sorted(target_gpus)}")
-        stoppable = [
-            name for name in services
-            if name not in targets and self._is_model_build(name) and self._target_gpu(name) in target_gpus
-        ]
-        if not stoppable:
-            log.line("[exclusivity] no other model builds on this GPU — nothing to stop")
-            return
-        log.line(f"[exclusivity] stopping model builds not in this run: {stoppable}")
-        hung = []
-        for name in stoppable:
-            try:
-                result = dc.compose(name, ["stop"], self.config.checkout_dir / "builds", check=False, timeout=120)
-                if result.returncode != 0:
-                    hung.append(name)
-                    log.line(f"[exclusivity] WARNING: stop {name} returned {result.returncode}: {result.stdout[-400:]}")
-            except subprocess.TimeoutExpired:
-                hung.append(name)
-                log.line(f"[exclusivity] WARNING: stop {name} timed out (container likely hung)")
-        if hung:
-            log.line(f"[exclusivity] could not stop {len(hung)} services (hung): {hung}")
+    def _up_targets_exclusive(self, targets: list):
+        """Bring up every target with the GPU(s) it needs entirely to
+        itself, by delegating straight to `modelctl up <targets>
+        --exclusive` (2026-09-01, M-139 — replaces this orchestrator's own
+        copy of GPU-scoped exclusivity-stopping plus its always-up-aware
+        bring-up special-case: Chris wanted the benchmark tool to stop
+        caring what a target is tagged or whether it's already running, and
+        just trust modelctl --exclusive to handle it uniformly, the same as
+        any other caller). modelctl reads each build's own build.yaml
+        (derived.target_gpu) exactly like this orchestrator used to, stops
+        every OTHER running build sharing that GPU, then starts the given
+        targets regardless of always-up tags - and enforces its own
+        .download-complete precheck along the way, a real safety property
+        this orchestrator never had before (see M-139: a target manually
+        stopped outside the orchestrator, e.g. for hands-on testing, used to
+        get silently skipped here because it was tagged always-up, burning
+        a full health_wait_s timeout with the container never even
+        attempted - modelctl always issues its own `up`, a no-op if a
+        target is already running unchanged, a real start otherwise)."""
+        modelctl = str(self.config.checkout_dir / "modelctl")
+        timeout = self.config.health_wait_s * max(1, len(targets)) + 300
+        dc.run([modelctl, "up", *targets, "--exclusive"], timeout=timeout)
 
     def _wait_all_healthy(self, targets: list, services: dict):
+        self._up_targets_exclusive(targets)
         for build in targets:
             info = services[build]
-            if info["always_up"]:
-                # Always-up targets (ollama, and any standing model) are
-                # already up — just confirm healthy. KNOWN LIMITATION: this
-                # means the -sps benchmark override below never applies to
-                # an always-up spec-decode target (e.g. a standing MTP
-                # model) - recreating it here to apply the override would
-                # mean a real restart of a container serving live traffic,
-                # which is a production-impact decision this orchestrator
-                # doesn't make unilaterally. Its decode-throughput numbers
-                # keep the known slot-reuse-vs-MTP limitation documented in
-                # M-138 until/unless that tradeoff is explicitly decided.
-                log.line(f"[health] {build} is always-up, confirming reachable ...")
-                self._wait_healthy(build, info, already_up=True)
-            else:
-                log.line(f"[health] bringing up {build} ...")
-                override = self._write_sps_override(build)
-                if override:
-                    log.line(
-                        f"[health] {build} is spec-decode (build.yaml derived.mtp: true) - "
-                        f"applying benchmark-only -sps 0 override ({override}, see M-138)"
-                    )
+            override = self._write_sps_override(build)
+            if override:
+                log.line(
+                    f"[health] {build} is spec-decode (build.yaml derived.mtp: true) - "
+                    f"applying benchmark-only -sps 0 override ({override}, see M-138)"
+                )
                 dc.compose(
                     build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600,
-                    extra_compose_files=[override] if override else None,
+                    extra_compose_files=[override],
                 )
-                self._wait_healthy(build, info, already_up=False)
+            self._wait_healthy(build, info)
 
-    def _wait_healthy(self, build: str, info: dict, already_up: bool):
+    def _wait_healthy(self, build: str, info: dict):
         port = info["port"]
         if port is None:
             raise RuntimeError(f"Service '{build}' has no 127.0.0.1 port mapping — cannot health-check or benchmark")
@@ -693,7 +623,7 @@ class Orchestrator:
                 if attempt < max_attempts:
                     log.line(f"[bench] {build} crashed during attempt {attempt} — restarting and re-running once")
                     dc.compose(build, ["up", "-d"], self.config.checkout_dir / "builds", timeout=600)
-                    self._wait_healthy(build, info, already_up=False)
+                    self._wait_healthy(build, info)
                 else:
                     self._save_crash_log(build, crash_log)
                     self._update_build(run_id, build, status="failed", crash_log=str(crash_log.relative_to(self.config.checkout_dir)))
