@@ -1,0 +1,105 @@
+name: ornith-1.5-35b-a3b-w4a16-sym-p78-mtp--sglang-gfx1151-strix-apu-v1
+status: WORKING
+derived:
+  engine: sglang-gfx1151-v1
+  model: Ornith-1.5-35B-A3B
+  params: 35B
+  active_params: 3.3B
+  quant: W4A16-SYM + dense-int4 (patches 7+8, lm_head left bf16 - see notes)
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-01). Chris clarified the actual ask that had been
+    mislabeled "SGLang vs MTP" all session: he wants SGLang WITH MTP
+    (speculative decoding) vs SGLang WITHOUT it - not SGLang vs
+    llama.cpp+MTP (two different engines). This build is the "with MTP"
+    half, using the checkpoint's own preserved draft head
+    (model-mtp.safetensors) that ships alongside
+    MIRALABS/Ornith-1.5-35B-A3B-W4A16-SYM.
+
+    Real research (dispatched as a focused investigation, not guessed):
+    SGLang's pinned commit (sgl-project/sglang @ b0b8436f) has full native
+    NEXTN speculative-decoding support for Qwen3_5MoeForConditionalGeneration
+    - --speculative-algorithm NEXTN dispatches to the standard EAGLE worker
+    using model class Qwen3_5ForCausalLMMTP
+    (python/sglang/srt/models/qwen3_5_mtp.py). The draft head's own tensor
+    naming (mtp.fc.weight, mtp.layers.0.*, mtp.pre_fc_norm_*, mtp.norm.weight
+    - 785 tensors, all bf16, confirmed via direct safetensors inspection)
+    already matches exactly what that loader expects - no renaming needed.
+    Embed/lm_head are shared from the target model at runtime via
+    set_embed_and_head() (confirmed via source read, not assumed) - the
+    draft checkpoint deliberately ships with no embed_tokens/lm_head
+    tensors of its own.
+
+    Draft-model directory: /var/lib/ai-models/ornith-1.5-35b-a3b-mtp-draft
+    - config.json + tokenizer files copied from the original unquantized
+    checkpoint, model-mtp.safetensors hardlinked in (same filesystem, no
+    extra disk cost). Deliberately isolated from the ~70GB main-model
+    directory (which technically also cross-references the same mtp.*
+    tensors in its own model.safetensors.index.json) to avoid any risk of
+    SGLang's draft-model loader scanning/mmapping the full main-model
+    shards.
+
+    REAL BUG FOUND AND FIXED (Patch 9, docker/strix-halo-sglang.dockerfile,
+    local/not upstream): first attempt loaded and served without crashing,
+    but real /metrics showed spec_accept_rate pinned at exactly 0.0 across
+    280+ real verify calls - mechanically running (draft proposed, target
+    verified) but every single draft token rejected, despite this exact
+    draft head hitting 85-95% acceptance on llama.cpp for the same
+    checkpoint. Root-caused via source read (not guessed): SGLang's own
+    Qwen3_5ForCausalLMMTP.__init__ already has precedent for this exact
+    class of bug - it force-clears quant_config to None when constructing
+    the draft's internal model for two known cases where a checkpoint's
+    MTP module ships unquantized despite the target being quantized
+    (modelopt_fp4, unconditionally; quark, if "mtp." appears in the quant
+    config's own exclude_layers list) - but has no equivalent case for
+    compressed-tensors (our patches 7+8 quantization scheme). Left
+    unpatched, the draft's internal Linear/MoE layers get constructed
+    expecting quantized parameter shapes while load_weights() hands them
+    plain bf16 tensors from model-mtp.safetensors - not a crash, silently
+    wrong logits. Fixed by adding the same unconditional exclusion for
+    compressed_tensors, mirroring the modelopt_fp4 precedent exactly (no
+    exclude_layers signal exists for our checkpoint to key off, unlike
+    quark's case). After the fix: real, working speculative decoding -
+    spec_accept_rate 0.625, spec_accept_length 1.625 across 131 verify
+    calls, confirmed coherent generated output.
+
+    Side effect discovered along the way: quantizing lm_head (Patch 8) is
+    ALSO incompatible with speculative decoding's embed/lm_head sharing -
+    a completely separate bug from Patch 9's, hit first: SGLang's generic
+    get_embed_and_head() (used to share the target's lm_head with any
+    draft model, non-eagle3 code path) does a bare `self.lm_head.weight`
+    attribute access, which doesn't exist once lm_head is quantized
+    (Patch 8's whole point was replacing that plain attribute). Rather
+    than patch this too, re-ran tools/quantize_nonexpert.py with its
+    existing --no-lm-head flag (already built for exactly this class of
+    issue, per its own docstring: "leave lm_head in bf16, isolates
+    logit-path issues") to produce a separate checkpoint variant
+    (/var/lib/ai-models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78-mtp,
+    190 tensors quantized instead of 191, 0.93GB saved instead of 1.67GB)
+    specifically for this MTP-enabled build - the non-MTP sibling build
+    (ornith-1.5-35b-a3b-w4a16-sym-p78--sglang-gfx1151-strix-apu-v1) is
+    untouched and keeps its full lm_head quantization. Real, small memory
+    cost (~0.7GB more VRAM) traded for MTP actually working - the smaller
+    intervention vs. also patching the generic embed/head-sharing code
+    path.
+
+    Speculative decoding flags kept conservative for a first working
+    result, real remaining headroom if pursued further:
+    --speculative-num-steps 1 --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 2 (single-step drafting only - llama.cpp's
+    own working config uses --spec-draft-n-max 1 too, so this matches
+    rather than under-configuring). Same launch pattern otherwise as the
+    non-MTP sibling (context 262144, max-total-tokens 1048576,
+    SGLANG_AWQ_MOE_TRITON_ROCM=1, persistent Triton cache + TunableOp
+    volumes - separate volume names from the sibling build,
+    --enable-metrics).
+
+    Not yet benchmarked with llm-inference-bench - manual verification only
+    so far (coherent completions, real spec_accept_rate via /metrics).
+    Real next step: a proper benchmark run for a genuine three-way
+    comparison against (a) SGLang without MTP (same quant, patches 7+8)
+    and (b) the standing llama.cpp+MTP build - all three on the exact
+    same Ornith-1.5-35B-A3B/quant-family, only the speculative-decoding
+    mechanism (none / SGLang-native / llama.cpp-native) differing.

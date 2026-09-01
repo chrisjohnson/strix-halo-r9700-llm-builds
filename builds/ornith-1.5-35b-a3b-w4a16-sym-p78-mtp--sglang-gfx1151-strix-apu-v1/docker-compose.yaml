@@ -1,0 +1,42 @@
+name: docker
+services:
+  ornith-1.5-35b-a3b-w4a16-sym-p78-mtp--sglang-gfx1151-strix-apu-v1:
+    image: strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151
+    container_name: ornith-1.5-35b-a3b-w4a16-sym-p78-mtp--sglang-gfx1151-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      SGLANG_FORCE_NATIVE_LAYERNORM: "1"
+      SGLANG_AWQ_MOE_TRITON_ROCM: "1"
+    volumes:
+    - /var/lib/ai-models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78-mtp:/models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78-mtp:ro
+    - /var/lib/ai-models/ornith-1.5-35b-a3b-mtp-draft:/models/ornith-1.5-35b-a3b-mtp-draft:ro
+    - sglang-ornith-p78-mtp-tunableop:/root/.tunableop
+    - sglang-ornith-p78-mtp-triton-cache:/root/.triton/cache
+    command: >-
+      python3 -m sglang.launch_server --model-path
+      /models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78-mtp --served-model-name
+      ornith-1.5-35b-a3b-w4a16-sym-p78-mtp-sglang --host 0.0.0.0 --port 30000 --dtype
+      float16 --mamba-ssm-dtype float16 --mem-fraction-static 0.55
+      --context-length 262144 --max-total-tokens 1048576
+      --max-mamba-cache-size 32 --attention-backend triton --disable-cuda-graph
+      --speculative-algorithm NEXTN --speculative-draft-model-path
+      /models/ornith-1.5-35b-a3b-mtp-draft --speculative-num-steps 1
+      --speculative-eagle-topk 1 --speculative-num-draft-tokens 2
+      --enable-metrics
+    ports:
+    - 127.0.0.1:8160:30000
+volumes:
+  sglang-ornith-p78-mtp-tunableop:
+    external: true
+    name: docker_sglang-ornith-p78-mtp-tunableop
+  sglang-ornith-p78-mtp-triton-cache:
+    external: true
+    name: docker_sglang-ornith-p78-mtp-triton-cache

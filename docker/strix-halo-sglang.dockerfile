@@ -259,6 +259,45 @@ COPY strix-halo-sglang-patches/patch_lmhead_rocm.py /tmp/patch_lmhead_rocm.py
 RUN python3 /tmp/patch_lmhead_rocm.py \
     /sgl-workspace/sglang/python/sglang/srt/layers/quantization/compressed_tensors/compressed_tensors.py
 
+# Patch 9 (local, not upstream) — Qwen3.5's MTP/NEXTN draft module ships
+# unquantized (plain bf16) regardless of the target checkpoint's own
+# quantization scheme - upstream already special-cases this for
+# modelopt_fp4 (unconditional) and quark (checked against exclude_layers)
+# in Qwen3_5ForCausalLMMTP.__init__, but has no equivalent case for
+# compressed-tensors (our patches 7+8 scheme). Left unpatched, the draft's
+# internal Linear/MoE layers get constructed expecting quantized parameter
+# shapes while load_weights() hands them plain bf16 tensors from
+# model-mtp.safetensors (this fork's own tools/quantize_nonexpert.py never
+# touches that file - it only requantizes the main checkpoint). This does
+# NOT crash - the forward pass runs and returns real numbers - it just
+# produces wrong logits, observed live as spec_accept_rate pinned at 0.0
+# across hundreds of real verify calls despite this exact draft head
+# achieving 85-95% acceptance on llama.cpp. Confirmed via source read (no
+# ignore-list entry exists for our checkpoint's compressed-tensors config
+# to key off, unlike quark's exclude_layers check), not guessed.
+RUN python3 - <<'PYEOF'
+p = "/sgl-workspace/sglang/python/sglang/srt/models/qwen3_5_mtp.py"
+t = open(p).read()
+old = '''        if quant_config and quant_config.get_name() == "quark":
+            exclude_layers = getattr(quant_config, "exclude_layers", [])
+            if any(
+                isinstance(layer, str) and layer.startswith("mtp.")
+                for layer in exclude_layers
+            ):
+                quant_config = None
+'''
+assert old in t, "patch 9: quark exclude_layers anchor not found, upstream layout changed"
+new = old + '''
+        # Patch 9 (local): compressed-tensors checkpoints ship the MTP
+        # module unquantized too, same as modelopt_fp4/quark above.
+        if quant_config and quant_config.get_name() == "compressed_tensors":
+            quant_config = None
+'''
+t = t.replace(old, new)
+open(p, "w").write(t)
+print("patched", p)
+PYEOF
+
 # Tuned Triton MoE kernel configs for gfx1151 (upstream defaults launch far
 # too few workgroups for a 40-CU part at batch size 1 - BLOCK_SIZE_N=16,
 # num_warps=2 measured optimal vs upstream's BLOCK_SIZE_N=128, num_warps=4).
