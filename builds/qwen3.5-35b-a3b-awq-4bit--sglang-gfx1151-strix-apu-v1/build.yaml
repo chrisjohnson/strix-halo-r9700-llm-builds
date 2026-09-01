@@ -1,5 +1,5 @@
 name: qwen3.5-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1
-status: TESTING
+status: WORKING
 derived:
   engine: sglang-gfx1151-v1
   model: Qwen3.5-35B-A3B
@@ -17,13 +17,12 @@ derived:
     TESTED_NOT_VIABLE writeup). Chris: "Fall back" - test the fork's own
     proven-working checkpoint (cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit).
 
-    FIRST ATTEMPT (build.yaml previously said TESTED_NOT_VIABLE): server
-    loaded and started listening but hung/timed out during its internal
-    startup warmup request (600s ReadTimeoutError), inconsistently -
-    sometimes a long stall, sometimes a fast internal TimeoutError.
-    Chris pushed back on treating this as categorically "not viable" off
-    one attempt, since the fork's own README publishes real measured
-    throughput for this exact checkpoint. Root-caused properly instead of
+    FIRST ATTEMPT (previously recorded TESTED_NOT_VIABLE): server loaded
+    and started listening but hung/timed out during its internal startup
+    warmup request (600s ReadTimeoutError), inconsistently. Chris pushed
+    back on treating this as categorically "not viable" off one attempt,
+    since the fork's own README publishes real measured throughput for
+    this exact checkpoint - correctly. Root-caused properly instead of
     accepting the first negative result:
 
     Real root cause (confirmed via full traceback, not guessed): a
@@ -45,26 +44,61 @@ derived:
     docker/strix-halo-sglang.dockerfile, image rebuilt via
     scripts/build-strix-halo-sglang.sh.
 
-    RESULT AFTER THE FIX: real success. Server loads (23.4GB, ~13-48s),
-    warmup completes, "The server is fired up and ready to roll!",
-    real coherent completions served. First requests per new
-    prompt-length/shape are slow (~2-4 tok/s, cold Triton JIT compile
-    for that exact shape) but subsequent requests of an already-compiled
-    shape run ~20 tok/s single-stream - in the range of the fork's own
-    published 23.4 tok/s reference number. Mounted a persistent
-    /root/.triton/cache volume (was only persisting /root/.tunableop
-    before) so compiled kernels survive container restarts.
+    Chris then asked for a realistic context ceiling (130k+, matching our
+    other real builds, not the fork's toy 2048-token reference config).
+    Raised to --context-length 131072 --max-total-tokens 524288 - real
+    per-token KV cost for this hybrid attention+mamba architecture is
+    cheap (524288-token KV pool = only 10GB), confirmed safe with the
+    full memory pool free. Also mounted a persistent /root/.triton/cache
+    volume (was only persisting /root/.tunableop before) so compiled
+    kernels survive container restarts - first-request-per-shape is slow
+    (cold JIT compile) but subsequent requests of an already-compiled
+    shape are fast.
 
-    Launch config (current, matches the fork's own documented reference
-    in docs/RUNNING_AWQ_MOE.md exactly, changed from the first attempt's
-    modified flags): --dtype float16 --mem-fraction-static 0.55
-    --context-length 2048 --max-total-tokens 4096
-    --max-mamba-cache-size 32 --attention-backend triton
-    --disable-cuda-graph. SGLANG_FORCE_NATIVE_LAYERNORM=1,
-    SGLANG_AWQ_MOE_TRITON_ROCM=1.
+    Two more real, fixed issues surfaced getting a clean benchmark run:
+    (1) local edits I tested manually were never committed to git, so
+    the benchmark orchestrator's own git sync silently reverted the
+    container to a stale 8192-token config for every automated run -
+    fixed by actually committing the verified-working compose.yaml;
+    (2) llm-inference-bench requires --enable-metrics on the SGLang
+    server for accurate server-side throughput measurement - added.
 
-    Both Laguna AND Ornith stopped for this attempt (R9700/Dirk left
-    running - Chris was actively using Dirk).
+    REAL RESULTS (run 134, llm-inference-bench, metrics-backed, warm
+    Triton cache) vs. our two existing same-size-class comparisons on
+    this box:
 
-    Not yet run through llm-inference-bench for a proper concurrent
-    throughput sweep - status left as TESTING pending that.
+    aggregate tok/s, ctx=0:      SGLang  21 / 32 / 56 / 83  (c=1/2/4/8)
+                                  Ornith  68 / 61 / 61 / 66
+                                  vLLM    15 / 24 / 36 / 40
+    aggregate tok/s, ctx=32768:  SGLang  20 / 34 / 52 / 81
+                                  Ornith  60 / 59 / 55 / 51
+                                  vLLM    11 / 18 / 28 / 40
+    aggregate tok/s, ctx=65536:  SGLang  20 / 32 / 49 / 78
+                                  Ornith  51 / 54 / 53 / 48
+                                  vLLM     9 / 15 / 24 / 32
+
+    A real, genuinely mixed result, not a strict win or loss:
+    - SGLang wins decisively on CONCURRENT throughput at real context
+      depths (32k/65k): 50-65% higher than Ornith at concurrency=8, and
+      2x+ vLLM's own BF16 numbers (confirming AWQ's real advantage over
+      unquantized weights within the same continuous-batching engine).
+    - SGLang loses badly on single-stream latency: Ornith's MTP
+      speculative decoding gives it a real ~2.5-3x edge at concurrency=1
+      (this build has no MTP - plain AWQ, no speculative decoding
+      capability for this checkpoint).
+    - This is the classic continuous-batching-vs-speculative-decoding
+      tradeoff, now real and measured on our own hardware, not
+      theoretical. Whether SGLang is the better choice for the
+      medium-moe role depends on real usage pattern: bursty/concurrent
+      (multiple simultaneous agents/users) favors SGLang; mostly
+      single-user/interactive favors Ornith's MTP.
+    - Not yet attempted: the fork's patches 7+8 (dense-layer + lm_head
+      quantization), which their own numbers show closing/flipping the
+      single-stream gap too (single-stream parity, 4.76x at 8 streams on
+      their hardware) - a real, scoped next step if pursued further.
+
+    Both Laguna and Ornith stopped for the benchmark run, restored and
+    confirmed healthy immediately after. Container itself stopped after
+    benchmarking (not needed to stay up) - real, reproducible build
+    (image + compose + build.yaml all committed) ready to bring back up
+    on request.
