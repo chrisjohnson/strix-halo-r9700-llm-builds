@@ -49,10 +49,25 @@
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .row label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer;
                background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; }
-  .row label.off { opacity: 0.45; }
+  .row label.off, .checkbox-list label.off { opacity: 0.45; }
   .row label input { accent-color: var(--accent); }
-  .checkbox-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 140px; overflow-y: auto; }
-  .checkbox-list label { flex: 0 0 auto; }
+  .checkbox-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .checkbox-list label { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; font-size: 13px;
+                          color: var(--text); cursor: pointer; background: var(--bg-card-2);
+                          border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; }
+  .checkbox-list label input { accent-color: var(--accent); }
+
+  .filter-group { margin-top: 10px; }
+  .filter-group:first-of-type { margin-top: 0; }
+  .filter-group-head { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--text-dim);
+                        text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+
+  .model-families { max-height: 360px; overflow-y: auto; padding-right: 4px; }
+  .family-group { margin-bottom: 10px; }
+  .family-group:last-child { margin-bottom: 0; }
+  .family-head { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text); font-weight: 600;
+                 margin-bottom: 5px; }
+  .family-head .panel-toggle { font-weight: 400; }
 
   .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 14px; font-size: 12.5px; color: var(--text-dim); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -121,19 +136,28 @@
 
   <div class="controls">
     <div class="panel">
-      <h3>View <span class="panel-toggle" id="view-toggle"><a href="#" data-scope="view" data-check="1">All</a> / <a href="#" data-scope="view" data-check="0">None</a></span></h3>
+      <h3>View</h3>
       <div class="row" style="margin-bottom:8px">
         <label><input type="checkbox" id="f-best" checked> Best build per model</label>
         <select id="f-ctx" style="margin-left:auto"></select>
         <select id="f-conc"></select>
       </div>
-      <div class="row" id="f-engine"></div>
-      <div class="row" id="f-arch" style="margin-top:6px"></div>
-      <div class="row" id="f-gpu" style="margin-top:6px"></div>
+      <div class="filter-group">
+        <div class="filter-group-head">Engine <span class="panel-toggle" data-scope="engine"><a href="#" data-check="1">All</a> / <a href="#" data-check="0">None</a></span></div>
+        <div class="row" id="f-engine"></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-group-head">Architecture <span class="panel-toggle" data-scope="arch"><a href="#" data-check="1">All</a> / <a href="#" data-check="0">None</a></span></div>
+        <div class="row" id="f-arch"></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-group-head">GPU <span class="panel-toggle" data-scope="gpu"><a href="#" data-check="1">All</a> / <a href="#" data-check="0">None</a></span></div>
+        <div class="row" id="f-gpu"></div>
+      </div>
     </div>
     <div class="panel">
-      <h3>Models <span style="text-transform:none" id="model-count"></span> <span class="panel-toggle" id="model-toggle"><a href="#" data-scope="model" data-check="1">All</a> / <a href="#" data-scope="model" data-check="0">None</a></span></h3>
-      <div class="checkbox-list" id="f-model"></div>
+      <h3>Models <span style="text-transform:none" id="model-count"></span> <span class="panel-toggle" data-scope="model"><a href="#" data-check="1">All</a> / <a href="#" data-check="0">None</a></span></h3>
+      <div class="model-families" id="f-model-families"></div>
     </div>
   </div>
 
@@ -166,6 +190,12 @@ const state = {
 const ENGINES = [...new Set(DATA.builds.map(b => b.engine_cat))].sort();
 const ARCHS = [...new Set(DATA.builds.map(b => b.arch))].sort();
 const MODELS = [...new Set(DATA.builds.map(b => b.model_key))].sort();
+// model_key -> family (e.g. "Qwen3.5-35B-A3B" -> "Qwen3.5"), computed
+// server-side (see family_of() in generate_interactive_dashboard.py) so
+// the grouping logic lives in one reviewable place, not duplicated here.
+const MODEL_FAMILY = Object.fromEntries(DATA.builds.map(b => [b.model_key, b.family]));
+const FAMILIES = [...new Set(MODELS.map(m => MODEL_FAMILY[m]))].sort();
+const MODELS_BY_FAMILY = new Map(FAMILIES.map(f => [f, MODELS.filter(m => MODEL_FAMILY[m] === f)]));
 // Which physical GPU produced each result, same filter/legend/badge
 // treatment as engine family above -- every build defaults to the
 // pre-R9700 GPU unless its own target_gpu says otherwise (see gpu_of() in
@@ -241,13 +271,25 @@ function initControls() {
     gpuEl.appendChild(lbl);
   });
 
-  const modelEl = $('f-model');
-  MODELS.forEach(m => {
-    const lbl = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.checked = true; cb.dataset.model = m;
-    lbl.append(cb, m);
-    modelEl.appendChild(lbl);
+  const familiesEl = $('f-model-families');
+  MODELS_BY_FAMILY.forEach((models, family) => {
+    const group = document.createElement('div');
+    group.className = 'family-group';
+    const head = document.createElement('div');
+    head.className = 'family-head';
+    head.innerHTML = `<span>${esc(family)}</span><span class="panel-toggle" data-scope="family" data-family="${esc(family)}">` +
+      `<a href="#" data-check="1">All</a> / <a href="#" data-check="0">None</a></span>`;
+    const list = document.createElement('div');
+    list.className = 'checkbox-list';
+    models.forEach(m => {
+      const lbl = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = true; cb.dataset.model = m; cb.dataset.family = family;
+      lbl.append(cb, m);
+      list.appendChild(lbl);
+    });
+    group.append(head, list);
+    familiesEl.appendChild(group);
   });
   updateModelCount();
 
@@ -264,12 +306,12 @@ function updateModelCount() {
 function syncState() {
   state.engines = new Set([...document.querySelectorAll('#f-engine input:checked')].map(i => i.dataset.engine));
   state.archs = new Set([...document.querySelectorAll('#f-arch input:checked')].map(i => i.dataset.arch));
-  state.models = new Set([...document.querySelectorAll('#f-model input:checked')].map(i => i.dataset.model));
+  state.models = new Set([...document.querySelectorAll('#f-model-families input:checked')].map(i => i.dataset.model));
   state.gpus = new Set([...document.querySelectorAll('#f-gpu input:checked')].map(i => i.dataset.gpu));
   state.ctx = Number($('f-ctx').value);
   state.conc = Number($('f-conc').value);
   state.best = $('f-best').checked;
-  document.querySelectorAll('#f-engine label, #f-arch label, #f-gpu label').forEach(l =>
+  document.querySelectorAll('#f-engine label, #f-arch label, #f-gpu label, #f-model-families label').forEach(l =>
     l.classList.toggle('off', !l.querySelector('input').checked));
   updateModelCount();
 }
@@ -434,23 +476,89 @@ function initTheme() {
     setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 }
 
+// Maps a panel-toggle's data-scope to the checkbox selector it controls.
+// Each filter group (engine/arch/gpu) gets its own independent All/None now
+// (2026-09-02) - previously a single "View" toggle controlled all three
+// together, which meant unchecking one engine also required re-checking
+// unrelated arch/gpu boxes if you'd used "None". 'model' covers every
+// model across every family (the Models panel's own top-level toggle);
+// 'family' (with a data-family attribute alongside data-scope) scopes to
+// just that one family's models, for the per-family toggle in each
+// family-group header.
+const TOGGLE_SELECTORS = {
+  engine: () => '#f-engine input',
+  arch: () => '#f-arch input',
+  gpu: () => '#f-gpu input',
+  model: () => '#f-model-families input',
+  family: wrap => `#f-model-families input[data-family="${wrap.dataset.family}"]`,
+};
+
 function initPanelToggles() {
-  // "All / None" per filter panel: 'view' covers the three checkbox rows
-  // that share the View panel (engine, arch, gpu) as one group, 'model'
-  // covers the separate Models panel - matches the two visual panels, not
-  // one control per individual checkbox row.
   document.querySelectorAll('.panel-toggle a').forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();
       const checked = a.dataset.check === '1';
-      const selector = a.dataset.scope === 'view'
-        ? '#f-engine input, #f-arch input, #f-gpu input'
-        : '#f-model input';
+      const wrap = a.closest('.panel-toggle');
+      const selector = (TOGGLE_SELECTORS[wrap.dataset.scope] || TOGGLE_SELECTORS.model)(wrap);
       document.querySelectorAll(selector).forEach(cb => { cb.checked = checked; });
       syncState();
       refreshAll();
     });
   });
+}
+
+// URL state sync (2026-09-02): every filter change is reflected into the
+// query string via history.replaceState (not pushState - a checkbox
+// click firing on every toggle would otherwise flood the back-button
+// history with one entry per click), so refreshing or sending the link
+// reproduces the exact same filtered/detail-open view. Group params
+// (eng/arch/gpu/model) are omitted entirely when everything in that
+// group is checked (the default) - keeps a default-state URL clean and
+// makes "some are unchecked" unambiguous from "nothing was ever
+// customized". Values are joined with a raw comma and handed to
+// URLSearchParams as-is; it percent-encodes the whole value (including
+// any literal comma/plus/space inside a model name like "Laguna-S-2.1 +
+// DFlash") on write and decodes it back exactly on read, so no manual
+// encodeURIComponent is needed here.
+function updateURL() {
+  const p = new URLSearchParams();
+  p.set('best', state.best ? '1' : '0');
+  p.set('ctx', String(state.ctx));
+  p.set('conc', String(state.conc));
+  if (state.engines.size !== ENGINES.length) p.set('eng', [...state.engines].join(','));
+  if (state.archs.size !== ARCHS.length) p.set('arch', [...state.archs].join(','));
+  if (state.gpus.size !== GPUS.length) p.set('gpu', [...state.gpus].join(','));
+  if (state.models.size !== MODELS.length) p.set('model', [...state.models].join(','));
+  if (state.detailModel) p.set('detail', state.detailModel);
+  const qs = p.toString();
+  history.replaceState(null, '', qs ? `${location.pathname}?${qs}` : location.pathname);
+}
+
+// Applies the URL's query string to the just-built (all-checked-by-
+// default) controls, before the first syncState()/render - so a shared/
+// refreshed link reproduces its exact filtered state on load instead of
+// briefly flashing the all-selected default. Absent params leave the
+// default (everything checked) alone; a present-but-empty group param
+// (e.g. "eng=") means "user unchecked everything in this group",
+// deliberately distinct from an absent param.
+function applyURLState() {
+  const p = new URLSearchParams(location.search);
+  if (p.has('best')) $('f-best').checked = p.get('best') !== '0';
+  if (p.has('ctx') && [...$('f-ctx').options].some(o => o.value === p.get('ctx'))) $('f-ctx').value = p.get('ctx');
+  if (p.has('conc') && [...$('f-conc').options].some(o => o.value === p.get('conc'))) $('f-conc').value = p.get('conc');
+
+  const applyGroup = (param, selector, dataKey) => {
+    if (!p.has(param)) return;
+    const wanted = new Set(p.get(param) ? p.get(param).split(',') : []);
+    document.querySelectorAll(selector).forEach(cb => { cb.checked = wanted.has(cb.dataset[dataKey]); });
+  };
+  applyGroup('eng', '#f-engine input', 'engine');
+  applyGroup('arch', '#f-arch input', 'arch');
+  applyGroup('gpu', '#f-gpu input', 'gpu');
+  applyGroup('model', '#f-model-families input', 'model');
+
+  const detail = p.get('detail');
+  if (detail && MODELS.includes(detail)) state.detailModel = detail;
 }
 
 // Bug fix (2026-08-22): renderChart() alone left an already-open detail
@@ -464,14 +572,16 @@ function initPanelToggles() {
 function refreshAll() {
   renderChart();
   if (state.detailModel) renderDetail(state.detailModel);
+  updateURL();
 }
 
 function init() {
   initTheme();
   initControls();
+  applyURLState();
   initPanelToggles();
   syncState();
-  renderChart();
+  refreshAll();
   document.addEventListener('change', e => {
     syncState();
     refreshAll();
@@ -479,6 +589,7 @@ function init() {
   $('bars').addEventListener('click', e => {
     const row = e.target.closest('.bar-row');
     if (row) renderDetail(decodeURIComponent(row.dataset.model));
+    updateURL();
   });
 }
 

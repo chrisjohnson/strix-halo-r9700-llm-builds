@@ -109,6 +109,51 @@ def model_key(model_display):
     return re.sub(r"\s*\(.*?\)\s*", "", model_display).strip()
 
 
+# Groups model_key values into a "family" for the dashboard's Models filter
+# (e.g. "Qwen3.5-35B-A3B" and "Qwen3.5-122B-A10B" -> "Qwen3.5") - same
+# explicit-pattern-table style as ENGINE_CAT/GPU_LABEL above, deliberately
+# NOT a generic regex trying to guess brand-vs-size-suffix (real model
+# names mix conventions too much for that to be reliable: some glue the
+# version number onto the brand with no separator - Qwen3.5, Qwen3.6,
+# Qwen3.8, Qwen2.5, each its own real, incompatible generation Chris
+# treats as distinct throughout this project - while others hyphenate it
+# - GLM-4.7 - and sizes are sometimes hyphenated onto the brand too -
+# Gemma-4-26B-A4B vs Gemma-4-31B, both meant to group under one "Gemma"
+# family). Ordered, first-match-wins; add a new pattern here as new model
+# families show up rather than trying to generalize further.
+FAMILY_PATTERNS = [
+    (re.compile(r"^DeepSeek", re.I), "DeepSeek"),
+    (re.compile(r"^Dirk", re.I), "Dirk"),
+    (re.compile(r"^Gemma", re.I), "Gemma"),
+    (re.compile(r"^GLM", re.I), "GLM"),
+    (re.compile(r"^GPT-OSS", re.I), "GPT-OSS"),
+    (re.compile(r"^KAT-Coder", re.I), "KAT-Coder"),
+    (re.compile(r"^Laguna", re.I), "Laguna"),
+    (re.compile(r"^MiniMax", re.I), "MiniMax"),
+    (re.compile(r"^North", re.I), "North"),
+    (re.compile(r"^(NVIDIA-)?Nemotron", re.I), "Nemotron"),
+    (re.compile(r"^Ornith", re.I), "Ornith"),
+    (re.compile(r"^Qwen3\.5", re.I), "Qwen3.5"),
+    (re.compile(r"^Qwen3\.6", re.I), "Qwen3.6"),
+    (re.compile(r"^Qwen3\.8", re.I), "Qwen3.8"),
+    (re.compile(r"^Qwen2\.5", re.I), "Qwen2.5"),
+    (re.compile(r"^Qwen3-Coder", re.I), "Qwen3-Coder"),
+    (re.compile(r"^Qwen", re.I), "Qwen (other)"),
+]
+
+
+def family_of(model_key_val):
+    for pat, name in FAMILY_PATTERNS:
+        if pat.search(model_key_val):
+            return name
+    # Fallback: leading run of letters (stops at the first digit or
+    # separator that isn't a hyphen inside a word) - keeps an unmatched
+    # future model from silently vanishing into a catch-all "unknown"
+    # bucket; it just gets its own single-member family named after itself.
+    m = re.match(r"^[A-Za-z][A-Za-z\-]*", model_key_val)
+    return m.group(0).rstrip("-") if m else model_key_val
+
+
 def parse_params(s):
     if not s:
         return None
@@ -198,6 +243,7 @@ def load_builds():
         with open(compose_path) as fh:
             compose = fh.read()
         md = derived.get("model", os.path.basename(bdir))
+        mkey = model_key(md)
         builds.append({
             "name": os.path.basename(bdir),
             "status": by.get("status", "UNKNOWN"),
@@ -205,7 +251,8 @@ def load_builds():
             "engine_ref": derived.get("engine"),
             "target_gpu": gpu_of(derived),
             "model": md,
-            "model_key": model_key(md),
+            "model_key": mkey,
+            "family": family_of(mkey),
             "params": derived.get("params"),
             "active": derived.get("active_params"),
             "arch": arch_of(derived),
