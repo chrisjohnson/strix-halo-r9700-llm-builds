@@ -103,3 +103,44 @@ derived:
     and (b) the standing llama.cpp+MTP build - all three on the exact
     same Ornith-1.5-35B-A3B/quant-family, only the speculative-decoding
     mechanism (none / SGLang-native / llama.cpp-native) differing.
+
+    REAL STABILITY ISSUE FOUND AND RESOLVED (2026-09-01, post-Patch-9):
+    the very first llm-inference-bench runs (142, 143) both crashed twice
+    each and failed outright - one signature was SGLang's own internal
+    warmup request timing out after 600s during startup, the other was a
+    real in-flight benchmark request hanging mid-sweep. Both looked like
+    genuine deadlocks at first. Root-caused via direct stress testing
+    (concurrent real completions outside the benchmark harness, isolating
+    variables): NOT a deadlock - the very first time this exact
+    speculative-decoding configuration processes a given (concurrency,
+    context-shape) combination, Triton/TunableOp needs to JIT-compile and
+    autotune kernel variants it has never seen before, which can take
+    minutes per unique shape and can exceed both SGLang's own internal
+    timeouts and the benchmark orchestrator's own crash-probe patience -
+    which then kills the container mid-compile, discarding progress and
+    repeating the same slow-first-hit on the next attempt. Confirmed
+    directly: a raw concurrency=8 stress test against a freshly-restarted
+    container showed a clear warm-up curve (round 1: 1/8 requests
+    succeeded, taking 146s; round 4: 8/8 succeeded, uniformly ~126-131s)
+    - then, after a full container restart (reusing the same persistent
+    TunableOp/Triton cache volumes), the identical concurrency=8 load was
+    immediately fast and 100% reliable (25-28s, 8/8, every round) -
+    proving the caches genuinely persist the compiled/tuned kernels
+    across restarts and the slowness is a real but one-time cost, not a
+    recurring instability.
+
+    Added --disable-overlap-schedule to the launch command as a real
+    mitigation tested alongside this investigation (SGLang's overlap
+    scheduling is a newer optimization for pipelining draft/verify steps;
+    disabling it removes one more moving part while diagnosing, and was
+    kept since it did not reduce speed in manual testing and produces
+    more predictable, easier-to-reason-about behavior under concurrent
+    load). Real remaining risk: the FIRST-EVER benchmark run (or first
+    real production traffic) against a freshly-created build with empty
+    cache volumes may still be slow enough on its first pass through each
+    (concurrency, context) combination to trip a timeout somewhere in the
+    pipeline - this is a one-time warm-up cost inherent to Triton/
+    TunableOp on this hardware, not something patches 1-9 can eliminate,
+    only something that can be worked around with either more patient
+    timeouts on a first run or a dedicated pre-warming pass before
+    treating a fresh instance as production-ready.

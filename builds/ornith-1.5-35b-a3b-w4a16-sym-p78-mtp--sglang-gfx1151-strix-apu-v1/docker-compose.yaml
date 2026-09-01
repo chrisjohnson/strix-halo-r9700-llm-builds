@@ -30,7 +30,7 @@ services:
       --speculative-algorithm NEXTN --speculative-draft-model-path
       /models/ornith-1.5-35b-a3b-mtp-draft --speculative-num-steps 1
       --speculative-eagle-topk 1 --speculative-num-draft-tokens 2
-      --enable-metrics
+      --disable-overlap-schedule --enable-metrics
     ports:
     - 127.0.0.1:8160:30000
 volumes:
