@@ -1,0 +1,18 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: Qwen3.5 @ localhost:8156                                              │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Engine: SGLang 0.0.0.dev1+gb0b8436f1.d20260901  Models: 
+['qwen3.5-35b-a3b-awq-4bit-sglang']
+KV cache budget: 524,288 tokens
+ERROR: SGLang server does not have metrics enabled.
+This benchmark requires Prometheus metrics for accurate server-side throughput 
+measurement.
+Restart SGLang with --enable-metrics flag.
+
+Example:
+  python -m sglang.launch_server --model ... --enable-metrics
