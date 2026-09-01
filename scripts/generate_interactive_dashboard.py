@@ -45,12 +45,14 @@ ENGINE_CAT = {
     "ollama-vulkan-0177-v1": "ollama",
     "ollama-rocm-0177-broken": "ollama",
     "ds4-strix-halo-v1": "ds4",
+    "sglang-gfx1151-v1": "sglang",
 }
 ENGINE_LABEL = {
     "vllm": "vLLM",
     "llamacpp": "llama.cpp",
     "ollama": "Ollama",
     "ds4": "DS4",
+    "sglang": "SGLang",
     "unknown": "unknown",
 }
 ENGINE_COLOR = {
@@ -58,6 +60,7 @@ ENGINE_COLOR = {
     "llamacpp": "#34d399",
     "ollama": "#fb923c",
     "ds4": "#a78bfa",
+    "sglang": "#f472b6",
     "unknown": "#9aa4b2",
 }
 
@@ -97,6 +100,8 @@ def engine_cat(engine_ref):
         return "vllm"
     if engine_ref and "ollama" in engine_ref:
         return "ollama"
+    if engine_ref and "sglang" in engine_ref:
+        return "sglang"
     return "unknown"
 
 
