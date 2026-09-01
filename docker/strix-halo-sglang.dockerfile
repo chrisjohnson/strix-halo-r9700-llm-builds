@@ -237,6 +237,37 @@ open(p, "w").write(t)
 print("patched", p, f"({n} occurrences)")
 PYEOF
 
+# Patch 7 — non-Marlin int4 Linear for compressed-tensors on ROCm. Marlin
+# (CUDA-only) is the only wNa16 backend upstream, so quantized dense
+# (attention/projection) layers can't load on RDNA - every public quant of
+# this model class quantizes only mlp.experts.* as a result. Adds a ROCm
+# branch using vLLM's gptq_gemm; the fork's own testing verified it
+# numerically (cos=1.00000 against a plain PyTorch reference) via exllama +
+# v1 zero points. See patches/07-wna16-rocm-linear.md upstream.
+COPY strix-halo-sglang-patches/patch_wna16_rocm.py /tmp/patch_wna16_rocm.py
+RUN python3 /tmp/patch_wna16_rocm.py \
+    /sgl-workspace/sglang/python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16.py
+
+# Patch 8 — quantized lm_head for compressed-tensors. get_quant_method only
+# handles LinearBase/FusedMoE and returns None for ParallelLMHead, so a
+# quantized checkpoint's lm_head silently falls back to an unquantized
+# parameter the checkpoint never fills (uninitialized logits, not a crash).
+# lm_head is the single largest tensor in this model class (~1GB streamed
+# per decode token) - worth patching separately from patch 7's dense
+# layers. See patches/08-lmhead-compressed-tensors.md upstream.
+COPY strix-halo-sglang-patches/patch_lmhead_rocm.py /tmp/patch_lmhead_rocm.py
+RUN python3 /tmp/patch_lmhead_rocm.py \
+    /sgl-workspace/sglang/python/sglang/srt/layers/quantization/compressed_tensors/compressed_tensors.py
+
+# Tuned Triton MoE kernel configs for gfx1151 (upstream defaults launch far
+# too few workgroups for a 40-CU part at batch size 1 - BLOCK_SIZE_N=16,
+# num_warps=2 measured optimal vs upstream's BLOCK_SIZE_N=128, num_warps=4).
+# Matches this exact GPU name (Radeon_8060S_Graphics) and MoE shape
+# (E=256,N=256,dtype=int4_w4a16) - confirmed by the runtime's own warning
+# log line naming this exact path when the config is absent. See
+# configs/moe/README.md upstream.
+COPY strix-halo-sglang-patches/configs-moe/ /sgl-workspace/sglang/python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_7_0/
+
 # Compile sgl-kernel for gfx1151
 WORKDIR /sgl-workspace/sglang/sgl-kernel
 RUN AMDGPU_TARGET=gfx1151 python3 setup_rocm.py develop
