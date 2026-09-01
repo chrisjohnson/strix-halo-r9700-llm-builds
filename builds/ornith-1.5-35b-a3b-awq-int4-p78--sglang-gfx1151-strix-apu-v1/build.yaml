@@ -1,0 +1,58 @@
+name: ornith-1.5-35b-a3b-awq-int4-p78--sglang-gfx1151-strix-apu-v1
+status: TESTING
+derived:
+  engine: sglang-gfx1151-v1
+  model: Ornith-1.5-35B-A3B
+  params: 35B
+  active_params: 3.3B
+  quant: AWQ-INT4 + dense/lm_head-int4 (patches 7+8)
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-01). Chris: "can we use this to run ornith 1.5 now
+    that we see how well it works? Same quant and context as my existing
+    build" (context corrected mid-task to the model's max: "go up to the
+    maximum context"). Applies the now-proven SGLang patches 1-8 recipe
+    (real, working, benchmarked on Qwen3.5-35B-A3B - see the sibling
+    qwen3.5-35b-a3b-awq-4bit-p78 build) to our actual standing medium-moe
+    model for the first time.
+
+    Checkpoint: ulkaa/Ornith-1.5-35B-A3B-AWQ-INT4 - same
+    Qwen3_5MoeForConditionalGeneration architecture, same compressed-
+    tensors/pack-quantized format as the Qwen3.5 checkpoint, so the
+    exact same recipe applies directly (unlike the earlier biMEMO
+    AutoRound/"inc" quant of this same model, TESTED_NOT_VIABLE for
+    vLLM - this is a genuinely different, SGLang-compatible quant
+    format). Ran tools/quantize_nonexpert.py against it (same tool, same
+    defaults - lm_head included): 191 tensors quantized (identical count
+    to the Qwen3.5 run - same architecture/layer count), 1.67GB saved,
+    worst relative dequant error 0.14 (same magnitude as Qwen3.5's run -
+    expected RTN error, not a bug). Output ~24.4GB, stored at
+    /var/lib/ai-models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78. Source
+    checkpoint also includes a preserved MTP head
+    (model-mtp.safetensors, 1.69GB) - not used in this build, SGLang MTP
+    support not yet attempted, a real future option.
+
+    Context: 262144 (the model's own native max_position_embeddings,
+    confirmed via ornith-ai/Ornith-1.5-35B-A3B's own config.json,
+    rope_scaling: None so this is genuinely trained, not extrapolated) -
+    Chris explicitly asked to go to the max rather than match the
+    standing llama.cpp build's own 131072. --max-total-tokens 1048576
+    (1M, 2x the ratio used for the Qwen3.5 test's 131072/524288) - KV
+    cost is cheap for this hybrid attention+mamba architecture (confirmed
+    on the Qwen3.5 test: 524288 tokens = only 10GB), so this should stay
+    well within real memory headroom.
+
+    Same launch config pattern as the working Qwen3.5 patches-7+8 build
+    otherwise (--dtype float16, --mamba-ssm-dtype float16,
+    SGLANG_AWQ_MOE_TRITON_ROCM=1, persistent Triton cache +
+    TunableOp volumes, --enable-metrics).
+
+    Comparison baseline (real, existing data, same box): standing
+    ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3 (MTP,
+    Q4_K_M, -c 131072): aggregate tok/s ctx=0: 67/65/63/67 (c=1/2/4/8).
+
+    Not yet tested - checkpoint requantized, container not yet brought
+    up (freeing the APU from the Qwen3.5 SGLang test container first,
+    per Chris's explicit "one at a time" pattern all session).

@@ -1,0 +1,38 @@
+name: docker
+services:
+  ornith-1.5-35b-a3b-awq-int4-p78--sglang-gfx1151-strix-apu-v1:
+    image: strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151
+    container_name: ornith-1.5-35b-a3b-awq-int4-p78--sglang-gfx1151-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      SGLANG_FORCE_NATIVE_LAYERNORM: "1"
+      SGLANG_AWQ_MOE_TRITON_ROCM: "1"
+    volumes:
+    - /var/lib/ai-models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78:/models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78:ro
+    - sglang-ornith-p78-tunableop:/root/.tunableop
+    - sglang-ornith-p78-triton-cache:/root/.triton/cache
+    command: >-
+      python3 -m sglang.launch_server --model-path
+      /models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78 --served-model-name
+      ornith-1.5-35b-a3b-awq-int4-p78-sglang --host 0.0.0.0 --port 30000 --dtype
+      float16 --mamba-ssm-dtype float16 --mem-fraction-static 0.55
+      --context-length 262144 --max-total-tokens 1048576
+      --max-mamba-cache-size 32 --attention-backend triton --disable-cuda-graph
+      --enable-metrics
+    ports:
+    - 127.0.0.1:8159:30000
+volumes:
+  sglang-ornith-p78-tunableop:
+    external: true
+    name: docker_sglang-ornith-p78-tunableop
+  sglang-ornith-p78-triton-cache:
+    external: true
+    name: docker_sglang-ornith-p78-triton-cache
