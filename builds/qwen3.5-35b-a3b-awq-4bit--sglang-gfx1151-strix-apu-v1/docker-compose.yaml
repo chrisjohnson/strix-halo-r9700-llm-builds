@@ -26,6 +26,7 @@ services:
       float16 --mamba-ssm-dtype float16 --mem-fraction-static 0.55
       --context-length 131072 --max-total-tokens 524288
       --max-mamba-cache-size 32 --attention-backend triton --disable-cuda-graph
+      --enable-metrics
     ports:
     - 127.0.0.1:8156:30000
 volumes:
