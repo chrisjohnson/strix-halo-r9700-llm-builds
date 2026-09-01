@@ -1,5 +1,5 @@
 name: ornith-1.5-35b-a3b-w4a16-sym-p78--sglang-gfx1151-strix-apu-v1
-status: TESTING
+status: WORKING
 derived:
   engine: sglang-gfx1151-v1
   model: Ornith-1.5-35B-A3B
@@ -57,9 +57,32 @@ derived:
     SGLANG_AWQ_MOE_TRITON_ROCM=1, persistent Triton cache + TunableOp
     volumes, --enable-metrics).
 
-    Comparison baseline (real, existing data, same box): standing
-    ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v3 (MTP,
-    Q4_K_M, -c 131072): aggregate tok/s ctx=0: 67/65/63/67 (c=1/2/4/8).
+    RESULT: real success, confirmed coherent output (verified a real
+    completion, not uninitialized-logit garbage). Real llm-inference-bench
+    sweep (run 136, metrics-enabled, warm caches) vs. standing Ornith
+    (MTP, Q4_K_M, -c 131072), same box:
 
-    Not yet tested - checkpoint requantized, container not yet brought
-    up.
+    aggregate tok/s, ctx=0:     p7+8   30/50/78/107  (c=1/2/4/8)
+                                 Ornith 67/65/63/67
+    aggregate tok/s, ctx=16384: p7+8   29/48/73/98
+                                 Ornith 66/63/61/57
+    aggregate tok/s, ctx=32768: p7+8   29/48/69/92
+                                 Ornith 64/60/58/54
+    aggregate tok/s, ctx=65536: p7+8   28/45/63/88
+                                 Ornith 57/55/55/52
+
+    Same qualitative tradeoff as the Qwen3.5 patches-7+8 result: MTP
+    wins single-stream decisively (~2.3x at ctx=0, c=1 - 67 vs 30), SGLang
+    wins concurrency decisively (~1.6x at ctx=0, c=8 - 107 vs 67; ~1.7x
+    at ctx=65536, c=8 - 88 vs 52). Neither build is a strict win over the
+    other - MTP is the better choice for interactive/single-session use,
+    SGLang is the better choice for batched/concurrent load. Real
+    remaining headroom, not yet attempted: this checkpoint carries a
+    preserved MTP head (model-mtp.safetensors) that SGLang's own MTP
+    support could exploit to close the single-stream gap, same as the
+    Qwen3.5 sibling build's own noted follow-up.
+
+    Per Chris's explicit standing-set instruction (do not reflexively
+    restore Laguna/Ornith llama.cpp during active work), this container
+    is left running rather than torn down after benchmarking - it's the
+    build Chris asked to have running.
