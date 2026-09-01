@@ -1,0 +1,57 @@
+name: qwen3.5-35b-a3b-awq-4bit-p78--sglang-gfx1151-strix-apu-v1
+status: TESTING
+derived:
+  engine: sglang-gfx1151-v1
+  model: Qwen3.5-35B-A3B
+  params: 35B
+  active_params: 3.3B
+  quant: AWQ-4bit + dense/lm_head-int4 (patches 7+8)
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-01). Follow-up to the working
+    qwen3.5-35b-a3b-awq-4bit--sglang-gfx1151-strix-apu-v1 build - Chris:
+    "proceed on the sglang stuff" (keep pushing performance gains).
+
+    Applies the fork's own patches 7+8 (previously untried, flagged as the
+    real next step): patch 7 unlocks quantized dense (attention/
+    projection) Linear layers on ROCm via a non-Marlin gptq_gemm path
+    (Marlin/CUDA-only was the only wNa16 backend upstream); patch 8 fixes
+    a silent bug where quantized lm_head falls back to an unfilled
+    unquantized parameter (uninitialized logits) since
+    CompressedTensorsConfig.get_quant_method doesn't handle
+    ParallelLMHead. Also vendors the fork's own pre-tuned Triton MoE
+    kernel config for this exact GPU (Radeon_8060S_Graphics) and MoE
+    shape (E=256,N=256,dtype=int4_w4a16) - no local tuning needed, the
+    runtime's own warning log named this exact missing path earlier.
+
+    Checkpoint: ran the fork's tools/quantize_nonexpert.py against our
+    existing cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit download (no re-download
+    needed, no GPU needed - pure CPU tensor requantization). 191 tensors
+    quantized (dense layers + lm_head, default flags i.e. lm_head
+    included), 1.67GB saved, worst relative dequant error 0.14 (expected
+    RTN-quantization-error magnitude, not a bug - matches the fork's own
+    reported stage-A error range). Output: 22GB (down from 23GB source),
+    config.json's quant targets confirmed to include "lm_head". Stored at
+    /var/lib/ai-models/qwen3.5-35b-a3b-awq-4bit-cyankiwi-p78 (separate
+    from the source checkpoint, which is kept).
+
+    Fork's own measured numbers for this exact combination
+    (Qwen3.5-35B-A3B, concurrency 1/8, warm TunableOp):
+    experts-only 23.4/127.0 tok/s -> patch7 29.7/137.6 -> patch7+8
+    33.4/180.8. Single-stream 0.62x -> 0.88x of Ollama/llama.cpp, 8-stream
+    3.35x -> 4.62x. If these numbers hold on our hardware, this should
+    close most of the real single-stream latency gap that made the
+    earlier (patches 1-6 only) SGLang build a genuine tradeoff against
+    Ornith's MTP rather than a clean win.
+
+    Same launch config as the working patches-1-6 build (context 131072,
+    max-total-tokens 524288, persistent Triton cache + TunableOp
+    volumes, --enable-metrics for accurate benchmark data) - only the
+    image (rebuilt with patches 7+8) and model path differ. Separate
+    build id (not overwriting the working patches-1-6 build) so both
+    remain independently reproducible/comparable.
+
+    Not yet tested - image built and checkpoint requantized, container
+    not yet brought up.
