@@ -144,3 +144,47 @@ derived:
     only something that can be worked around with either more patient
     timeouts on a first run or a dedicated pre-warming pass before
     treating a fresh instance as production-ready.
+
+REAL, FINAL THROUGHPUT DATA (2026-09-01, after root-causing the harness's
+own measurement bug for deep-context cells - see decision log above).
+The automated llm-inference-bench tool reports mathematically-impossible
+values for ctx=32768/65536 at higher concurrency with this build (the
+exact same aggregate_tps repeated across cells with different wall
+times - a bug in the harness's own measurement/warmup logic for this
+specific MTP+huge-context+disabled-radix-cache combination, confirmed
+via inspecting num_completed/num_errors/wall_time on the raw per-cell
+results: every request genuinely completed successfully with 0 errors,
+real distinct wall times, but garbage aggregate_tps). Real values below
+were obtained by sampling the server's own sglang:gen_throughput /metrics
+gauge directly during sustained real load at each shape, waiting past
+the prefill-dominated warmup portion for the value to stabilize -
+validated first against a clean cell (ctx=0, c=4: sampled 78.19 tok/s vs
+the harness's own clean 80.2 tok/s for the same cell, well within noise).
+
+Full three-way comparison, same model/hardware, aggregate tok/s:
+  ctx=0:     no-MTP 30/50/78/107     MTP 31.8/55.6/80.2/114.5   llama.cpp+MTP 71.8/68.2/71.7/71.1
+  ctx=16384: no-MTP 29/48/73/98      MTP 19.6/32.0/30.5/53.1    llama.cpp+MTP 69.9/65.9/66.0/65.6
+  ctx=32768: no-MTP 29/48/69/92      MTP ~10/~18/~23/~22.5      llama.cpp+MTP 67.1/63.1/60.4/61.8
+  ctx=65536: no-MTP 28/45/63/88      MTP ~7.5/~8.5/~13.5/~13    llama.cpp+MTP 56.4/56.4/53.9/55.0
+  (all c=1/2/4/8; ctx=32768/65536 MTP figures are the manually-sampled
+  real numbers, not the harness's broken output for those cells)
+
+REAL FINDING: MTP's payoff inverts with context depth. At ctx=0 it's a
+genuine win over plain SGLang (114.5 vs 107 at c=8) - the best result of
+all three builds at this depth. By ctx=32768-65536 it is dramatically
+WORSE than plain SGLang (3-6x lower, not a small regression). Root
+cause: SGLang automatically disables radix-cache (prefix reuse) whenever
+speculative decoding is active for this architecture (confirmed in the
+server's own startup log: "Speculative decoding for
+Qwen3_5MoeForConditionalGeneration is not compatible with radix cache on
+ROCm devices. Automatically disabling radix cache.") - so MTP trades
+away all prefix-caching benefit for draft-token speedup, and at deep
+context the caching loss outweighs the drafting gain by a wide margin.
+
+Practical conclusion: this build is a real, working, genuinely fast
+option specifically for short-context/high-concurrency traffic (it beats
+both other builds at ctx=0, c=8). It is not competitive for deep-context
+workloads - plain SGLang (no MTP) or llama.cpp+MTP are both far better
+there. Not promoted to any role - this is architecture-dependent
+tradeoff data for Chris to weigh, same as every other build this
+session.
