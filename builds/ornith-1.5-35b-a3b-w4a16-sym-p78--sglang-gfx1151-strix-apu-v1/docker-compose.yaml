@@ -1,8 +1,8 @@
 name: docker
 services:
-  ornith-1.5-35b-a3b-awq-int4-p78--sglang-gfx1151-strix-apu-v1:
+  ornith-1.5-35b-a3b-w4a16-sym-p78--sglang-gfx1151-strix-apu-v1:
     image: strix-halo-r9700-llm-builds/strix-halo-sglang:gfx1151
-    container_name: ornith-1.5-35b-a3b-awq-int4-p78--sglang-gfx1151-strix-apu-v1
+    container_name: ornith-1.5-35b-a3b-w4a16-sym-p78--sglang-gfx1151-strix-apu-v1
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
@@ -16,13 +16,13 @@ services:
       SGLANG_FORCE_NATIVE_LAYERNORM: "1"
       SGLANG_AWQ_MOE_TRITON_ROCM: "1"
     volumes:
-    - /var/lib/ai-models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78:/models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78:ro
+    - /var/lib/ai-models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78:/models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78:ro
     - sglang-ornith-p78-tunableop:/root/.tunableop
     - sglang-ornith-p78-triton-cache:/root/.triton/cache
     command: >-
       python3 -m sglang.launch_server --model-path
-      /models/ornith-1.5-35b-a3b-awq-int4-ulkaa-p78 --served-model-name
-      ornith-1.5-35b-a3b-awq-int4-p78-sglang --host 0.0.0.0 --port 30000 --dtype
+      /models/ornith-1.5-35b-a3b-w4a16-sym-miralabs-p78 --served-model-name
+      ornith-1.5-35b-a3b-w4a16-sym-p78-sglang --host 0.0.0.0 --port 30000 --dtype
       float16 --mamba-ssm-dtype float16 --mem-fraction-static 0.55
       --context-length 262144 --max-total-tokens 1048576
       --max-mamba-cache-size 32 --attention-backend triton --disable-cuda-graph
