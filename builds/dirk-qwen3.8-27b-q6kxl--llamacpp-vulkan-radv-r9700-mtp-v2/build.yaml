@@ -1,0 +1,52 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v2
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-09-02). Chris: "let's review dirk for similar thoughts --
+    let's make sure we're making good use of all our vram" (follow-up to
+    the Ornith v4 capacity upgrade after Laguna left the standing set).
+
+    Real findings before changing anything (verified, not assumed):
+    - Context: already -c 262144, the model's own true native ceiling -
+      confirmed directly from the GGUF's own embedded metadata
+      (qwen35.context_length = 262144, parsed straight out of the file's
+      binary header) rather than trusting the launch flag alone. No
+      change possible here, v1 was already maxed.
+    - --cache-ram: already 65536, matching the exact value just set for
+      Ornith v4. No change - already at parity.
+    - R9700 VRAM headroom: checked via rocm-smi at the time of this
+      review - 34.2GB total, 31.6GB used, only ~2.6GB free. Unlike the
+      Strix APU (which gained ~70GB+ of real headroom when Laguna left
+      the standing set), R9700 is a dedicated-VRAM discrete GPU with no
+      equivalent windfall - it was already close to fully utilized.
+      Deliberately did NOT pursue moving KV cache to system RAM
+      (--no-kv-offload or reduced -ngl) to free VRAM for something else -
+      that would mean PCIe traffic on every token, a real, unwanted
+      memory-bandwidth cost, the opposite of what Chris explicitly asked
+      for ("gains ... without adding memory bandwidth pressure").
+
+    The one real, safe, additive change: --load-mode mmap+mlock (same
+    lever just added to Ornith v4, and for the same reason - pins the
+    model's weight pages in host RAM against eviction, a zero-bandwidth-
+    cost capacity spend, not a throughput change). Applies to the host-
+    side file cache for the model's initial load, independent of R9700's
+    own VRAM state - safe to add even with R9700 nearly full, since it
+    doesn't touch GPU memory at all.
+
+    No other real levers identified for this build specifically - unlike
+    Ornith, Dirk's constraint is VRAM capacity (already near its ceiling)
+    not system RAM capacity, so there wasn't a comparable "we just freed
+    up 70GB, spend it" opportunity here.
+
+    Not yet re-benchmarked (mmap+mlock is a load-time/reliability change,
+    not expected to move steady-state throughput) - v1's real benchmark
+    (run 2026-08-31, see its own benchmarks/ directory) remains the
+    reference data.
