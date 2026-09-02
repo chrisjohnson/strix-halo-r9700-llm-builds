@@ -1,0 +1,90 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v5
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-02). Real production incident: the box hung hard
+    (total unresponsiveness, required a physical power cycle - console
+    showed a wall of real OOM errors) not long after v4 went live with
+    both Ornith and Dirk running --cache-ram 65536 (64GB each,
+    128GB combined ceiling against 124GB total system RAM) plus
+    --load-mode mmap+mlock on both. Chris: this class of hang recurs
+    periodically and is "almost certainly my models" - the standing set
+    is supposed to be builds tuned considering the ENTIRE machine
+    (all standing models + always-up infra + typical usage), not each
+    build's own headroom check in isolation. v5 is that real, careful
+    pass - not another single-build capacity bump.
+
+    REAL MISTAKE FOUND AND FIXED: --load-mode mmap+mlock (added in v4)
+    was reasoned as a "zero-bandwidth-cost, capacity-only" reliability
+    lever - that reasoning was wrong for a fully GPU-offloaded model
+    (-ngl 999). mlock pins the host-side mmap'd copy of the GGUF
+    permanently in RAM even though the Strix APU already has its own
+    copy resident via GTT for actual inference - the host copy is pure
+    waste once loaded, and mlock prevents the kernel from ever
+    reclaiming it, removing exactly the safety valve (swap/reclaim
+    under pressure) that should have prevented tonight's hang. Verified
+    empirically: this build's own host RAM usage per `docker stats`
+    dropped from ~23GB to ~4.2GB the instant mlock was removed (the
+    ~4.2GB is real - APU-shared weights/state genuinely need to be
+    resident since there's no separate VRAM - but the extra ~19GB was
+    the wasted duplicate). Confirmed via system-wide `free -h` (not
+    docker stats alone, which under-attributes APU/GTT memory to the
+    owning container's own cgroup) that real combined system RAM usage
+    with both models loaded and mlock removed is ~34-35GB baseline.
+
+    REAL COMBINED-MACHINE BUDGET (system RAM, 124GB total) - this is
+    the actual fix Chris asked for, not just removing mlock:
+      - All 17 non-model always-up infra containers combined (litellm,
+        litellm-db, grafana, prometheus/node-exporter, searxng, dsh,
+        pi-web-factory-orchestrator, both litellm-queue-haproxy
+        instances, st-caddy, dsh-lan-proxy, etc.): ~2.3GB, measured via
+        `docker stats` summed across all of them.
+      - Ornith (this build, Strix APU - shares system RAM as its GPU
+        pool via GTT, no separate VRAM unlike Dirk on R9700): ~31GB
+        baseline (weights + idle state) with mlock removed, measured via
+        system-wide free -h delta before/after model load.
+      - Ornith's real KV-cache growth under a genuine large-context
+        request: measured directly - a real 200,010-token prompt (not
+        estimated) grew system RAM usage by ~4-5GB. Extrapolated
+        linearly to this model's own true native max context (262144,
+        confirmed via upstream HF config earlier this session) gives
+        ~6GB worst-case for ONE full-context active generation
+        (-np 1, single slot, so this is the real ceiling for active
+        generation state, separate from --cache-ram's own reuse pool).
+      - Dirk (R9700 - weights/active KV live entirely in R9700's own
+        34GB dedicated VRAM, NOT system RAM): confirmed via rocm-smi
+        that R9700 VRAM usage (31.6GB/34.2GB) is completely unaffected
+        by the mlock fix - separate physical pool. Only Dirk's own
+        --cache-ram draws from system RAM.
+    Total floor before any --cache-ram: ~31 + 6 + 2.3 ≈ 39.3GB. Budget
+    for BOTH builds' --cache-ram ceilings combined, targeting a
+    genuinely comfortable ~25-30GB of real margin (not the razor's-edge
+    sizing that contributed to tonight's incident): 124 - 39.3 - 28
+    (margin) ≈ 56.7GB for both ceilings together.
+
+    --cache-ram: 65536 -> 32768 (32GB) - down from v4's number, but
+    still 16x the original pre-this-session baseline of 2048. Paired
+    with Dirk v3's own --cache-ram 24576 (24GB), worst-case realistic
+    combined system RAM usage ≈ 31 + 6 + 32 + 24 + 2.3 ≈ 95.3GB,
+    leaving ~28.7GB (23%) genuine margin out of 124GB total - a real,
+    considered safety margin given the severity of a full-machine hang
+    requiring a hard power cycle, not a value picked to look generous.
+
+    Same launch pattern otherwise as v4 (context 262144 unchanged - the
+    model's own true native ceiling, already correct in v4).
+
+    Not yet re-benchmarked with llm-inference-bench - the changes here
+    (cache-ram ceiling, mlock removal) are both memory-headroom/
+    reliability levers, not expected to move steady-state decode
+    throughput (v4's own real benchmark vs v3 confirmed this same
+    pattern: cache-ram changes don't move measured tok/s, only capacity
+    ceilings). v4's real benchmark data remains the throughput
+    reference.

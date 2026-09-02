@@ -1,0 +1,48 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v3
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-09-02). Companion to Ornith v5 - see that build's own
+    build.yaml for the full incident writeup and combined-machine
+    budget math (real production hang, hard power-cycle required,
+    console showed real OOM errors). Same two real fixes applied here:
+
+    REAL MISTAKE FOUND AND FIXED: --load-mode mmap+mlock (added in v2)
+    was wrong for this build specifically, more so than for Ornith:
+    Dirk runs fully GPU-offloaded (-ngl 999) onto R9700's own dedicated
+    34GB VRAM - the host-side mmap'd GGUF copy that mlock pins is pure,
+    100% wasted duplication once weights are uploaded, since R9700 has
+    its own separate VRAM (unlike the Strix APU, which shares system
+    RAM as its GPU pool and genuinely needs SOME host-resident state).
+    Verified empirically via `docker stats`: this build's own host RAM
+    usage dropped from ~26GB to ~251MB the instant mlock was removed -
+    confirming the entire ~26GB was wasted duplication, not real,
+    needed memory. Confirmed via rocm-smi that R9700's own VRAM usage
+    (31.6GB/34.2GB, already near its own ceiling - see v2's own
+    build.yaml, unrelated to this fix) is completely unaffected by the
+    mlock change, since it's a separate physical memory pool from
+    system RAM.
+
+    --cache-ram: 65536 -> 24576 (24GB), per the real combined-machine
+    budget worked out in Ornith v5's build.yaml (both builds' ceilings
+    sized together against the same real, measured system RAM
+    baseline, not independently). Still 12x the original pre-this-
+    session baseline of 2048.
+
+    Same launch pattern otherwise as v2 (context 262144 unchanged -
+    the model's own true native ceiling, confirmed directly from the
+    GGUF's own embedded metadata in v2's build).
+
+    Not yet re-benchmarked - same reasoning as v5: cache-ram/mlock
+    changes are memory-headroom levers, not expected to move steady-
+    state throughput (v2's own real benchmark vs v1 already confirmed
+    this pattern - a net -0.2% average delta, a wash). v2's real
+    benchmark data remains the throughput reference.
