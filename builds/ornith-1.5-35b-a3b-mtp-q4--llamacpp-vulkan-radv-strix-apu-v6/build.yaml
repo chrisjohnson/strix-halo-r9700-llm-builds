@@ -1,0 +1,45 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v6
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M, MTP, vision)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-02). Companion to Dirk v4 - see that build's own
+    build.yaml for the full context (Chris asking whether the standing
+    builds handle images, both didn't, root cause, and how it was fixed).
+
+    Ornith-1.5-35B-A3B's original checkpoint genuinely has a vision tower
+    - confirmed directly from the MIRALABS/Ornith-1.5-35B-A3B-W4A16-SYM
+    checkpoint used for the SGLang builds: image_token_id present in
+    config.json, and model.visual.blocks.* tensors kept unquantized in
+    the quantization_config's own ignore list (785 vision tensors). It
+    just never made it into the llama.cpp GGUF v1-v5 use (confirmed via
+    header metadata - no clip/vision keys in that GGUF either).
+    bartowski/Ornith-1.5-35B-A3B-GGUF - the exact same repo v1-v5's GGUF
+    already comes from - publishes mmproj-Ornith-1.5-35B-A3B-bf16.gguf
+    (903 MB) alongside the text quants (confirmed via HF tree listing).
+    Same mechanism as Dirk v4: --mmproj + --mmproj-device Vulkan1 (pin to
+    the APU device the main model already uses), same main GGUF as v5,
+    only the projector is new.
+
+    Declared via a new configuration.nix download-service entry
+    (ornith-1.5-35b-a3b-mmproj, separate directory), same reasoning as
+    Dirk v4's own entry (per-directory .download-complete marker means
+    editing the v1-v5 entry in place wouldn't re-trigger).
+
+    Deliberately NOT carrying v5's com.local-ai-machine.always-up label -
+    this is a new, unverified build; promoting it into the standing set
+    (replacing v5) is a separate decision for after real verification
+    (multimodal completion test) and Chris's go-ahead, not automatic.
+
+    Not yet benchmarked or manually verified - mmproj download was still
+    queued behind other in-progress downloads (gemma-4-31b-it, etc., via
+    the shared /var/lib/ai-models/.download.lock) at the time this build
+    was declared. cache-ram/context/MTP flags unchanged from v5 - adding
+    a vision projector doesn't touch text-generation throughput.

@@ -1,0 +1,24 @@
+name: docker
+services:
+  dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v4:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v4
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/dirk-qwen3.8-27b-q6kxl:/models:ro
+    - /var/lib/ai-models/dirk-qwen3.8-27b-mmproj:/mmproj:ro
+    command: 'llama-server -m /models/Dirk-Qwen3.8-27B-UD-Q6_K_XL.gguf -dev Vulkan0
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min
+      0.6 -np 1 -c 262144 -n 8192 -ctk q4_0 -ctv q4_0 --cache-ram 24576
+      --mmproj /mmproj/mmproj-F16.gguf --mmproj-device Vulkan0
+      --host 0.0.0.0
+      --port 8080 -a dirk-qwen3.8-27b-q6kxl-r9700-mtp --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8161:8080

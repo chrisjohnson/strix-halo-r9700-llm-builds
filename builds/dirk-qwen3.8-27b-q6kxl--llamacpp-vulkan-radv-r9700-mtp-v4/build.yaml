@@ -1,0 +1,46 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v4
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-09-02). Chris asked whether the standing Dirk/Ornith builds
+    handle images - they didn't: v3's GGUF is text-only (confirmed via
+    header metadata - no clip/vision keys), not because Qwen/Qwen3.8-27B
+    lacks vision (it's natively a vision-language model, per its own model
+    card - native image/video understanding), but because whatever pulled
+    the GGUF never fetched the separate mmproj file llama.cpp needs
+    alongside the main quant for VL models. Confirmed the deployed
+    llama-server binary has full mtmd/vision support compiled in
+    (--mmproj, --mmproj-device, llama-mtmd-cli all present) before doing
+    any of this.
+
+    peculiar-ragdoll/Dirk-Qwen3.8-27B-GGUF - the exact same repo v1-v3's
+    GGUF already comes from - publishes mmproj-F16.gguf (928 MB)
+    alongside the text quants (confirmed via HF tree listing). This is
+    the standard llama.cpp VL mechanism (main GGUF + separate mmproj
+    GGUF via --mmproj), not a graft or a rebuild - same quant file as
+    v3, only addition is the projector + --mmproj-device Vulkan0 (pin to
+    the same GPU as the main model, avoid a silent CPU fallback).
+
+    Declared via a new configuration.nix download-service entry
+    (dirk-qwen3.8-27b-mmproj, separate directory) rather than editing the
+    v1-v3 model directory's existing entry - download-model-<name>
+    services key their idempotency off a per-directory .download-complete
+    marker, so editing the original entry in place wouldn't have re-
+    triggered anything (same reasoning as M-051's separate imatrix
+    re-download entry).
+
+    Not yet benchmarked or manually verified - mmproj download was still
+    queued behind other in-progress downloads (gemma-4-31b-it, etc., via
+    the shared /var/lib/ai-models/.download.lock) at the time this build
+    was declared. cache-ram/context/MTP flags unchanged from v3 - adding
+    a vision projector doesn't touch text-generation throughput, same
+    reasoning already confirmed for v3's own cache-ram/mlock changes
+    against v2.
