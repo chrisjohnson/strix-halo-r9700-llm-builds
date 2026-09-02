@@ -1,0 +1,70 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v4
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-01). Chris, after the full SGLang-with-MTP vs
+    without vs llama.cpp comparison this session: for his real usage
+    pattern (low concurrency, regularly large context), llama.cpp+MTP
+    (this build's v3 predecessor) wins or ties at every low-
+    concurrency/large-context combination measured - SGLang (either
+    variant) is never competitive there. Confirmed v3 has no known bug
+    (status TESTED_VIABLE, real clean benchmark data); v4 is not a bug
+    fix, it's a deliberate capacity/context upgrade now that the box's
+    standing set is changing shape around it.
+
+    Two real, explicit changes vs v3:
+    - --cache-ram 2048 -> 65536 (matches dirk-qwen3.8-27b-q6kxl's own
+      precedent number exactly, see that build's own decision log).
+      Confirmed empirically earlier this session that --cache-ram does
+      not pre-allocate - it's a ceiling approached lazily as large
+      prompts actually get cached, so this carries no immediate memory
+      cost and is safe even though Dirk's own ceiling could theoretically
+      sum to more than total system RAM (64+64=128GB vs 124GB total) -
+      both hitting their absolute ceiling simultaneously under Chris's
+      real single-user, non-extreme-concurrency usage pattern is not a
+      realistic scenario, and 14GB swap remains as a fallback buffer if
+      it ever were.
+    - -c 131072 -> 262144: the model's own true native context ceiling
+      (confirmed earlier this session via upstream HF config.json:
+      max_position_embeddings 262144, rope_scaling: None - a real
+      trained ceiling, not RoPE-extrapolated), not an arbitrary bump.
+      v3 was only using half of it.
+
+    Also added --load-mode mmap+mlock (supersedes the deprecated
+    --mlock/--mmap flags this image's llama-server still exposes for
+    back-compat, confirmed via --help). This is a real capacity-only,
+    zero-bandwidth-cost lever Chris asked for explicitly ("any other
+    gains we can make that make use of memory capacity without adding
+    memory bandwidth pressure") - pins the model's weight pages in RAM
+    so they can never be evicted/swapped under memory pressure, avoiding
+    any possibility of a page-fault stall mid-generation. Purely a
+    reliability/consistency improvement (spends now-abundant spare RAM
+    capacity), not a throughput change - does not touch how many bytes
+    move through memory per decode step, so it adds no bandwidth
+    pressure. Real headroom to actually use this now exists because of
+    the third change below.
+
+    Context for why headroom exists now: Chris removed
+    laguna-s-2.1-118b-q4km--llamacpp-vulkan-radv-strix-apu-v4 from the
+    standing set entirely (see standing-models.txt in local-ai-machine)
+    - he wants this model to run alone on the Strix APU going forward,
+    freeing the ~70GB+ Laguna's own Q4_K_M weights previously occupied
+    plus whatever KV/cache-ram headroom it was competing for. This also
+    retires a real risk v3's own decision log flagged but didn't
+    resolve: "strix-apu already carries [the always-up-sharing-a-GPU-
+    with-benchmarkable-siblings] exposure via laguna v4" - with Laguna
+    gone, this build is now the ONLY always-up model on strix-apu, so
+    that specific cross-model GPU-sharing risk no longer applies here.
+
+    Not yet re-benchmarked with llm-inference-bench at the new context
+    ceiling - v3's own numbers (real, clean, TESTED_VIABLE) are the
+    best available reference until a fresh sweep is run at the new
+    -c 262144 setting.
