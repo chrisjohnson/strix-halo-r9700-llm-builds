@@ -1,5 +1,5 @@
 name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v4
-status: TESTING
+status: WORKING
 derived:
   engine: llamacpp-vulkan-radv-mtp-v1
   model: Dirk-Qwen3.8-27B (MTP, vision)
@@ -37,10 +37,16 @@ derived:
     triggered anything (same reasoning as M-051's separate imatrix
     re-download entry).
 
-    Not yet benchmarked or manually verified - mmproj download was still
-    queued behind other in-progress downloads (gemma-4-31b-it, etc., via
-    the shared /var/lib/ai-models/.download.lock) at the time this build
-    was declared. cache-ram/context/MTP flags unchanged from v3 - adding
-    a vision projector doesn't touch text-generation throughput, same
-    reasoning already confirmed for v3's own cache-ram/mlock changes
-    against v2.
+    Real verification (2026-09-02, after mmproj download completed):
+    brought up via `modelctl up ... --exclusive` (GPU-scoped, stopped v3
+    first). /props confirms modalities.vision: true at the server level.
+    Sent a real multimodal chat completion (base64 PNG, a red square
+    with a blue circle) via /v1/chat/completions - response: "A blue
+    circle is centered inside a red square on a white background." -
+    exactly correct, not a hallucination or generic answer. Genuinely
+    working, not just loaded-without-error.
+
+    cache-ram/context/MTP flags unchanged from v3 - adding a vision
+    projector doesn't touch text-generation throughput, same reasoning
+    already confirmed for v3's own cache-ram/mlock changes against v2;
+    not separately re-benchmarked for throughput.

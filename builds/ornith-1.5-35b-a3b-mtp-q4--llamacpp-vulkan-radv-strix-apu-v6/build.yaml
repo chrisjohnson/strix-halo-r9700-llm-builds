@@ -1,5 +1,5 @@
 name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v6
-status: TESTING
+status: WORKING
 derived:
   engine: llamacpp-vulkan-radv-v1
   model: Ornith-1.5-35B-A3B (Q4_K_M, MTP, vision)
@@ -38,8 +38,17 @@ derived:
     (replacing v5) is a separate decision for after real verification
     (multimodal completion test) and Chris's go-ahead, not automatic.
 
-    Not yet benchmarked or manually verified - mmproj download was still
-    queued behind other in-progress downloads (gemma-4-31b-it, etc., via
-    the shared /var/lib/ai-models/.download.lock) at the time this build
-    was declared. cache-ram/context/MTP flags unchanged from v5 - adding
-    a vision projector doesn't touch text-generation throughput.
+    Real verification (2026-09-02, after mmproj download completed):
+    brought up via `modelctl up ... --exclusive` (GPU-scoped, stopped v5
+    first). /props confirms modalities.vision: true at the server level.
+    Sent a real multimodal chat completion (base64 PNG, a red square
+    with a blue circle) via /v1/chat/completions - reasoning content
+    correctly identified "a red square as the background" and "a blue
+    circle in the center"; final answer (truncated by max_tokens, not a
+    content problem): "The image shows a solid blue circle positioned
+    in the center of a solid [red square]". Genuinely working, not just
+    loaded-without-error.
+
+    cache-ram/context/MTP flags unchanged from v5 - adding a vision
+    projector doesn't touch text-generation throughput; not separately
+    re-benchmarked for throughput.
