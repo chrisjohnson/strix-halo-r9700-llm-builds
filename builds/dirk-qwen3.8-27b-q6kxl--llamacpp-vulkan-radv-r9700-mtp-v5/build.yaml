@@ -1,0 +1,34 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v5
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    M-139 (2026-09-02). Concurrency test build, companion to Ornith v7 -
+    see that build's own notes for the full methodology/rationale. Only
+    change from v4: -np 1 -> 2. Deliberately NOT jumping straight to a
+    higher value the way Ornith's test did (-np 4) - real, live VRAM
+    check before starting this test found the R9700 at 32.97/34.2GB
+    used, only ~1.15GB free. That's a much harder constraint than
+    Ornith's ~28.7GB system-RAM margin: VRAM exhaustion on this card can
+    fail the container outright rather than degrade gracefully. Chris's
+    explicit call after being shown the real number: test -np 2 only,
+    cautiously, watch closely, back off if it doesn't fit rather than
+    push further.
+
+    Real basis for expecting this MIGHT still fit despite the tight
+    margin: Ornith's own concurrency test showed only ~1GB of real
+    system RAM growth across the entire 1->4 slot test (--kv-unified
+    means slots share one cache-ram pool rather than each getting a
+    dedicated multiplied allocation) - if the same holds on Dirk, the
+    per-additional-slot cost might be small (compute-buffer overhead,
+    not a full KV-cache duplication). Not assumed, being tested for
+    real.
+
+    Not promoted to standing - measurement build only.
