@@ -1,0 +1,51 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v9
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M, MTP, vision)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-03. Supersedes v8. v8's -c 262144 -np 3 divided that total
+    context evenly across slots (llama.cpp's plain -c behavior under
+    -np), leaving each real request only ~87552 usable tokens
+    (confirmed via /props n_ctx and a real dsh/litellm
+    ContextWindowExceededError at 128067 requested tokens) - v8's own
+    notes documented the *memory* cost of concurrency (~1GB growth
+    1->4 slots, confirmed real) but never flagged that the addressable
+    per-request context was also being cut, which Chris had not agreed
+    to trade away.
+
+    Fix: --kv-unified-per-slot 262144 instead of dividing via -c.
+    Unlike plain -c, this sizes the shared unified-KV pool to
+    n_parallel * kv_unified_per_slot while keeping each individual
+    slot's own addressable ceiling at the full 262144 (confirmed via
+    startup log: "capping per-slot context (786432) to
+    --kv-unified-per-slot (262144)" and /props reporting n_ctx: 262144
+    with n_slots: 3, not a divided value).
+
+    Real verification, not just config inspection:
+    - A single real chat completion with a 250,018-token prompt
+      completed successfully (no context error), confirming the full
+      262144 window is genuinely usable by one request, not just
+      claimed by /props.
+    - 3 genuinely concurrent requests (25,018 tokens each, fired
+      simultaneously) all completed successfully with distinct
+      completion times (52s/86s/92s - real parallel scheduling, not
+      serialized queueing).
+    - Real system memory cost throughout: idle after load ~64GiB used
+      (vs v8's ~34GiB, itself mostly model weights + a small KV
+      pool), rising to ~69GiB under the 3-way concurrent test, out of
+      124GiB total (~55GiB still available). Comparable in practice to
+      v8's own real footprint despite requesting a nominal 786432-token
+      pool (3x 262144) - kv-unified pooling allocates against actual
+      sequence usage, not the nominal ceiling, matching v8's own
+      documented finding for the divided-context case.
+
+    Net result: full per-request context AND 3-way concurrency, no
+    tradeoff needed - the two are not actually in tension once
+    kv-unified-per-slot is used correctly instead of plain -c division.
