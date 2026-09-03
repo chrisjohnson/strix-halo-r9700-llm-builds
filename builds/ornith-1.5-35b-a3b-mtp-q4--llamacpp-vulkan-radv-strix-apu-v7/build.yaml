@@ -1,0 +1,52 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v7
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M, MTP, vision)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-02). Concurrency test build, not a config fix - Chris's
+    real workload (spotify-tracker classifier firing many sequential
+    chunks, plus a general expectation of multiple concurrent work
+    streams over time with real idle gaps between inference calls) raised
+    the question of whether -np 1 (the standing v6 config, and every
+    Ornith build before it) is leaving real capacity on the table.
+
+    Identical to v6 in every other respect (same GGUF, same mmproj, same
+    context/cache-ram/MTP flags) - only change is -np 1 -> 4, to test
+    concurrency headroom without confounding it with any other variable.
+
+    Real basis for testing rather than guessing at a number: llama-server
+    already runs with --kv-unified active by default (confirmed via its
+    own --help - "using unified KV (default: enabled, requires
+    cache-ram)"), a newer llama.cpp mode (ggml-org PR #16391) where slots
+    draw from one shared cache-ram pool dynamically rather than each
+    getting a statically pre-divided slice of -c - meaning the real
+    memory cost of more slots is not simply cache-ram x np, and is worth
+    measuring directly rather than assuming. Also relevant precedent
+    already on this box: dsh-home-seed/settings.yaml's own M-125/M-126
+    history records a real A/B test that found 2 concurrent requests
+    against one GPU here genuinely parallelized (higher aggregate
+    throughput, not worse) - this build extends that same empirical
+    approach to find the actual saturation point, not just confirm
+    concurrency=2 is fine.
+
+    Test methodology: fire 1, then 2, then 4 concurrent requests shaped
+    like the real classifier workload (static system-prompt prefix +
+    variable track-list suffix, matching spotify-tracker's actual
+    request shape) against this build specifically (not the standing v6,
+    to avoid disrupting live traffic), measuring per-request latency,
+    aggregate tok/s, real system RAM (free -h) and GPU busy% at each
+    concurrency level - looking for the knee where per-request latency
+    degrades meaningfully before aggregate throughput has flattened
+    (that knee is the real ceiling, not whatever -np happens to be set
+    to).
+
+    Not promoted to standing - this is a measurement build. Whether v7's
+    -np 4 (or some other value) becomes the new standing config is a
+    separate decision after real data, not automatic.
