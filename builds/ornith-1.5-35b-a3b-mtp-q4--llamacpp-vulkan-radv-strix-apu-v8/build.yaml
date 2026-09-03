@@ -1,0 +1,49 @@
+name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v8
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Ornith-1.5-35B-A3B (Q4_K_M, MTP, vision)
+  params: 36B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-139 (2026-09-03). Promoted to standing: -np 1 -> 3, the real
+    tested sweet spot found via v7's concurrency experiment (v7 tested
+    -np 4, kept as its own historical record, not modified in place).
+
+    Real staged load test (1/2/3/4 concurrent requests, classifier-
+    shaped: static system-prompt prefix + 25 variable track lines,
+    matching spotify-tracker's real chunk shape) found aggregate
+    throughput plateaus right at 3 concurrent requests (77.0 tok/s,
+    vs 55.6 at np=2 and ~75.8 avg at np=4 across two clean reruns -
+    essentially flat 3->4) while per-request latency at np=3 (~5.6s for
+    a 150-token chunk) is barely worse than np=2 (~5.4s). np=4 buys no
+    more aggregate throughput while making every individual stream
+    ~34% slower than np=3 - a clearly worse trade past that point.
+    Real memory cost across the whole 1->4 test: only ~1GB system RAM
+    growth (46Gi -> 47Gi), confirming --kv-unified (active by default
+    here, confirmed via llama-server --help) pools KV state across
+    slots from the existing 32GB cache-ram budget rather than
+    multiplying it per slot - well within the real ~28.7GB safety
+    margin from the post-crash memory budget.
+
+    Chris's actual motivation: multiple concurrent work streams over
+    time (agent/tool-use patterns with real idle gaps between
+    inference calls) plus the spotify-tracker classifier firing many
+    sequential chunks - both benefit from decode-phase concurrency via
+    continuous batching, which this box already has real precedent for
+    (dsh-home-seed's own M-125/M-126 history: 2 concurrent requests
+    against one GPU here "genuinely parallelized," not worse).
+
+    A companion Dirk concurrency test (v5, -np 2) was also run: real,
+    live R9700 VRAM check found only ~1.15GB free (32.97/34.2GB used)
+    before even starting - a much harder constraint than Ornith's
+    system-RAM margin. -np 2 technically worked (no crash) but left
+    essentially zero VRAM slack (33.16/34.2GB used throughout) for a
+    worse throughput/latency trade than Ornith's (+69% latency for
+    +32% aggregate throughput, vs Ornith's +40%/+43% at the same np=2
+    step). Chris's call: not worth shipping with zero margin - Dirk
+    stays at -np 1 (v4), only Ornith's concurrency gets promoted.

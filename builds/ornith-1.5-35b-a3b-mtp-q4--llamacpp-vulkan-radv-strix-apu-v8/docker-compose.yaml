@@ -1,0 +1,26 @@
+name: docker
+services:
+  ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v8:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v8
+    labels:
+      com.local-ai-machine.always-up: "true"
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/llamacpp-ornith-1.5-35b-a3b-mtp-q4:/models:ro
+    - /var/lib/ai-models/ornith-1.5-35b-a3b-mmproj:/mmproj:ro
+    command: 'llama-server -m /models/Ornith-1.5-35B-A3B-Q4_K_M.gguf -dev Vulkan1
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 1 --spec-draft-p-min
+      0.3 -np 3 -c 262144 -n 8192 -ctk q8_0 -ctv q8_0 --cache-ram 32768
+      --mmproj /mmproj/mmproj-Ornith-1.5-35B-A3B-bf16.gguf --mmproj-device Vulkan1
+      --host 0.0.0.0
+      --port 8080 -a ornith-1.5-35b-a3b-mtp-q4 --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8165:8080
