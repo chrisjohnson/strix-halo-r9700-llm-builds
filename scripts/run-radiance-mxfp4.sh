@@ -59,6 +59,27 @@ git -C "$CHECKOUT" checkout --detach "$RADIANCE_COMMIT"
 GOT=$(git -C "$CHECKOUT" rev-parse HEAD)
 [ "$GOT" = "$RADIANCE_COMMIT" ] || { echo "checkout landed on $GOT, expected $RADIANCE_COMMIT" >&2; exit 1; }
 
+# Local-only fixup, not sent upstream: serve-mxfp4.sh sets BOTH
+# ROCR_VISIBLE_DEVICES and HIP_VISIBLE_DEVICES to the same raw index from
+# gpu-detect.sh's sysfs scan. ROCm applies ROCR_VISIBLE_DEVICES as a device
+# filter FIRST, then re-indexes HIP_VISIBLE_DEVICES within that already-
+# filtered list - so on a host where the target GPU's real index is
+# non-zero (this box: HIP index 0 is the Strix Halo APU's own iGPU, index 1
+# is the R9700), setting both to "1" asks HIP for the second device in a
+# ROCR-filtered list of one, and torch.cuda.is_available() comes back
+# False with no other error. Verified directly: HIP_VISIBLE_DEVICES=1 alone
+# (no ROCR_VISIBLE_DEVICES) correctly selects the R9700; the combination
+# gpu-detect.sh's own logic produces does not. Dropping the
+# ROCR_VISIBLE_DEVICES env line is a one-line, idempotent sed against our
+# own pinned checkout - it only matters on host topologies like this one
+# (a discrete GPU sharing a box with another ROCm-visible device at a
+# lower index), not on the 2xR9700 reference box this fork was built for.
+if grep -q 'ROCR_VISIBLE_DEVICES="\$GPU_IDS" -e HIP_VISIBLE_DEVICES' "$CHECKOUT/serve-mxfp4.sh"; then
+  sed -i 's/-e ROCR_VISIBLE_DEVICES="\$GPU_IDS" -e HIP_VISIBLE_DEVICES="\$GPU_IDS"/-e HIP_VISIBLE_DEVICES="$GPU_IDS"/' \
+    "$CHECKOUT/serve-mxfp4.sh"
+  echo "applied local ROCR_VISIBLE_DEVICES fixup to $CHECKOUT/serve-mxfp4.sh"
+fi
+
 step "source checkpoint"
 [ -f "$SRC/config.json" ] || { echo "missing $SRC/config.json - wait for download-model-qwen3.8-27b-quark-awq-mxfp4.service to finish" >&2; exit 1; }
 
