@@ -1,0 +1,37 @@
+name: docker
+services:
+  qwen3.8-27b-quark-mxfp4--radiance-vllm-w4a8-r9700-v1:
+    image: stilldeadcode/vllm-radiance:0.9.3
+    container_name: qwen3.8-27b-quark-mxfp4--radiance-vllm-w4a8-r9700-v1
+    privileged: true
+    ipc: host
+    network_mode: host
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '303'
+    - '26'
+    volumes:
+    - /var/lib/ai-models:/models:ro
+    environment:
+      # HIP_VISIBLE_DEVICES only, not ROCR_VISIBLE_DEVICES too - see
+      # scripts/run-radiance-mxfp4.sh's own comment for why setting both to
+      # the same index breaks torch.cuda.is_available() on this host (HIP
+      # index 0 is the Strix Halo APU's own iGPU, index 1 is the R9700).
+      HIP_VISIBLE_DEVICES: "1"
+      HF_HUB_OFFLINE: "1"
+      RADIANCE_MXFP4: "1"
+      RADIANCE_MXFP4_W4A8: "1"
+      RADIANCE_USE_R4D: "1"
+    # This is a snapshot of the container configuration serve-mxfp4.sh
+    # resolved for a single R9700 (TP=1) - the real, actually-run
+    # invocation is scripts/run-radiance-mxfp4.sh, which clones the
+    # upstream repo at a pinned commit and lets its own launcher compute
+    # this dynamically (GPU detection, ~90 more env-var knobs, and an
+    # inline patch-application step at container start). This file is
+    # for reference/co-residency bookkeeping, not standalone-executable -
+    # scripts/run-radiance-mxfp4.sh is the reproducible path.
+    command: "(see scripts/run-radiance-mxfp4.sh - not a static command)"
+    ports:
+    - 127.0.0.1:8012:8012

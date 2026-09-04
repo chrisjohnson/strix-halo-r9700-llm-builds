@@ -1,0 +1,102 @@
+name: qwen3.8-27b-quark-mxfp4--radiance-vllm-w4a8-r9700-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: radiance-vllm-mxfp4-v1
+  model: Qwen3.8-27B
+  params: 27.32B
+  active_params: null
+  quant: Quark-AWQ-MXFP4 (native W4A8 kernel path)
+  mtp: false
+  dflash: true
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    codeberg.org/ggz14/radiance-vllm-mxfp4 (pinned commit
+    505513660a4f74016aba432a8393ad368dfc825f), a single-maintainer fork of
+    codeberg.org/StillDeadcode/vllm-radiance adding native MXFP4/W4A8
+    kernels for gfx1201. Reddit-reported 573 tok/s aggregate decode on
+    Qwen3.8-27B was on 2x R9700 (tensor-parallel); this box has one. TP=1
+    is an explicitly supported, documented path in the fork's own README
+    (card count auto-detected, "one card works, four work"), so the real
+    open question was single-GPU throughput, never published anywhere.
+
+    Real, working run on this box: setup-mxfp4.sh's flow reproduced via a
+    committed wrapper (scripts/run-radiance-mxfp4.sh) -
+    amd/Qwen3.8-27B-Quark-AWQ-MXFP4 (19GB) downloaded declaratively via
+    local-ai-machine's configuration.nix, requantized with the fork's own
+    fp8_mtp.py (AMD's release ships the MTP head bf16 with a tensor-named
+    exclude list that never matches quark's module-name matching, so it
+    loads mxfp4 onto a bf16 head and asserts - documented, pre-solved
+    upstream issue, not something hit cold), then served with the
+    tcclaviger/Qwen3.8-27B-DFlash2-FP8 drafter (dflash, spec=7).
+
+    Two real, non-obvious problems fixed to get this running at all, both
+    specific to this box's 3-GPU-node topology (Strix Halo iGPU + a tiny
+    ~1GB device + the R9700), not upstream bugs on the fork's own 2xR9700
+    reference box:
+      1. gpu-detect.sh's sysfs VRAM-floor scan correctly excludes the tiny
+         device and picks HIP index 1 for the R9700, but serve-mxfp4.sh
+         sets BOTH ROCR_VISIBLE_DEVICES and HIP_VISIBLE_DEVICES to that
+         same raw index. ROCm applies ROCR_VISIBLE_DEVICES as a device
+         filter first, then re-indexes HIP_VISIBLE_DEVICES WITHIN that
+         already-filtered list - so "1" and "1" together ask HIP for the
+         second device in a one-device list, and torch.cuda.is_available()
+         silently returns False with no other error. Verified directly
+         with a minimal torch.cuda repro against the same image: dropping
+         ROCR_VISIBLE_DEVICES and keeping only HIP_VISIBLE_DEVICES=1 fixes
+         it. Patched via a one-line sed against our own pinned checkout in
+         scripts/run-radiance-mxfp4.sh (not sent upstream - it's a
+         single-R9700-among-other-GPUs topology issue, not a bug on the
+         fork's own dual-R9700 target hardware).
+      2. Default MAXLEN=262144 does not fit: on a single R9700 the ~20GB
+         MXFP4 body + drafter leaves only ~5.1 GiB for KV cache at
+         gpu_memory_utilization=0.98, against 9.61 GiB needed for the full
+         262144-token context (vLLM's own error named the real ceiling:
+         ~115360 tokens). Served at MAXLEN=98304 instead - a real,
+         necessary consequence of NOT having the fork's second R9700 to
+         shard the KV cache and weights across, not a bug.
+
+    Confirmed genuinely serving, not just up: /health and /v1/models both
+    200, and the log showed the fast paths actually bound -
+    "Using RadianceMxfp4W4A8LinearKernel for MXFP4 GEMM" and
+    "linear layers: 304/304 on our kernel, 0 FORCED ONTO AITER" - so the
+    numbers below reflect the native W4A8 kernel path, not a silent
+    fallback to emulation.
+
+    REAL MEASURED RESULT (llm-inference-bench, standalone against this
+    server's port, concurrency 1/2/4/8, context 0, 20s/cell, max_tokens
+    512):
+
+    | concurrency | aggregate tok/s | per-request tok/s | TTFT (s) |
+    |---|---|---|---|
+    | 1 | 32.8 | 32.8 | 0.29 |
+    | 2 | 49.6 | 24.8 | 0.25 |
+    | 4 | 119.2 | 29.8 | 0.30 |
+    | 8 | 122.0 | 15.3 | 8.48 |
+
+    Prefill: 4,706 tok/s @8k falling to 4,099 tok/s @64k (TTFT 16.1s @64k)
+    - genuinely strong, consistent with the fork's own claimed prefill
+    kernel wins, and the one number here that plausibly does scale
+    per-GPU rather than needing TP=2.
+
+    CONCLUSION: single-stream decode (32.8 tok/s) is BELOW the standing
+    qwen3.8-27b-q6kl llama.cpp build's 35-52 tok/s on the same card, and
+    concurrency=8 saturates at 122 tok/s aggregate with an 8.5s TTFT - a
+    real number, but nowhere near the 573 tok/s the 2xR9700 reference
+    posts, exactly the risk flagged before starting this (every published
+    number in the fork's README is 2-GPU tensor-parallel; none of the
+    MXFP4/W4A8 kernel's real per-GPU speedup survives as a win once you
+    also lose the second card's aggregate throughput and the larger KV
+    cache/context ceiling that comes with it). Not a crash, not a
+    misconfiguration - a real, working, honestly worse-than-standing
+    result on this specific single-GPU hardware. Would very plausibly look
+    different with a second R9700.
+
+    Cleanup: 40GB of checkpoints deleted (qwen3.8-27b-quark-awq-mxfp4
+    source, the locally fp8-MTP-rewritten qwen3.8-27b-mxfp4-mtpfp8, and
+    the qwen3.8-27b-dflash2-fp8 drafter), the ~14GB
+    stilldeadcode/vllm-radiance:0.9.3 image removed, libr4d build cache
+    and vLLM compile cache cleared, both download-model-* entries removed
+    from local-ai-machine's configuration.nix (no silent re-download on a
+    future reboot), container/checkout removed from the box. Standing
+    dirk-qwen3.8-27b-q6kxl llama.cpp service restarted and confirmed
+    healthy afterward.
