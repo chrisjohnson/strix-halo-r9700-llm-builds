@@ -1,0 +1,28 @@
+name: minicpm5-2b--llamacpp-vulkan-radv-strix-apu-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: MiniCPM5-2B
+  params: 2B
+  active_params: null
+  quant: Q8_0
+  mtp: false
+  dflash: false
+  notes: >-
+    Real, standard LlamaForCausalLM architecture (openbmb/MiniCPM5-2B's own
+    config.json: model_type "llama", 42 layers, 16 attention heads / 2 KV
+    heads, head_dim 128, max_position_embeddings 131072) - no custom
+    kernels or model-code fork needed, should load in any recent
+    llama.cpp build. GGUF quant confirmed real via HF CDN Content-Length
+    (openbmb/MiniCPM5-2B-GGUF, not guessed): Q8_0 2,679,710,688 bytes
+    (~2.50 GiB), Q4_K_M 1,561,318,368 bytes (~1.45 GiB), F16 5,039,006,688
+    bytes (~4.69 GiB). Q8_0 chosen over F16 since the tiny footprint makes
+    disk/VRAM a non-issue either way - no reason not to take the quality
+    ceiling. KV cache is negligible even at full native 131072-token
+    context: 2 (K+V) x 2 kv_heads x 128 head_dim x 42 layers x 1 byte
+    (q8_0) = 21,504 bytes/token, ~2.82 GiB at full context - comfortably
+    fits alongside the 2.50 GiB weights. Not yet downloaded or run on this
+    box - Chris wants to explore it. Catalog-only entry per his explicit
+    direction that catalog entries persist independent of download status
+    (configuration.nix models list is the separate, disk-state-tracking
+    list - no entry added there yet).
