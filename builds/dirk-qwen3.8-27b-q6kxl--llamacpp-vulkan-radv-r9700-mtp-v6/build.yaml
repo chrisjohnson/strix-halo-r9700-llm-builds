@@ -1,0 +1,72 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v6
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-15, Chris's explicit request: -n doubled 8192 -> 16384,
+    everything else unchanged from v4 (same quant, same KV settings, same
+    mmproj). Named v6, not v5 - v5 already exists as a distinct, unrelated
+    2026-09-02 concurrency experiment (-np 1 -> 2, M-139), not a version of
+    this change.
+
+    Real trigger: the GPS Routes DSH session (medium-dense role) hit
+    finish_reason=max-tokens 10 times in one session. Checked each one
+    against the actual transcript, not assumed: 9 of the 10 produced ZERO
+    visible text - the full 8192-token budget was consumed entirely by
+    reasoning (25,000-32,000 characters each, measured directly from the
+    session's reasoning-content blocks) before the model ever reached an
+    answer or tool call. reasoningEffort was never set in that session, so
+    this was Dirk's implicit default, not a deliberately-chosen high effort
+    level.
+
+    -n's real origin traced via git archaeology before deciding to raise
+    it, not assumed safe: 8192 first appears for Laguna-S-2.1 (M-026,
+    2026-07-29) as a hard requirement, not a headroom choice - Laguna has a
+    genuine tokenizer defect (special_eos_id not in special_eog_ids,
+    confirmed in its own startup logs) that leaves it structurally unable
+    to emit a stop token; -n is its only stopping mechanism. A second,
+    independent 8192 was chosen five days later for qwen3.6-35b-a3b-mtp
+    (commit 6c4fdf2, 2026-07-30) after two real stuck-reasoning incidents -
+    confirmed via MTP draft-acceptance sitting at ~98% during the stuck
+    windows (the signature of trivial, repetitive-text prediction, not real
+    reasoning) - explicitly checked and ruled out Laguna's tokenizer defect
+    as the cause for this different model. That commit also surfaced an
+    important fact: with NO -n flag at all, this exact llama-server build
+    doesn't actually run unbounded despite llama.cpp's own --help claiming
+    -1/infinity - it silently hard-stopped at an undocumented compiled-in
+    32768-token default, reporting truncated=0 (i.e. as a normal completed
+    turn, not a cutoff) - worse than an explicit cap, since nothing would
+    have flagged it as unfinished.
+
+    Neither incident is Dirk. No EOS/tokenizer defect matches Laguna's
+    (checked: no matching startup warnings on this build), and no
+    degenerate-loop incident has been reported on Dirk specifically -
+    found no evidence the original 8192 was ever independently re-derived
+    for this model, only that it matches the two other builds' number.
+
+    Given real headroom exists (16384 is still under 7% of the 262144
+    context; -n doesn't grow KV cache reservation, which scales off -c not
+    -n) and Chris's explicit framing (a complete answer that ran long beats
+    an 80%-truncated one that needed a retry; he still wants the answer
+    either way, and isn't trying to catch every possible max-tokens hit,
+    just the ones that would never converge) - doubled rather than removed
+    entirely, since the qwen3.6-35b-a3b-mtp incident proves this class of
+    failure (a genuine non-converging loop) is real on this hardware/stack,
+    just not yet observed on Dirk specifically. Deliberately stopped short
+    of 32768 - not because it's unsafe, but to avoid future confusion with
+    the other incident's coincidentally identical undocumented-default
+    number.
+
+    Tradeoff stated plainly, not hidden: if Dirk ever does hit a genuine
+    non-converging loop (structurally possible - same MTP mechanism as the
+    qwen3.6-35b-a3b-mtp incident, just unconfirmed on this model), the
+    continue-kicker plugin (kicks on finish_reason=max-tokens) now waits
+    roughly 2x as long before getting a chance to intervene. Accepted per
+    Chris's explicit request.
