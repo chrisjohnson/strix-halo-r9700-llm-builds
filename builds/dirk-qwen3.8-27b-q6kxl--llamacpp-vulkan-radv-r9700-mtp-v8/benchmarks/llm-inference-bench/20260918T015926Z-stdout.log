@@ -1,0 +1,13 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: Qwen3.5 @ localhost:8168                                              │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Engine: SGLang (assumed)  Models: ['dirk-qwen3.8-27b-q6kxl-r9700-mtp-v8']
+Prefill tests: ['8k', '16k', '32k', '64k', '128k']
+Generating padding texts (run=sehvbuotcrdp, up to 128k)...
+Done.
+
