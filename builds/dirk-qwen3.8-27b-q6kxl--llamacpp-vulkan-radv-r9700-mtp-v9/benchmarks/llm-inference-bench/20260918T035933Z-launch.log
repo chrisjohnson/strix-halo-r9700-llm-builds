@@ -1,0 +1,22 @@
+WARNING: radv is not a conformant Vulkan implementation, testing use only.
+0.00.039.370 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.039.637 W srv  llama_server: -----------------
+0.00.039.639 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.039.639 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.039.639 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.039.640 W srv  llama_server: -----------------
+0.00.040.797 I srv    load_model: loading model '/models/Dirk-Qwen3.8-27B-UD-Q6_K_XL.gguf'
+0.00.900.691 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to 999, abort
+0.06.191.769 I cmn          init: llama threadpool init, n_threads = 16
+0.14.461.624 I common_speculative_init_result: creating MTP draft context against the target model '/models/Dirk-Qwen3.8-27B-UD-Q6_K_XL.gguf'
+0.14.821.749 W load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+0.14.821.753 W load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+0.14.821.753 W load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+0.15.030.877 I srv    load_model: loaded multimodal model, '/mmproj/mmproj-F16.gguf'
+0.24.610.793 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 262144, kv_unified = 'false'
+0.25.711.835 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.25.711.879 I srv  llama_server: model loaded
+0.25.711.891 I srv  llama_server: listening on http://0.0.0.0:8080
+0.25.711.896 W srv  llama_server: NOTICE: server default port will be changed to :9931 in a future release
+0.25.711.896 W srv  llama_server:         ref: https://github.com/ggml-org/llama.cpp/pull/26508
