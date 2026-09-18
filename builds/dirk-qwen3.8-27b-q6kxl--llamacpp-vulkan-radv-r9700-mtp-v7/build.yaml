@@ -1,0 +1,32 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v7
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-17, MTP draft-depth sweep (Chris's explicit request, benchmark-only
+    - does not touch the standing medium-dense role, which stays on v6). Same
+    quant/KV/context settings as v6, only --spec-draft-n-max changed: 3 -> 2.
+
+    Trigger: AMD's own "Day 0" blog for Qwen3.8-27B on Radeon/Ryzen AI
+    (llama.cpp + Vulkan) reports up to 51.8 tok/s on a Radeon AI PRO R9700
+    with MTP draft depth 2 - well above v6's real measured ~32 tok/s at
+    draft depth 3 (see v4's benchmarks/llm-inference-bench/
+    20260903T004435Z.json summary_table, unchanged by v6's -n bump). Same
+    base model, same speculative-decoding mechanism, same GPU family - the
+    gap is plausibly a draft-depth/config difference rather than a model
+    difference, so this sweep isolates --spec-draft-n-max as the one
+    variable before concluding anything about the model itself. AMD's
+    number is a first-party vendor claim (Windows, no quant/context
+    breakdown, "still improving") - not trusted until reproduced here on
+    Linux/RADV with this exact quant.
+
+    v8 (draft-n-max=1) and v9 (draft-n-max=4) are the other two points in
+    this same sweep - see their own build.yaml for the same context,
+    not repeated per-file.

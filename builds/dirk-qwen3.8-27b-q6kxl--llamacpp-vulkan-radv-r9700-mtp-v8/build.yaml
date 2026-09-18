@@ -1,0 +1,18 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v8
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-17, MTP draft-depth sweep, same trigger and context as v7's
+    build.yaml (AMD's 51.8 tok/s R9700 claim at draft depth 2, vs v6's real
+    ~32 tok/s at draft depth 3) - not repeated here. This point:
+    --spec-draft-n-max 3 -> 1, everything else unchanged from v6.
+    Benchmark-only, does not touch the standing medium-dense role (stays
+    on v6).
