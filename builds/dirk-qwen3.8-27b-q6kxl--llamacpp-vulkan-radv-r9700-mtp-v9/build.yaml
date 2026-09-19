@@ -1,5 +1,5 @@
 name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v9
-status: TESTING
+status: WORKING
 derived:
   engine: llamacpp-vulkan-radv-mtp-v1
   model: Dirk-Qwen3.8-27B (MTP, vision)
@@ -14,5 +14,12 @@ derived:
     build.yaml (AMD's 51.8 tok/s R9700 claim at draft depth 2, vs v6's real
     ~32 tok/s at draft depth 3) - not repeated here. This point:
     --spec-draft-n-max 3 -> 4, everything else unchanged from v6.
-    Benchmark-only, does not touch the standing medium-dense role (stays
-    on v6).
+
+    Result: a real, consistent win (+4% to +13% decode tok/s across every
+    tested context length at concurrency 1), confirmed via an isolated
+    re-run (this file's own bench, run 153, after a combined 3-build run
+    corrupted the first attempt with cross-build VRAM contention - see
+    the run's own history for detail). Promoted to v10 (same command,
+    WORKING status, v6's production port 8161) as the new standing
+    medium-dense target. This directory stays as the raw benchmark
+    artifact/port 8169, not itself pointed at by any role.

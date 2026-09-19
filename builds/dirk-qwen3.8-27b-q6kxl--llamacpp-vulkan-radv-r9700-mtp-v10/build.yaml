@@ -1,0 +1,38 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v10
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-18, promoted to standing (Chris's explicit request, replaces v6
+    as the medium-dense role target). Same as v6 except
+    --spec-draft-n-max 3 -> 4.
+
+    Origin: v7/v8/v9 were a real benchmark sweep of --spec-draft-n-max
+    (2/1/4 respectively) against v6's baseline of 3, triggered by AMD's own
+    Qwen3.8-27B blog claiming 51.8 tok/s on R9700 at draft depth 2 - well
+    above v6's real ~32 tok/s at depth 3. Result did NOT confirm AMD's
+    claim (best achieved here was 36.6 tok/s, not 51.8 - likely a Windows/
+    driver/quant difference, not reproducible via config alone on this
+    Linux/RADV stack) but DID find a real, consistent win at depth 4, not
+    depth 2: +4% to +13% decode throughput across every tested context
+    length (0/16K/32K/64K) at concurrency 1, measured via two clean
+    isolated orchestrator runs (run 152, run 153) after a first combined
+    3-build run (run 151) produced invalid data - bundling same-GPU builds
+    into one multi-build run brings them up CONCURRENTLY (that mode proves
+    cross-GPU coexistence, not same-GPU variant sweeps), oversubscribing
+    R9700 VRAM 3x over given each instance's 262144-token KV cache
+    reservation; v9's own boot log shows the resulting fit failure
+    ("failed to fit params to free device memory... abort").
+
+    v9 (port 8169, still in the catalog as the raw benchmark artifact) is
+    byte-for-byte the same command as this build, just renumbered/promoted
+    with WORKING status and v6's production port (8161) once confirmed
+    live. See v9's own build.yaml for the pre-promotion benchmark context;
+    not repeated here beyond this summary.

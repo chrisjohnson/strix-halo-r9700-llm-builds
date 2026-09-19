@@ -1,5 +1,5 @@
 name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v8
-status: TESTING
+status: WORKING
 derived:
   engine: llamacpp-vulkan-radv-mtp-v1
   model: Dirk-Qwen3.8-27B (MTP, vision)
@@ -14,5 +14,14 @@ derived:
     build.yaml (AMD's 51.8 tok/s R9700 claim at draft depth 2, vs v6's real
     ~32 tok/s at draft depth 3) - not repeated here. This point:
     --spec-draft-n-max 3 -> 1, everything else unchanged from v6.
-    Benchmark-only, does not touch the standing medium-dense role (stays
-    on v6).
+
+    Result: worse than v6's baseline at every tested context length
+    (e.g. 30.2 vs 32.5 tok/s at concurrency 1, short context) - lower
+    draft depth means less speculative benefit, as expected. Draft depth
+    4 (v9/v10) won instead - see v10's build.yaml for the promoted
+    result. First benchmark attempt (combined 3-build run 151) hung for
+    the full 7200s timeout with zero data - a same-GPU multi-build run
+    brings all targets up concurrently rather than serially, so this
+    build's 262144-token KV cache reservation was competing against v7
+    and v9's simultaneously; a clean isolated re-run (152) completed in
+    ~28 minutes with no issue once run alone.

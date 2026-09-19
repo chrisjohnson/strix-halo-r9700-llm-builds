@@ -1,5 +1,5 @@
 name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v7
-status: TESTING
+status: WORKING
 derived:
   engine: llamacpp-vulkan-radv-mtp-v1
   model: Dirk-Qwen3.8-27B (MTP, vision)
@@ -30,3 +30,10 @@ derived:
     v8 (draft-n-max=1) and v9 (draft-n-max=4) are the other two points in
     this same sweep - see their own build.yaml for the same context,
     not repeated per-file.
+
+    Result: mixed vs v6's baseline - a real gain at short context
+    (34.8 vs 32.5 tok/s at concurrency 1) but a small loss at longer
+    contexts (28.9 vs 30.4 tok/s at 64K). Draft depth 4 (v9/v10) won
+    clearly across every context length instead - see v10's build.yaml
+    for the promoted result. AMD's 51.8 tok/s claim did not reproduce at
+    this or any tested depth on Linux/RADV with this quant.
