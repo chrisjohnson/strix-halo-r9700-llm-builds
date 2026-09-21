@@ -3,6 +3,8 @@ services:
   qwen-image-2.1--stable-diffusion-cpp-vulkan-radv-strix-apu-v2:
     image: strix-halo-r9700-llm-builds/sdcpp:vulkan-radv
     container_name: qwen-image-2.1--stable-diffusion-cpp-vulkan-radv-strix-apu-v2
+    labels:
+      com.local-ai-machine.always-up: "true"
     devices:
     - /dev/kfd:/dev/kfd
     - /dev/dri:/dev/dri
