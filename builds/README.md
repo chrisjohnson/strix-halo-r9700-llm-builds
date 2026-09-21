@@ -32,6 +32,8 @@ Per-engine-family, sequential within family:
 
 - vLLM builds: 8000-8099
 - llama.cpp-server: 8100-8199
+- stable-diffusion.cpp-server: 8200-8299 (image generation/editing; M-149,
+  first entry qwen-image-2.1 at 8200)
 - Ollama: 11434 (single shared instance, model switch via API) plus
   dedicated per-build instances above 11434 for benchmarking
 - Everything binds to 127.0.0.1 only

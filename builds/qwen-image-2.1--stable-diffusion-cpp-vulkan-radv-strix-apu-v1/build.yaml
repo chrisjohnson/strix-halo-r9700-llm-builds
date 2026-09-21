@@ -1,0 +1,46 @@
+name: qwen-image-2.1--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: stable-diffusion-cpp-vulkan-radv-v1
+  model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
+  params: 7B
+  active_params: null
+  quant: Q8_0
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-149 (2026-09-20). First image-generation build in this catalog —
+    new engine (stable-diffusion.cpp, not llama.cpp: llama.cpp cannot
+    load the qwen_image architecture and llama-server has no
+    image-output endpoint at all, confirmed via upstream issue tracker).
+    Vulkan/RADV chosen over ROCm/HIP because it needs no gfx-target
+    build flag and this catalog already has this exact APU proven on
+    that backend for every other Strix build (HIP would need
+    GPU_TARGETS=gfx1151, a less-traveled path here).
+
+    Takes over Ornith's APU slot (ornith-1.5-35b-a3b-mtp-q4--
+    llamacpp-vulkan-radv-strix-apu-v8 removed from local-ai-machine's
+    standing-models.txt as part of this same change).
+
+    Q8_0 chosen for v1 as a quality baseline (7.69GB DiT + ~8.7GB text
+    encoder + VAE, comfortably inside the APU's freed-up memory budget)
+    — not yet benchmarked. llm-inference-bench's harness is
+    tokens/sec-only and doesn't apply to this modality; benchmarking
+    this build means a custom wall-clock-per-image timing script against
+    a small quant/step grid, not the standard bench matrix below. Server
+    CLI flags (--diffusion-model/--vae/--llm/--llm_vision/--device/
+    --diffusion-fa/--cfg-scale/--sampling-method/--listen-ip/
+    --listen-port) are carried over from leejet's documented `sd-cli`
+    examples on the assumption sd-server shares the same flag parser for
+    model-loading/hardware options — NOT yet verified against a real
+    `sd-server --help` on this box. Expect a v2 once that's confirmed
+    and a real quant/perf sweep has run (same iteration pattern as every
+    other build's v1→vN history here).
+bench:
+  concurrency: null
+  contexts: null
+  duration: null
+  max_tokens: null
+  kv_budget: null
+  model: null
