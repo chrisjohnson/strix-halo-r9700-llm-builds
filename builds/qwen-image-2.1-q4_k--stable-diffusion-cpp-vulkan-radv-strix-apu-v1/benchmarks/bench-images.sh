@@ -4,8 +4,16 @@
 # images/sec concept, so this build's benchmarking doesn't go through it
 # (see build.yaml's notes) — this script times real generation calls
 # against the build's own port directly, one run per (steps, resolution)
-# combination, and writes raw JSON next to itself the same "raw,
-# untainted" way llm-inference-bench writes its own results.
+# combination, and writes a small timing-only summary JSON next to
+# itself. Deliberately NOT the raw per-request API response
+# (llm-inference-bench's own "raw untainted" convention doesn't apply
+# cleanly here): /sdapi/v1/txt2img embeds the full generated image as
+# base64 in its response body, 2-3MB per call - committing that per
+# tuning iteration would bloat this git repo fast and permanently (git
+# history never shrinks). Raw responses go to /tmp (ephemeral, box-local)
+# instead; decode one manually with `python3 -c "import json,base64;
+# open('out.png','wb').write(base64.b64decode(json.load(open(f))['images'][0]))"`
+# if you need to eyeball a specific run's actual output.
 #
 # Uses the A1111-compatible /sdapi/v1/txt2img route, NOT
 # /v1/images/generations: confirmed via a real run that the
@@ -41,7 +49,7 @@ for run in "${RUNS[@]}"; do
   height="${size#*x}"
   echo "== steps=$steps size=$size ==" >&2
   start=$(date +%s.%N)
-  http_code=$(curl -s -o "$OUT_DIR/${STAMP}-steps${steps}-${size}.json" -w '%{http_code}' \
+  http_code=$(curl -s -o "/tmp/bench-images-${STAMP}-steps${steps}-${size}.json" -w '%{http_code}' \
     -X POST "http://127.0.0.1:${PORT}/sdapi/v1/txt2img" \
     -H 'Content-Type: application/json' \
     -d "{\"prompt\": \"${PROMPT}\", \"steps\": ${steps}, \"width\": ${width}, \"height\": ${height}}")

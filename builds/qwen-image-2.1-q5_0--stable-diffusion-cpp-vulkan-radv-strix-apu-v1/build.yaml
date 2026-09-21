@@ -1,5 +1,5 @@
 name: qwen-image-2.1-q5_0--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: stable-diffusion-cpp-vulkan-radv-v1
   model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
@@ -16,6 +16,17 @@ derived:
     Own port (8202) so it can run independently of the other quant/cache
     variants without a port collision, tested one at a time (not
     concurrently - GPU residency contention would bias the numbers).
+
+    RESULT: 4 steps=64.2s, 20 steps=277.5s - statistically the same as
+    the Q8_0 baseline (59.6s/263.8s), if anything marginally slower
+    (within run-to-run noise). DiT quantization alone does not move
+    generation time on this hardware - unlike LLM decode, this workload
+    is compute-bound on the iterative denoising matmuls, not
+    memory-bandwidth-bound on weight reads (confirmed further by Q4_K,
+    see its own sibling build - same ~260-280s band at 20 steps). Not
+    adopted: no speed benefit, real quality cost for nothing in return.
+    Q8_0 stays the quant of record; `--cache-mode easycache` (v2) is the
+    only lever that actually helped.
 bench:
   concurrency: null
   contexts: null

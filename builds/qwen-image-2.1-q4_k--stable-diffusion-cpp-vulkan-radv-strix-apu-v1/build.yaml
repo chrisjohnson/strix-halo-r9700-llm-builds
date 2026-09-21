@@ -1,5 +1,5 @@
 name: qwen-image-2.1-q4_k--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: stable-diffusion-cpp-vulkan-radv-v1
   model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
@@ -16,6 +16,23 @@ derived:
     Own port (8203) so it can run independently of the other quant/cache
     variants without a port collision, tested one at a time (not
     concurrently - GPU residency contention would bias the numbers).
+
+    RESULT: real, clean 20-step measurement=257.8s - same ~260-280s band
+    as Q8_0 (263.8s) and Q5_0 (277.5s), confirming DiT quantization
+    alone doesn't move generation time on this compute-bound (not
+    memory-bandwidth-bound) workload. The paired 4-step measurement from
+    this same run (252.5s) is a KNOWN-BAD data point, kept in the raw
+    benchmarks/ JSON for the record rather than deleted: an earlier test
+    against this build got killed client-side by a local SSH timeout
+    mid-generation, but the server kept running it to completion
+    unattended - the next (this) request queued behind that orphaned
+    generation, inflating its measured wall-clock by the orphan's
+    remaining runtime. Real lesson: always background/nohup a
+    long-running generation request instead of letting a local timeout
+    kill the client while the server-side job survives - confirmed via
+    `docker logs -t` timestamps (the "generating image" log lines
+    showed the queueing gap directly). Not adopted, same reasoning as
+    Q5_0: no speed benefit, real quality cost for nothing in return.
 bench:
   concurrency: null
   contexts: null
