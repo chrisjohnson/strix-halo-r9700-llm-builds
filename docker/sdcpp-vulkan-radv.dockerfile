@@ -30,6 +30,6 @@ RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
 WORKDIR /build/src
 RUN cmake -B /build/build -DSD_VULKAN=ON -DCMAKE_BUILD_TYPE=Release \
     && grep -E "SD_VULKAN" /build/build/CMakeCache.txt \
-    && cmake --build /build/build -j --target sd sd-server
+    && cmake --build /build/build -j --target sd-cli sd-server
 
 WORKDIR /build
