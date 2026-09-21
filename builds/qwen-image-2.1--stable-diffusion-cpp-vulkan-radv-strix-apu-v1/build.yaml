@@ -27,16 +27,27 @@ derived:
     encoder + VAE, comfortably inside the APU's freed-up memory budget)
     — not yet benchmarked. llm-inference-bench's harness is
     tokens/sec-only and doesn't apply to this modality; benchmarking
-    this build means a custom wall-clock-per-image timing script against
-    a small quant/step grid, not the standard bench matrix below. Server
-    CLI flags (--diffusion-model/--vae/--llm/--llm_vision/--device/
-    --diffusion-fa/--cfg-scale/--sampling-method/--listen-ip/
-    --listen-port) are carried over from leejet's documented `sd-cli`
-    examples on the assumption sd-server shares the same flag parser for
-    model-loading/hardware options — NOT yet verified against a real
-    `sd-server --help` on this box. Expect a v2 once that's confirmed
-    and a real quant/perf sweep has run (same iteration pattern as every
-    other build's v1→vN history here).
+    this build means a custom wall-clock-per-image timing script
+    (benchmarks/bench-images.sh) against a small step/resolution grid,
+    not the standard bench matrix below.
+
+    Real `sd-server --help` run against the built image (not guessed):
+    confirmed --diffusion-model/--vae/--llm/--llm_vision/--diffusion-fa/
+    --cfg-scale/--sampling-method/--listen-ip/--listen-port all exist as
+    expected. One real correction from the initial draft: there is no
+    --device flag (that's a llama.cpp-ism) — GPU pinning here is
+    --backend <name>, and --list-devices confirms device 1 (`Vulkan1`)
+    is the Strix APU (AMD Radeon 8060S, RADV GFX1151, uma:1) vs device 0
+    (`Vulkan0`, the R9700 eGPU) — matches Ornith's own Vulkan1-is-the-APU
+    convention. Also caught and fixed during the build: the CMake target
+    is `sd-cli`, not `sd` (examples/cli/CMakeLists.txt names it
+    explicitly) — first build attempt failed on this before the
+    Dockerfile was corrected.
+
+    Not yet benchmarked/tuned — v1's flags (Q8_0 everywhere, cfg-scale
+    6.0, euler, no --offload-to-cpu) are a reasonable starting default,
+    not a measured choice. Expect v2+ once bench-images.sh has run
+    (same v1→vN iteration pattern as every other build here).
 bench:
   concurrency: null
   contexts: null

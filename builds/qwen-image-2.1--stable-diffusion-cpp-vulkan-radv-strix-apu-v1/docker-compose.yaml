@@ -17,7 +17,7 @@ services:
       --vae /vae/qwen_image_2.1_vae_bf16.safetensors
       --llm /text_encoders/Qwen3VL-8B-Instruct-Q8_0.gguf
       --llm_vision /text_encoders/mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf
-      --device Vulkan1 --diffusion-fa
+      --backend Vulkan1 --diffusion-fa
       --cfg-scale 6.0 --sampling-method euler
       --listen-ip 0.0.0.0 --listen-port 8080
 
