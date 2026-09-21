@@ -32,7 +32,7 @@ for run in "${RUNS[@]}"; do
     -H 'Content-Type: application/json' \
     -d "{\"prompt\": \"${PROMPT}\", \"size\": \"${size}\", \"n\": 1, \"steps\": ${steps}}")
   end=$(date +%s.%N)
-  elapsed=$(echo "$end - $start" | bc)
+  elapsed=$(python3 -c "print($end - $start)")
   echo "  http=$http_code elapsed=${elapsed}s" >&2
   results=$(echo "$results" | python3 -c "
 import json, sys
