@@ -1,5 +1,5 @@
 name: qwen-image-2.1--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: WORKING
 derived:
   engine: stable-diffusion-cpp-vulkan-radv-v1
   model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
@@ -44,10 +44,37 @@ derived:
     explicitly) — first build attempt failed on this before the
     Dockerfile was corrected.
 
-    Not yet benchmarked/tuned — v1's flags (Q8_0 everywhere, cfg-scale
-    6.0, euler, no --offload-to-cpu) are a reasonable starting default,
-    not a measured choice. Expect v2+ once bench-images.sh has run
-    (same v1→vN iteration pattern as every other build here).
+    Confirmed WORKING (2026-09-21): loads cleanly, all 16.4GB of weights
+    (text_encoders 8.4GB + diffusion 7.3GB + vae 0.6GB) resident on
+    Vulkan1 (the Strix APU) per its own auto-fit log — comfortably inside
+    the 127GB it now sees free after Ornith's slot was freed. Real
+    end-to-end image generated successfully through litellm's `image-gen`
+    role (`/v1/images/generations` -> port 8200 -> 200 OK).
+
+    First real benchmark (bench-images.sh, /sdapi/v1/txt2img, 1024x1024,
+    a lovely-cat prompt): 4 steps = 59.6s, 20 steps = 263.8s. Linear fit:
+    ~12.7s/step marginal cost, ~8s fixed overhead (text-encoder forward
+    pass + VAE decode, paid once per image regardless of step count).
+    This is APU memory-bandwidth-bound territory, consistent with every
+    other build's finding on this hardware. Important real constraint:
+    litellm's role goes through `/v1/images/generations`
+    (OpenAI-compatible), which has NO steps field in its real schema at
+    all (confirmed: two "20 vs 40 steps" calls against it came back
+    statistically identical, both silently using the server's own
+    default of 20) - so every image routed through the `image-gen` role
+    costs the full ~264s regardless of what a caller asks for, until v2
+    either bakes a different --steps default into the compose command or
+    someone calls the native `/sdapi/v1/txt2img` route directly instead
+    of going through litellm.
+
+    Not yet tuned beyond the above. Real candidates for v2, unexplored so
+    far: a lower quant (Q5_0/Q4_K) to test whether the bandwidth-bound
+    profile responds the same way llama.cpp builds on this box do; the
+    `--cache-mode easycache`/`--cache-mode dbcache` DiT step-skipping
+    options `sd-server --help` surfaces (no LLM-decode equivalent to
+    compare against, diffusion-specific); and whether a lower default
+    --steps in the compose command (traded against quality) is the right
+    call given litellm callers can't override it per-request anyway.
 bench:
   concurrency: null
   contexts: null
