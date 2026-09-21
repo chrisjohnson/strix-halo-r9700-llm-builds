@@ -22,7 +22,18 @@ derived:
     Purpose: isolate whether easycache's step-skipping meaningfully cuts
     the ~12.7s/step marginal cost v1 measured, independent of quant
     choice (that's a separate axis, see the -q5_0/-q4_k sibling builds).
-    See benchmarks/ for the head-to-head numbers.
+
+    RESULT (real bench-images.sh run, tested standalone with v1 stopped
+    to avoid GPU contention): 4 steps=63.9s (v1: 59.6s, within noise -
+    easycache needs a few steps of history before it can start skipping
+    recompute, so no benefit shows up yet this early), 20 steps=135.5s
+    (v1: 263.8s) - a real ~49% reduction at 20 steps, the step count
+    that matters since litellm's route can't override it anyway (see
+    v1's notes). Single biggest lever found so far - bigger than any
+    quant change is likely to be on its own. Real candidate for v3:
+    Q8_0 + easycache is already a clear win over v1; worth also testing
+    a lower quant + easycache combined once the standalone quant
+    results are in, to see if the two stack.
 bench:
   concurrency: null
   contexts: null
