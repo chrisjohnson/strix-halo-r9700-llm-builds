@@ -1,0 +1,26 @@
+name: docker
+services:
+  qwen-image-2.1-q4_k--stable-diffusion-cpp-vulkan-radv-strix-apu-v1:
+    image: strix-halo-r9700-llm-builds/sdcpp:vulkan-radv
+    container_name: qwen-image-2.1-q4_k--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/qwen-image-2.1-q4:/models:ro
+    - /var/lib/ai-models/qwen3vl-8b-instruct-q8:/text_encoders:ro
+    - /var/lib/ai-models/qwen-image-2.1-vae/vae:/vae:ro
+    command: './build/bin/sd-server --diffusion-model /models/qwen_image_2.1-Q4_K.gguf
+      --vae /vae/qwen_image_2.1_vae_bf16.safetensors
+      --llm /text_encoders/Qwen3VL-8B-Instruct-Q8_0.gguf
+      --llm_vision /text_encoders/mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf
+      --backend Vulkan1 --diffusion-fa
+      --cfg-scale 6.0 --sampling-method euler
+      --listen-ip 0.0.0.0 --listen-port 8080
+
+      '
+    ports:
+    - 127.0.0.1:8203:8080

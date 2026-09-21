@@ -1,0 +1,32 @@
+name: qwen-image-2.1--stable-diffusion-cpp-vulkan-radv-strix-apu-v2
+status: WORKING
+derived:
+  engine: stable-diffusion-cpp-vulkan-radv-v1
+  model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
+  params: 7B
+  active_params: null
+  quant: Q8_0
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-149 tuning pass (2026-09-21). Identical to v1 except one flag:
+    --cache-mode easycache (DiT step-skipping cache, one of the options
+    sd-server exposes with no LLM-decode equivalent - see v1's own notes).
+    Kept on a separate port (8201) from v1 (8200) deliberately, matching
+    this catalog's own precedent (Ornith v7 vs v8/v9) for a genuine
+    side-by-side comparison rather than reusing one port across
+    iterations - avoids GPU-residency contention biasing either
+    measurement by running one at a time, not simultaneously.
+
+    Purpose: isolate whether easycache's step-skipping meaningfully cuts
+    the ~12.7s/step marginal cost v1 measured, independent of quant
+    choice (that's a separate axis, see the -q5_0/-q4_k sibling builds).
+    See benchmarks/ for the head-to-head numbers.
+bench:
+  concurrency: null
+  contexts: null
+  duration: null
+  max_tokens: null
+  kv_budget: null
+  model: null

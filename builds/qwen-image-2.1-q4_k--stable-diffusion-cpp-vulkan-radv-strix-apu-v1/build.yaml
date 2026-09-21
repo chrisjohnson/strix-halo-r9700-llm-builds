@@ -1,0 +1,25 @@
+name: qwen-image-2.1-q4_k--stable-diffusion-cpp-vulkan-radv-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: stable-diffusion-cpp-vulkan-radv-v1
+  model: Qwen-Image-2.1 (7B DiT, unified gen+edit, Qwen3-VL 8B text encoder)
+  params: 7B
+  active_params: null
+  quant: Q4_K
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    M-149 tuning pass (2026-09-21). Same as v1 (Q8_0) except the DiT
+    quant - text encoder and VAE unchanged, isolating quant as the only
+    variable against the Q8_0 baseline (~12.7s/step, ~8s fixed overhead).
+    Own port (8203) so it can run independently of the other quant/cache
+    variants without a port collision, tested one at a time (not
+    concurrently - GPU residency contention would bias the numbers).
+bench:
+  concurrency: null
+  contexts: null
+  duration: null
+  max_tokens: null
+  kv_budget: null
+  model: null
