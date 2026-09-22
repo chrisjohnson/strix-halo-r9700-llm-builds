@@ -1,0 +1,60 @@
+name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1
+status: WORKING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q4_K_M, MTP, vision)
+  params: 35B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-22. Replaces ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v9
+    on the strix-apu slot (same size class: Accio-Lab/occamy-1.0 is also a
+    Qwen3.6-35B-A3B-derived MoE, 35B total / 3B active). Occamy's own published
+    benchmark table shows it beating Ornith-1.5 on most agentic/tool-use
+    evals (Claw-Eval, WildClawBench, AutomationBench) while losing a few
+    (BFCL v4, VitaBench, OfficeQA Pro, IFEval) - self-reported by the
+    publisher, not independently verified here.
+
+    Unlike Ornith, Occamy's official MTP head ships as a separate,
+    explicitly "Experimental" repo (Accio-Lab/occamy-1.0-MTP, sglang-
+    oriented) rather than merged into the base checkpoint. Used
+    fetchingcat/occamy-1.0-mtp-gguf instead of bartowski's plain
+    Accio-Lab_occamy-1.0-GGUF: fetchingcat grafts the MTP head directly into
+    the checkpoint as blk.40.nextn.* tensors, loadable with the same
+    single-file --spec-type draft-mtp mechanism Ornith/Dirk already use (no
+    -md / second model file). Its README pins a minimum llama.cpp build of
+    b10687/commit c841aeeb8 - exactly the build already running in
+    kyuz0/amd-strix-halo-toolboxes:vulkan-radv (confirmed via `llama-server
+    --version` on this box), so no image change was needed. Only one quant
+    is published in that repo (Q4_K_M) - happens to match Ornith's own
+    quant choice, so no separate size tradeoff was made.
+
+    Params chosen by direct one-at-a-time sweep on this box (strix-apu,
+    single-stream -np 1, 5x400-token /completion runs per config, APU freed
+    of both Ornith and qwen-image for clean measurement):
+    - --spec-draft-n-max: 1 (94.1 tok/s avg, matching Ornith's own setting)
+      and 2 (94.2 tok/s) tied for best; 3 (89.6) and 4 (85.0) both worse.
+      Picked 2 - tied with 1, and matches fetchingcat's own README example.
+    - --spec-draft-p-min: 0.3 (94.2, Ornith's own value) beat 0.5 (89.8);
+      tied with 0.1 (93.5). Kept 0.3.
+    - -ub: unset/default beat every explicit value tried (256: 90.8, 1024:
+      93.5, 2048: 90.4) - left unset, same as Ornith.
+    - PCIe ASPM policy: performance (95.2) vs default (94.2) - inside noise,
+      consistent with the same finding already made on dirk/r9700
+      (strix-halo-r9700-llm-builds/knowledge/research/
+      2026-09-22-dirk-aspm-ubatch-sweep-no-win.md). Left at default.
+
+    Direct control comparison, same harness/settings (-np 1, n-max 1,
+    p-min 0.3, 400-token single-stream decode, 5 runs): Ornith averaged
+    73.2 tok/s, Occamy (winning config) averaged 94.2 tok/s - a real ~29%
+    decode-speed improvement on top of the agentic-benchmark gains, not
+    just a lateral swap.
+
+    Production command below restores -np 3 with --kv-unified
+    --kv-unified-per-slot 262144 (matching Ornith v9's concurrency fix -
+    see that build's own notes for why plain -c division under -np was
+    wrong) rather than the -np 1 used for tuning, since this build is meant
+    as a full drop-in replacement, not just a single-stream config.
