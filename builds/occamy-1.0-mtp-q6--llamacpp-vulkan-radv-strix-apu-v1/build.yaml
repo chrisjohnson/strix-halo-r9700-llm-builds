@@ -1,0 +1,20 @@
+name: occamy-1.0-mtp-q6--llamacpp-vulkan-radv-strix-apu-v1
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q6_K, MTP, self-grafted)
+  params: 35B
+  active_params: 3B
+  quant: Q6_K
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-24 (M-152). Same self-grafted MTP build as
+    occamy-1.0-mtp-q5--llamacpp-vulkan-radv-strix-apu-v1 (see that build's
+    notes for the full transplant/conversion pipeline - both quants come
+    from the same bf16-with-MTP intermediate GGUF, just quantized
+    differently), at Q6_K instead of Q5_K_M for the other end of the
+    Chris-requested size comparison against the standing Q4_K_M build.
+    TESTING status until benchmarked and Chris decides whether either this
+    or Q5 replaces Q4.

@@ -1,0 +1,50 @@
+name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-strix-apu-v1
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q5_K_M, MTP, self-grafted)
+  params: 35B
+  active_params: 3B
+  quant: Q5_K_M
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-24 (M-152). Chris asked whether a larger Occamy quant is
+    available with MTP kept - fetchingcat/occamy-1.0-mtp-gguf (the source
+    for the standing occamy-1.0-mtp-q4 build) only publishes Q4_K_M. Built
+    this ourselves rather than trading away MTP for a plain bartowski
+    quant: downloaded the bf16 Accio-Lab/occamy-1.0 base checkpoint plus
+    fetchingcat's own published `model-mtp.safetensors` (their pre-extracted
+    19 mtp.* tensors, 1.57GiB) and `occamy-1.0-imatrix.dat`, then grafted
+    the tensors on ourselves.
+
+    Could not run fetchingcat's own occamy-mtp-transplant.py verbatim - it
+    expects a SEPARATE Qwen/Qwen3.6-35B-A3B base download (another ~70GB) in
+    HF's cache layout (snapshots/blobs), re-deriving model-mtp.safetensors
+    from scratch. Since they'd already published that exact file, wrote a
+    lighter adaptation that skips the re-derivation: symlinks Occamy's own
+    files, adds their model-mtp.safetensors directly, and patches
+    model.safetensors.index.json/config.json using tensor names/shapes read
+    straight from model-mtp.safetensors's own header (no external index
+    needed). Confirmed no dedicated-embedding tensor among the 19, so
+    config.text_config.mtp_use_dedicated_embeddings stayed False (only
+    mtp_num_hidden_layers 0->1 changed, per fetchingcat's README).
+
+    Converted via ghcr.io/ggml-org/llama.cpp:full's convert_hf_to_gguf.py
+    (bf16 intermediate, 71.1GB, default flags - no --mtp/--no-nextn, which
+    keeps mtp tensors in the single merged file, matching fetchingcat's own
+    approach and this build's --spec-type draft-mtp loading). Confirmed the
+    GGUF correctly picked up the MTP head:
+    qwen35moe.nextn_predict_layers = 1 in the converted file's own metadata.
+    Quantized with the SAME llama-quantize build this box actually serves
+    with (kyuz0/amd-strix-halo-toolboxes:vulkan-radv, b10687/c841aeeb8) for
+    GGUF-version compatibility, using fetchingcat's imatrix.dat.
+
+    Launch flags copied directly from the standing occamy-1.0-mtp-q4 build
+    (same --spec-type draft-mtp/--spec-draft-n-max 2/--spec-draft-p-min 0.3
+    already tuned there) - only the quant and model file differ. Not yet
+    benchmarked against the Q4_K_M baseline (94.2 tok/s, single-stream);
+    see this repo's benchmark notes / the M-152 fleet card for the real
+    number once measured. TESTING status until that comparison is done and
+    Chris decides whether to promote either this or Q6 over Q4.
