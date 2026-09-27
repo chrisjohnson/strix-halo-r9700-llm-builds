@@ -1,0 +1,82 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-reasoning-budget-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Part of the agentic-tuning thread - see
+    knowledge/research/2026-09-27-halogen-agentic-tuning-lessons.md. Same engine, image and env
+    as ...-lazy-direct-strixhalo-mtp-v1 (EngramHalo + PR #29030, HIPBLASLT, GDN chunking);
+    only reasoning handling differs.
+
+    WHY, and a CORRECTION this work owes: an earlier note in this repo claimed our builds'
+    thinking "does not surface as message.reasoning_content the way cloud DeepSeek's API does".
+    That is WRONG. Probed live on 8178 with no reasoning flags set, every reply already carried
+    message.reasoning_content; llama.cpp's default format extracts it. So --reasoning-format
+    deepseek is not fixing a wire-format gap, and if it changes anything here it is cosmetically.
+    --reasoning-preserve is the part with a real agentic argument: it keeps the reasoning trace
+    in the full history rather than only the last message.
+
+    THE ACTUAL DEFECT, measured on 8178 (default flags), one prompt, graded budgets:
+
+      max_tokens=32    finish=length  content_len=0     reasoning_len=118
+      max_tokens=64    finish=length  content_len=0     reasoning_len=292
+      max_tokens=2048  finish=length  content_len=0     reasoning_len=6455
+      + reasoning_effort=none          content_len=289   reasoning_len=0
+      + enable_thinking=false          content_len=289   reasoning_len=0
+
+    With thinking on - the default - the thinking block consumes the ENTIRE budget at any size
+    and `content` comes back EMPTY with finish_reason=length, the answer nowhere but in a field
+    most clients do not render. That is Halogen's "answer room" failure (their issue #56:
+    32,000 tokens of reasoning and an empty answer) and it is live here.
+
+    Does it bite big-moe? Partly, and less than it looks: that role leaves maxTokens unset, so
+    pi-ai's 32,768 route default applies rather than a small cap, and ordinary agentic turns
+    finish inside it. But 32,768 is the same order as the 32,000-token runaway in their issue,
+    so a hard prompt can still spend the whole cap thinking and return nothing - which the
+    harness reads as a failed turn and retries, presenting as slowness rather than as an error.
+
+    STATUS: EXPERIMENT, not a recommendation. It changes no serving behaviour that is measured
+    yet, and it is here to be compared against plain lazy-direct before anything is adopted.
+
+    THIS BUILD ADDS: --reasoning-budget 4096.
+
+    llama.cpp's nearest equivalent to Halogen's answer room: it closes the think block after N
+    generated thinking tokens instead of letting it run to the request's cap. 4096 is a starting
+    value, not a tuned one - it has to leave room under whatever cap the caller set, and the
+    point of measuring it is to see whether a forced close still yields a usable answer and how
+    much thinking quality it costs. llama.cpp also has --reasoning-budget-message, to inject text
+    before the end-of-thinking tag; deliberately NOT set here so the test is of the budget alone
+    (and because a quoted message inside this compose file's single-quoted command scalar is
+    awkward to keep valid).
+
+    MEASURED 2026-09-27, and it works. Same probe prompt, same build:
+
+      max_tokens=32     content_len=0     finish=length   (cap binds before the budget)
+      max_tokens=64     content_len=0     finish=length   (same)
+      max_tokens=2048   content_len=0     finish=length   (same)
+      max_tokens=8192   content_len=1020  finish=stop     ANSWER PRESENT, completion=4513
+      max_tokens=16384  content_len=2273  finish=stop     ANSWER PRESENT, completion=4962
+
+    So the budget closes the think block at ~4096 tokens and the model then answers normally and
+    reaches EOS. The rows where it does NOT help are the important ones to understand: a thinking
+    budget only bites when the caller's cap is larger than the budget, because below that the cap
+    ends generation first. 4096 is therefore sized for the real route - big-moe leaves maxTokens
+    unset, so pi-ai's 32,768 default applies and the budget leaves ~28k for the answer - and NOT
+    for callers that send a small cap. llama.cpp has no proportional "answer room" (Halogen
+    reserves max(1024, 15% of max_tokens) automatically); this is the nearest primitive and it
+    needs a size chosen against the caps actually in use.
+
+    WHAT THIS FIXES: the empty-answer failure measured above - finish_reason=length, empty
+    content, the answer stranded in reasoning_content - which an agent harness reads as a failed
+    turn and retries, presenting as slowness rather than as an error.
+
+    NOT YET DONE: a quality check on whether a forced close degrades reasoning, and a comparison
+    against plain lazy-direct on the agentic replay. A forced think-block close is a real
+    intervention in the model's behaviour, not a free correctness fix.

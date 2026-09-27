@@ -25,7 +25,7 @@ Snapshot 2026-09-27, git HEAD `1e3de30`, working tree clean, both repos clean.
 **Running:**
 | Container | Port | Notes |
 |---|---|---|
-| `qwen3.8-flash-next-...-strixhalo-mtp-v1` | 8152 | the standing APU build; litellm role `big-moe` points here |
+| `qwen3.8-flash-next-...-strixhalo-mtp-v1` | 8152 | litellm role `big-moe` points here. NOTE `standing-models.txt` is actually **dirk + occamy**, not this — correct as of 2026-09-27. |
 | `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | the standing R9700 build |
 | `litellm-proxy`, `open-webui`, `searxng`, `grafana`, `prometheus`, `caddy`, … | — | not part of this work |
 
@@ -281,16 +281,17 @@ gave 483/504/434.
     fraction, or TTFT numbers exist for a realistic growing conversation with tool calls and a
     compaction. Everything so far is single-shot prefill/decode. This is the biggest measurement
     gap given the goal in §2.
-11. **The "answer room" is un-audited, and the audit so far says we have none.** If a request's
-    answer cap is consumed by the thinking block, some servers return `finish_reason: length`
-    with **empty `content`** — and an agent harness reads that as a failed compaction and
-    retries. Confirmed 2026-09-27: **none of our flash-next builds sets ANY reasoning flag** —
-    no `--reasoning-format`, no `--reasoning-effort`, no `--reasoning-budget` — while the build
-    supports all of them plus `--reasoning-budget-message` (llama.cpp's answer-room primitive)
-    and the template carries both `reasoning_effort` and `enable_thinking`. So thinking is
-    unbounded and the wire format is not DeepSeek's. Two candidate build variants, both cheap:
-    `--reasoning-format deepseek` for API-shape parity with cloud DeepSeek, and a thinking bound
-    for compaction safety. Halogen's advice is to **bound** thinking at `xhigh`, not lower it.
+11. **Answer room: AUDITED, the failure is real, and there is a measured fix.** With thinking
+    on (the default) a request's whole budget is consumed by reasoning and `content` returns
+    **empty** with `finish_reason: length` — reproduced at caps of 32, 64 and 2048 on port 8178.
+    An agent harness reads that as a failed turn and retries, so it presents as slowness. It does
+    **not** bite `big-moe` hard today: that role leaves `maxTokens` unset, so pi-ai's 32,768
+    default applies, and ordinary turns finish inside it — but 32,768 is the same order as the
+    32,000-token runaway in Halogen's issue #56, so a hard prompt can still empty out.
+    `--reasoning-budget 4096` fixes it for any cap above the budget (measured: `content` 1,020 and
+    2,273 chars at caps 8192/16384, `finish=stop`), and does nothing below it. Promoted as
+    `...-lazy-direct-reasoning-budget-...v1`, status TESTED_VIABLE, not adopted and not yet
+    quality-checked.
 12. **llama.cpp has no disk-persistent prompt cache.** `--cache-ram` is memory-only, so a dsh
     session resumed after a *model* restart re-prefills its whole history. A production server
     persists it (~27 KiB/token) and turns ~40 s cold into a few seconds. No fix visible on our

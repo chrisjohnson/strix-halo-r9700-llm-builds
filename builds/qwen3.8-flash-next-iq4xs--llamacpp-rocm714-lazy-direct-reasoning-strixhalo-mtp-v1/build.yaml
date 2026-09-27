@@ -1,0 +1,46 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-reasoning-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Part of the agentic-tuning thread - see
+    knowledge/research/2026-09-27-halogen-agentic-tuning-lessons.md. Same engine, image and env
+    as ...-lazy-direct-strixhalo-mtp-v1 (EngramHalo + PR #29030, HIPBLASLT, GDN chunking);
+    only reasoning handling differs.
+
+    WHY, and a CORRECTION this work owes: an earlier note in this repo claimed our builds'
+    thinking "does not surface as message.reasoning_content the way cloud DeepSeek's API does".
+    That is WRONG. Probed live on 8178 with no reasoning flags set, every reply already carried
+    message.reasoning_content; llama.cpp's default format extracts it. So --reasoning-format
+    deepseek is not fixing a wire-format gap, and if it changes anything here it is cosmetically.
+    --reasoning-preserve is the part with a real agentic argument: it keeps the reasoning trace
+    in the full history rather than only the last message.
+
+    THE ACTUAL DEFECT, measured on 8178 (default flags), one prompt, graded budgets:
+
+      max_tokens=32    finish=length  content_len=0     reasoning_len=118
+      max_tokens=64    finish=length  content_len=0     reasoning_len=292
+      max_tokens=2048  finish=length  content_len=0     reasoning_len=6455
+      + reasoning_effort=none          content_len=289   reasoning_len=0
+      + enable_thinking=false          content_len=289   reasoning_len=0
+
+    With thinking on - the default - the thinking block consumes the ENTIRE budget at any size
+    and `content` comes back EMPTY with finish_reason=length, the answer nowhere but in a field
+    most clients do not render. That is Halogen's "answer room" failure (their issue #56:
+    32,000 tokens of reasoning and an empty answer) and it is live here.
+
+    Does it bite big-moe? Partly, and less than it looks: that role leaves maxTokens unset, so
+    pi-ai's 32,768 route default applies rather than a small cap, and ordinary agentic turns
+    finish inside it. But 32,768 is the same order as the 32,000-token runaway in their issue,
+    so a hard prompt can still spend the whole cap thinking and return nothing - which the
+    harness reads as a failed turn and retries, presenting as slowness rather than as an error.
+
+    STATUS: EXPERIMENT, not a recommendation. It changes no serving behaviour that is measured
+    yet, and it is here to be compared against plain lazy-direct before anything is adopted.

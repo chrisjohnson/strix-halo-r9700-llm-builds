@@ -218,6 +218,53 @@ wait_healthy() {
   return 1
 }
 
+# Warm a freshly started model before anything measures it.
+#
+# Why here rather than in the benchmark tool: priming belongs to *starting* a
+# model, not to benchmarking one, and every consumer (benchmarks, ad-hoc A/Bs,
+# litellm traffic) passes through `up`. The bench tool has its own per-cell
+# warmup, but that is per-cell and capped; it cannot undo a cold model, and the
+# orchestrator runs `up` immediately before measuring, so the first cell
+# otherwise pays for graph/JIT compilation and a cold page cache.
+#
+# Deliberately best-effort: a model that is up but refuses to answer a prompt is
+# a real problem, but it is not one that `up` should fail over, and not every
+# engine in the catalog speaks the same API. Failures are logged and ignored.
+# MODELCTL_PRIME=0 skips it.
+#
+# What this can and cannot warm: it compiles the graphs and pulls weights and
+# code pages in, which is the start-up transient. It CANNOT warm the pages a
+# later measured prompt will touch, because the gather path reads rows keyed by
+# the text's own n-grams -- a different body warms different pages. So this
+# removes start-up transients, not measurement-body effects.
+prime_model() {
+  local id="$1"
+  local port="$2"
+  [ "${MODELCTL_PRIME:-1}" = "0" ] && return 0
+  local body='{"messages":[{"role":"user","content":"hi"}],"max_tokens":8,"temperature":0}'
+  local i
+  for i in 1 2; do
+    if curl -sf -o /dev/null -m 120 -X POST \
+         -H 'Content-Type: application/json' -d "$body" \
+         "http://localhost:$port/v1/chat/completions" 2>/dev/null; then
+      echo "modelctl: primed $id on :$port" >&2
+      return 0
+    fi
+    # llama.cpp's native endpoint, for builds whose server does not expose the
+    # OpenAI chat route yet.
+    if curl -sf -o /dev/null -m 120 -X POST \
+         -H 'Content-Type: application/json' \
+         -d '{"prompt":"hi","n_predict":8,"temperature":0}' \
+         "http://localhost:$port/completion" 2>/dev/null; then
+      echo "modelctl: primed $id on :$port (native /completion)" >&2
+      return 0
+    fi
+    sleep 2
+  done
+  echo "modelctl: warning - could not prime $id on :$port (continuing; the first request will pay the start-up cost)" >&2
+  return 0
+}
+
 preflight_up() {
   local id="$1"
   local f
@@ -348,12 +395,15 @@ cmd_up() {
   local id f port
   for id in "${ids[@]}"; do
     if cmd_up_one "$id"; then
-      if [ "$wait_between" -eq 1 ]; then
-        f="$(compose_file_for "$id")"
-        port="$(port_for "$f")"
-        if [ -n "$port" ]; then
-          wait_healthy "$id" "$port" || true
-        fi
+      # Wait and prime for a single id too. It used to skip the wait, on the
+      # reasoning that nothing was queued behind it to protect -- but that left
+      # every single `up` returning a container that was not yet serving, and a
+      # benchmark starting against a cold model. `up` now means "ready".
+      f="$(compose_file_for "$id")"
+      port="$(port_for "$f")"
+      if [ -n "$port" ]; then
+        wait_healthy "$id" "$port" || true
+        prime_model "$id" "$port"
       fi
     else
       failures=$((failures + 1))

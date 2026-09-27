@@ -158,19 +158,46 @@ are using none of it.
 The template does its part: read from a live server's `/props`, it contains `reasoning_effort`
 8 times and `enable_thinking` 4 times, so both control paths are wired.
 
-**Two concrete consequences, both cheap to act on:**
+**CORRECTION (same day, after probing live).** The first of the two consequences below was
+**wrong**, and the retraction matters more than the original claim: probed on port 8178 with no
+reasoning flags set, **every reply already carried `message.reasoning_content`**. llama.cpp's
+default format extracts it. So `--reasoning-format deepseek` was never fixing a wire-format gap
+for DeepSeek parity, and the two builds made for it exist for `--reasoning-preserve` and for the
+budget below, not for that.
 
-1. **`--reasoning-format deepseek` is unset**, so the model's thinking does not surface as
-   `message.reasoning_content` the way cloud DeepSeek's API does. For a *drop-in replacement for
-   cloud DeepSeek* that is a wire-format difference the harness will notice — and it is a
-   one-flag change.
-2. **There is no thinking bound and no answer room.** This is exactly the shape of failure
-   Halogen describes as silently breaking compactions: the model thinks past the harness's
-   answer cap, the reply comes back `finish_reason: length` with empty `content`, and the
-   harness retries. It presents as slowness, not as an error. **This is the most likely
-   agentic defect on our stack and it costs nothing to test.**
+The second consequence was right, and is worse than described. Measured on 8178 (default flags),
+one prompt, graded budgets:
 
-Note Halogen's advice runs *against* the obvious fix: it says to leave the default effort at
-`xhigh` for agentic work, and bound it rather than lower it. So the candidate build is
-`--reasoning-format deepseek --reasoning-budget N --reasoning-budget-message ...`, not a
-reduced effort level.
+| request | finish | `content` len | `reasoning_content` len |
+|---|---|---|---|
+| `max_tokens=32` | length | **0** | 118 |
+| `max_tokens=64` | length | **0** | 292 |
+| `max_tokens=2048` | length | **0** | 6,455 |
+| `+ reasoning_effort=none` | length | 289 | 0 |
+| `+ enable_thinking=false` | length | 289 | 0 |
+
+With thinking on — the default — the thinking block consumes **the entire budget at any size**
+and `content` comes back empty with `finish_reason: length`, the answer stranded in a field most
+clients do not render. That is Halogen's answer-room failure, live here.
+
+**How much it actually bites is narrower than it looks.** `big-moe` leaves `maxTokens` unset, so
+pi-ai's 32,768 route default applies rather than a small cap, and ordinary agentic turns finish
+inside it. But 32,768 is the same order as the 32,000-token runaway in Halogen's issue #56, so a
+hard prompt can still spend the whole cap thinking and return nothing.
+
+**And there is a fix, measured.** `--reasoning-budget 4096` on the same prompt:
+
+| request | with the budget |
+|---|---|
+| `max_tokens=8192` | `content` 1,020 chars, `finish=stop` |
+| `max_tokens=16384` | `content` 2,273 chars, `finish=stop` |
+
+It closes the think block at ~4096 tokens, after which the model answers normally and reaches EOS.
+The rows where it does *not* help are the informative ones: at caps of 32/64/2048 the cap ends
+generation first, so **a thinking budget only acts when the caller's cap exceeds it**. 4096 is
+sized for the real route (32,768 default), not for callers sending small caps — llama.cpp has no
+proportional answer room equivalent to Halogen's `max(1024, 15% of max_tokens)`.
+
+Promoted as `...-lazy-direct-reasoning-budget-strixhalo-mtp-v1` (status TESTED_VIABLE). Not
+adopted, and not yet quality-checked: a forced think-block close is an intervention in the
+model's behaviour, not a free correctness fix.
