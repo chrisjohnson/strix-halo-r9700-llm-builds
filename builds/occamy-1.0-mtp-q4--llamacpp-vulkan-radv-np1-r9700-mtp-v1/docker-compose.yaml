@@ -1,0 +1,64 @@
+# Variant of occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2 kept as a catalog entry so the measurement behind it is
+# data rather than a paragraph in a research note. See build.yaml for the
+# measured result and the reason for its status.
+# occamy-1.0-mtp-q4 on the R9700 eGPU instead of the Strix Halo APU.
+#
+# Status: TESTING - NOT yet launched or measured (see build.yaml). Created
+# 2026-09-27 for the two-model topology Chris asked for: flash-next on the
+# APU, occamy on the R9700, both at the model's full 256k context.
+#
+# This is deliberately a MINIMAL port of
+# builds/occamy-1.0-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1 - a "same model,
+# different GPU" baseline, so that any measured difference is attributable to
+# the GPU and nothing else. Two changes only:
+#
+#   1. -dev / --mmproj-device Vulkan1 -> Vulkan0. For the Vulkan RADV builds
+#      Vulkan1 is the APU and Vulkan0 the R9700 (the inverse of this project's
+#      ROCm/HIP builds, where ROCm0 is the APU - see the flash-next rocm714
+#      build's own comment on that). Confirmed independently by the two
+#      R9700 builds already in the catalog, which both say -dev Vulkan0.
+#   2. The host port, 8165 -> 8170 (8100-8199 is the llama.cpp-server range
+#      and 8100-8169 are all taken).
+#
+# Deliberately NOT changed here, because changing them unmeasured would
+# conflate variables - each is a sweep candidate once there is a baseline:
+#
+#   - `-np 1 --kv-unified --kv-unified-per-slot 262144` with `-ctk q8_0
+#     -ctv q8_0` costs ~8.0 GiB of KV against 31.86 GiB of usable R9700 VRAM,
+#     which leaves only ~0.9 GiB of margin over weights + mmproj + buffers.
+#     That is tight enough to be worth measuring rather than trusting.
+#     `-ctk q4_0 -ctv q4_0` would take the same context to ~4.2 GiB and buy
+#     ~4.5 GiB of headroom; dirk already runs q4_0 KV on this same card. See
+#     knowledge/research/2026-09-27-flashnext-occamy-256k-memory-budget.md.
+#   - `--cache-ram 32768` is host RAM, not VRAM, so on the R9700 it competes
+#     with flash-next's page cache on the APU rather than with occamy's own
+#     weights. Whether it should stay at 32 GiB, drop to a small value, or go
+#     to 0 is exactly the kind of tradeoff the sweep should decide (note
+#     dirk runs 24576 and shows ~4.8 MB RSS, so the reservation is lazy).
+#
+# No `com.local-ai-machine.always-up` label: this is not part of the standing
+# set, and choosing the standing set is a Chris-confirmed edit to
+# local-ai-machine's standing-models.txt, not something a new build implies.
+services:
+  occamy-1.0-mtp-q4--llamacpp-vulkan-radv-np1-r9700-mtp-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-np1-r9700-mtp-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/llamacpp-occamy-1.0-mtp-q4:/models:ro
+    - /var/lib/ai-models/occamy-1.0-mmproj:/mmproj:ro
+    command: 'llama-server -m /models/occamy-1.0-mtp-Q4_K_M.gguf -dev Vulkan0
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min
+      0.3 -np 1 --kv-unified --kv-unified-per-slot 262144 -n 8192 -ctk q4_0 -ctv q4_0
+      --cache-ram 32768
+      --mmproj /mmproj/mmproj-occamy-1.0-F16.gguf --mmproj-device Vulkan0
+      --host 0.0.0.0
+      --port 8080 -a occamy-1.0-mtp-q4--llamacpp-vulkan-radv-np1-r9700-mtp-v1 --metrics
+      '
+    ports:
+    - 127.0.0.1:8176:8080

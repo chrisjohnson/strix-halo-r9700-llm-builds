@@ -1,0 +1,31 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazyoff-strixhalo-mtp-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Build v1 with ONE variable changed: `--tensor-read-lazy on` -> `off`, i.e.
+    the ~26.8 GiB n-gram/PLE tensor is made resident instead of demand-paged. Exists to test
+    whether the constant 2.58 ms/token prefill floor is mmap fault overhead on that tensor.
+    It is not - this makes things far worse:
+
+      v1 (lazy on)    326  335  370  372  325
+      lazy off        111  122  172  228  283
+      delta         -66%  -64%  -54%  -39%  -13%
+
+    Available memory stayed at 37 GiB, so unlike the `-ub 8192` entry this is not a hard
+    thrash - the resident table simply competes with the dense weights and KV for the same
+    pool. The deficit shrinking with context (-66% at 1k to -13% at 32k) is the signature of
+    losing a *constant* per-token cost, which is weaker once attention dominates.
+
+    The useful conclusion: the lazy path is worth having, not a tax. So the floor is not mmap
+    fault overhead on the lazy tensor, and the PR #29030-style parallel-`pread` port is not
+    aimed at it. See knowledge/research/2026-09-27-flashnext-prefill-constant-floor.md.
+
+    DO NOT USE. `--tensor-read-lazy on` (build v1) is the standing value.

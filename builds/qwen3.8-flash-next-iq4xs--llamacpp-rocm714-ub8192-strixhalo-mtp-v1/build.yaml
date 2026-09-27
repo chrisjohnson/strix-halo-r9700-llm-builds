@@ -1,0 +1,30 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-ub8192-strixhalo-mtp-v1
+status: TESTED_NOT_VIABLE
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Build v1 with ONE variable changed: `-ub 2048` -> `-ub 8192` (the maximum,
+    equal to `-b`). Kept as a catalog entry because the measurement is the useful part.
+
+    RESULT - a large loss, and NOT a compute result. Prefill tok/s at requested
+    1k/2k/4k/8k/32k, real-corpus prompts, single stream:
+
+      v1 (-ub 2048)   326  335  370  372  325
+      -ub 8192        325  344  245  137  211
+      delta         -0.3% +2.7% -33.8% -63.2% -35.1%
+
+    Available memory fell to **3 GiB** once healthy: a larger ubatch needs much more compute
+    scratch, and from 4k tokens up the working set no longer fits the APU's 124 GiB pool. The
+    neutral-to-slightly-positive 1k/2k points, where there is no memory pressure, are what
+    identify this as a memory effect rather than a kernel regression. Read the tok/s column
+    alone and it looks like the latter.
+
+    DO NOT USE. `-ub 2048` (build v1) is the standing value. See
+    knowledge/research/2026-09-27-flashnext-flag-sweep.md.

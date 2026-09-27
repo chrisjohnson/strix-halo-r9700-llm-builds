@@ -1,0 +1,34 @@
+name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-np1-r9700-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q4_K_M, MTP, vision)
+  params: 35B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-27. occamy on R9700 v2 with the slot count cut from 3 to 1 - the "minimum spill"
+    alternative, kept because the v1/v2 comparison raised the obvious question of how far the
+    host GTT spill should be chased.
+
+    Measured, alone on the R9700:
+
+      np   vram GiB   gtt GiB   total demand
+       1      23.79      0.54           24.33
+       2      26.39      1.04           27.43
+       3      28.99      1.55           30.54   <- v2 ships this
+       4      30.59      3.05           33.64   <- overcommits (31.86 available)
+
+    Throughput at np 1 vs np 3 (both q4_0 KV, co-resident with flash-next):
+      prefill 8k   2208 vs 2189   (+0.9%)
+      prefill 32k  1636 vs 1630   (+0.4%)
+
+    So removing the last ~1 GiB of spill is worth under 1% - inside noise - while giving up
+    two-thirds of the slot count. That is the finding that settles v2's configuration: spill
+    reduction pays only down to about 1.5 GiB and buys nothing below it. v2 stays the
+    recommendation; this entry exists because the negative result is the evidence for that.
+
+    Kept as VIABLE (it runs correctly and well) but not recommended over v2.

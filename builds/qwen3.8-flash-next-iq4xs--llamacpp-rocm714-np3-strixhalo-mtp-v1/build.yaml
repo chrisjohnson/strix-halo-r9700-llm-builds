@@ -1,0 +1,33 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-np3-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Build v1 with the slot count raised to 3 (`-c 786432 --parallel 3`, so
+    `n_ctx_slot` is exactly 262144 - the model's native limit, no `--override-kv` or YaRN).
+    This is the "maximum useful cache" option: three concurrent full-256k slots instead of
+    one. It works and `/props` reports `total_slots = 3`.
+
+      v1 (np 1)   326  335  370  372  325
+      np 3        296  315  375  375  328
+      delta      -9.2% -6.0% +1.4% +0.8% +0.9%
+
+    NOT RECOMMENDED, on memory rather than throughput. Available memory went 37 GiB (np 1)
+    -> 27 idle -> **19 during the ladder**: the two extra slots cost ~10 GiB of the *shared
+    APU pool*, above the ~6.4 GiB the KV alone predicts, because compute buffers scale too.
+    A goal that emphasises a stable experience should not trade a third of the remaining
+    headroom for concurrency a `--parallel 1` loop may never use - especially given how sharp
+    this same sweep shows the cliff to be (`-ub 8192` reached 3 GiB and lost 63%).
+
+    Kept and marked VIABLE rather than NOT_VIABLE because it does work and is a real choice:
+    if concurrent full-context sessions are wanted, this is the build that provides them, at
+    that measured cost. Note the asymmetry with occamy, where np 3 IS kept - occamy runs on
+    the R9700's own VRAM and costs the APU pool only ~1.6 GiB. Same flag, opposite answer,
+    different memory.
