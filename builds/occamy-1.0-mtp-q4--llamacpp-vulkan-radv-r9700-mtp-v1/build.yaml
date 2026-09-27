@@ -1,0 +1,63 @@
+name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q4_K_M, MTP, vision)
+  params: 35B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-27. Created for the two-model topology Chris asked for: qwen3.8-flash-next
+    on the Strix Halo APU and occamy on the R9700 eGPU, both at the model's full
+    262144 context.
+
+    STATUS: NOT YET LAUNCHED OR MEASURED. Nothing in this entry is a measured
+    result. It exists so the build is ready to bring up the moment dsh has docker
+    access (see local-ai-machine commit a1fe57b, which grants `sudo modelctl` plus a
+    temporary docker-group membership but had not been deployed at the time of
+    writing). Do not treat it as validated.
+
+    Deliberately a MINIMAL port of
+    occamy-1.0-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1 - the same model, quant, MTP
+    configuration and KV settings, moved to the other GPU - so that any measured
+    difference is attributable to the GPU alone. Only two things differ, both in
+    docker-compose.yaml: `-dev`/`--mmproj-device` Vulkan1 -> Vulkan0 (Vulkan1 is the
+    APU and Vulkan0 the R9700, the inverse of this project's ROCm/HIP builds), and
+    the host port 8165 -> 8170.
+
+    Why the R9700 at all: it is a discrete PCIe card with its own 32 GiB of GDDR6, so
+    occamy's weights and KV live there and cost the APU's 124 GiB unified pool nothing
+    - which is what makes running both models at full context feasible at all. The
+    earlier conclusion that the pair 165-173 GiB "does not fit" in 124 GiB was wrong
+    because it added the R9700's workload to the APU's pool. Evidence and arithmetic:
+    knowledge/research/2026-09-27-flashnext-occamy-256k-memory-budget.md. dirk holds
+    30.68 GiB of VRAM with a 4.8 MB process RSS, which is the direct proof.
+
+    Known risk, to be measured rather than assumed: at `-np 3` with
+    `--kv-unified-per-slot 262144` and q8_0 KV, occamy's KV alone is ~8.0 GiB. Against
+    31.86 GiB of usable VRAM that is ~31.0 GiB total with weights (20.22 GiB), mmproj
+    (0.84 GiB) and buffers - roughly 0.9 GiB of margin. It may refuse to load or OOM.
+    `-ctk q4_0 -ctv q4_0` would cut that to ~4.2 GiB and leave ~4.5 GiB of headroom;
+    dirk already runs q4_0 KV on this same card without incident. If this build fails
+    to come up, the q4_0 variant is the next candidate, not a retry of this one.
+
+    Sweep plan for this build (each as its own new versioned build, never edited in
+    place, per the standing rule):
+      - `-ctk/-ctv q4_0` vs q8_0 at matched context, measuring VRAM headroom and
+        prefill/decode.
+      - `--cache-ram`: 32768 vs 0. This is host RAM, so on the R9700 it competes with
+        flash-next's page cache on the APU, not with occamy's own weights. dirk runs
+        24576 and shows ~4.8 MB RSS, so the reservation is lazy - which means its real
+        cost is unproven in either direction.
+      - `-np 3` with `--kv-unified-per-slot 262144` (concurrency, matching the APU
+        build) vs `-np 1` (single-stream, ~5.4 GiB less KV).
+      - The MTP settings (`--spec-draft-n-max 2 --spec-draft-p-min 0.3`) were swept on
+        the APU and are inherited unchanged; nothing here re-tests them on the R9700.
+
+    Prefill expectations, for judging the first results: the APU build of this same
+    model measured 94.2 tok/s decode on the APU. The R9700 is a discrete card with its
+    own memory bandwidth, so decode should differ; there is no prior R9700 occamy
+    number to compare against, so the first run is a baseline rather than a check.

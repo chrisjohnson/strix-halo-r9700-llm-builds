@@ -126,6 +126,35 @@ layers and/or the DSA indexer (`attention.indexer.top_k = 2048`, selecting over 
 key set). It is not the lazy/mmapped n-gram table. dirk's independent 32% falloff with no
 PLE table of any kind points the same way.
 
+## At large context realistic text is *faster* than the synthetic text, not slower
+
+The matched-token pairs above stop at 47k. Pushing further needs the two runs compared by
+the *same* method, because the harness's `prompt_per_second` and the server log's cumulative
+rate differ by 5-11% systematically. Both runs below are read from the server's own
+`prompt processing` log, which is identical instrumentation, and matched on actual tokens:
+
+| tokens | synthetic | real corpus | real vs synthetic |
+|---|---|---|---|
+| 32,768 | 360.5 | 363.5 | **+0.8%** |
+| 65,536 | 277.7 | 300.5 | **+8.2%** |
+| 98,304 | 231.6 | 260.4 | **+12.5%** |
+| 114,688 | 215.1 | 246.0 | **+14.3%** |
+
+The real-corpus run carried **34,519 distinct trigrams at 119,040 tokens**; the synthetic
+carried roughly a third of that at the same size. Real text is nonetheless *faster*, and the
+advantage **grows with context**.
+
+This kills the PLE/n-gram reading outright. If gathering 3x more distinct rows from a
+26.8 GiB table cost anything measurable, that table would show up here as a penalty on the
+real text. It shows up as the opposite. Whatever the mechanism behind the small real-text
+advantage is, it is not n-gram row fetching, and the lazy/mmapped path is not where this
+build's prefill time goes.
+
+Corollary for reading old results: the *old* 20-sentence filler genuinely flattered the
+numbers (327 distinct trigrams, ~608 tok/s at 8k). This note's replacement synthetic text
+does not - it sits 1-14% *below* real text at matched token counts, so curves measured with
+it are mildly conservative rather than optimistic.
+
 ## The falloff continues to full context: ~142 tok/s at 250k tokens
 
 A 250,867-token synthetic prefill was run to completion (2026-09-27). The server's own
@@ -154,31 +183,34 @@ at ~201 tok/s, so the second half of the context costs roughly 2.7x what the fir
 That is the real price of the "keep 262144" decision - worth re-checking against the 131k
 alternative now that it is quantified, though it is Chris's call and was already made once.
 
-Caveat: this one curve is synthetic text and a single run. The matched-text comparisons above
-say real text is within ~5% at 5.9k/11.8k/47k, but real text at 251k is still unmeasured -
-the run that would have taken it was aborted once this curve made the answer clear, because
-the pre-fix harness was spending a second full 256k prefill on a "warmup" (see the commit
-fixing that).
+Caveat: this curve is synthetic text and a single run. The matched comparison in the section
+above extends real text to 115k tokens and finds it *faster*, but neither text type has been
+taken to a full 251k on the same footing.
 
 ## Consequence for the planned PR #29030 port
 
 The inherited plan had porting `--lazy-mode on-direct` (parallel `pread` for the n-gram
-rows) as its centrepiece, on the strength of a "+20-32% cold prefill" figure. On the
-evidence above that port is aimed at a component which is **not the bottleneck in the
-measured regime (5.8k-47k tokens)**.
+rows) as its centrepiece, on the strength of a "+20-32% cold prefill" figure. That port is
+aimed at a component this build's own measurements say is **not the bottleneck** — and not
+merely "not proven to be the bottleneck":
 
-It may still pay at 256k, where the PLE working set is several times larger and is
-untested — that measurement has not been taken, and taking it is the prerequisite. But it
-should not be built on the assumption that it is the main lever, and the rebase should not
-start before that number exists. The 2.5x figure circulating for the change is a DGX Spark
-with a table roughly twice this build's size; it is evidence that a real effect exists on
-real text, not a prediction for this box.
+- the falloff is 65% from 8k to 251k tokens **on periodic text, where the n-gram working set
+  never grows**;
+- at matched token counts real text, with 3x more distinct trigrams, is **faster** than that
+  periodic text, and by more (14%) the larger the context;
+- and dirk, which has no PLE table at all, shows a 32% falloff of its own.
+
+Three independent lines point the same way. **Recommendation: do not start the rebase.** The
+2.5x figure circulating for the change is a DGX Spark with a table roughly twice this build's
+size, and it is a real-text number — but on this box the real-text comparison comes out in
+the opposite direction, so there is no basis here for expecting that gain.
 
 What the data points at instead is the attention path: whatever scales with context in the
-12 full-attention layers and the indexer. That is where a lever would have to live to move
-the 26%.
+12 full-attention layers and the DSA indexer. That is where a lever would have to live to
+move the 65%.
 
 ## Cross-check: the context falloff is not a PLE signature at all
+
 dirk (`qwen35`, 65 layers, 16 full-attention, **no PLE/engram table of any kind**) logs its
 own in-flight prefill on the R9700: 873 tok/s at 4k falling to 593 tok/s at 43k — a 32%
 decline. flash-next's recorded ladder showed 31% over 8k->128k. A model with no n-gram
