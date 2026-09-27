@@ -1,7 +1,7 @@
 ---
 id: 2026-09-27-prefill-bench-padding-trap
 date: 2026-09-27
-source: direct measurement on local-ai-machine — llm_decode_bench.py padding-generator and tokenizer-basis audit, live prefill runs against the running qwen3.8-flash-next build, and dirk's own in-flight prefill log on the R9700
+source: direct measurement on local-ai-machine — llm_decode_bench.py padding-generator and tokenizer-basis audit, live prefill runs against the running qwen3.8-flash-next build including a completed 250,867-token prefill, that server's own prompt-processing log, and dirk's in-flight prefill log on the R9700
 tags: [benchmark, llm-inference-bench, prefill, padding, trigram, ple, engram, tokenizer, qwen3.8-flash-next, methodology]
 status: active
 ---
@@ -126,6 +126,40 @@ layers and/or the DSA indexer (`attention.indexer.top_k = 2048`, selecting over 
 key set). It is not the lazy/mmapped n-gram table. dirk's independent 32% falloff with no
 PLE table of any kind points the same way.
 
+## The falloff continues to full context: ~142 tok/s at 250k tokens
+
+A 250,867-token synthetic prefill was run to completion (2026-09-27). The server's own
+`prompt processing` log gives the whole curve rather than one number — these are cumulative
+rates (tokens so far / time so far), so the instantaneous rate is lower still:
+
+| tokens | cumulative tok/s | elapsed |
+|---|---|---|
+| 32,768 | 360.5 | 91s |
+| 65,536 | 277.7 | 236s |
+| 98,304 | 231.6 | 425s |
+| 131,072 | 201.3 | 651s |
+| 163,840 | 180.1 | 910s |
+| 196,608 | 164.1 | 1198s |
+| 229,376 | 151.2 | 1517s |
+| 250,867 | **141.8** | **1769s** |
+
+End to end: **404 tok/s at 5.8k -> 297 at 45k -> 141.8 at 251k**, i.e. **-65%** from 8k-class
+prompts to a full-context one. This is on *periodic* text, where the n-gram working set never
+grows, so it is the structural cost with no text-diversity contribution at all. Treat 142
+tok/s as the prefill rate for a full-context prompt on this build, not the ~600 the recorded
+ladder advertised.
+
+Practically: a full 251k prefill costs 1769s (~30 min). Halving to 131k costs ~651s and runs
+at ~201 tok/s, so the second half of the context costs roughly 2.7x what the first half does.
+That is the real price of the "keep 262144" decision - worth re-checking against the 131k
+alternative now that it is quantified, though it is Chris's call and was already made once.
+
+Caveat: this one curve is synthetic text and a single run. The matched-text comparisons above
+say real text is within ~5% at 5.9k/11.8k/47k, but real text at 251k is still unmeasured -
+the run that would have taken it was aborted once this curve made the answer clear, because
+the pre-fix harness was spending a second full 256k prefill on a "warmup" (see the commit
+fixing that).
+
 ## Consequence for the planned PR #29030 port
 
 The inherited plan had porting `--lazy-mode on-direct` (parallel `pread` for the n-gram
@@ -217,16 +251,14 @@ measurement.
 
 ## Open questions
 
-- **256k is still unmeasured.** Everything here is 5.8k-47k tokens. The PLE working set is
-  several times larger at 256k and the falloff may change character there, so the on-direct
-  port is neither endorsed nor ruled out by this note — it is un-prioritised until that
-  number exists. It needs a freed box (dirk contending for memory bandwidth is a real
-  confound on absolute values, though not on the matched synthetic-vs-real comparisons,
-  which were taken back to back).
-- **What in the attention path costs the 26%?** The leading candidates are the 12
+- **Only synthetic text has been measured at 256k.** The 250k curve above is periodic text.
+  Matched real-vs-synthetic comparisons hold within ~5% at 5.9k/11.8k/47k, so the text
+  component is expected to stay small, but that is an extrapolation, not a measurement. A
+  real-text 250k run is now cheap to take with the warmup and timeout fixes in place
+  (~30 min for the one request, vs ~60 before).
+- **What in the attention path costs the 65%?** The leading candidates are the 12
   full-attention layers and the DSA indexer's top-2048 selection over a growing key set.
-  Separating them is cheap on a freed box: `--prefill-contexts` at matched token counts with
-  the indexer's sparse selection disabled (if the build exposes it), and `-fa on/off`.
-  This is now the highest-value measurement, ahead of the port.
+  Separating them needs flag A/Bs on throwaway instances (`-fa on/off`, indexer toggles at
+  matched token counts). This is now the highest-value measurement, ahead of the port.
 - Whether the 256k KV/cache geometry (see the companion memory-budget note) changes the
   prefill picture once occamy moves to the R9700 and the APU's page cache has more room.
