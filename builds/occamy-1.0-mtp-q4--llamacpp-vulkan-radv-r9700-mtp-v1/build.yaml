@@ -1,5 +1,5 @@
 name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v1
-status: TESTING
+status: TESTED_VIABLE
 derived:
   engine: llamacpp-vulkan-radv-v1
   model: Occamy-1.0 (Q4_K_M, MTP, vision)
@@ -14,11 +14,28 @@ derived:
     on the Strix Halo APU and occamy on the R9700 eGPU, both at the model's full
     262144 context.
 
-    STATUS: NOT YET LAUNCHED OR MEASURED. Nothing in this entry is a measured
-    result. It exists so the build is ready to bring up the moment dsh has docker
-    access (see local-ai-machine commit a1fe57b, which grants `sudo modelctl` plus a
-    temporary docker-group membership but had not been deployed at the time of
-    writing). Do not treat it as validated.
+    STATUS: MISSING ITS VRAM BUDGET - superseded by ...-r9700-mtp-v2 (q4_0 KV).
+    Launched 2026-09-27 and it serves, but it does not fit in VRAM: measured alone on
+    card0, vram_used 30.87 GiB of 31.86 plus gtt_used 3.42 GiB. The GTT figure is host
+    memory reached over PCIe, so ~3.4 GiB of the working set (the KV cache, allocated
+    last and therefore the part that spills) was being served at PCIe latency. That cost
+    is large: v2, identical except for q4_0 KV, prefills +74% (8k) and +52% (32k) faster.
+    Use v2. This entry is kept because it is the recorded measurement the pair exists to
+    document.
+
+    MEASURED (serving alone on the R9700, real-corpus prompts via llm_decode_bench.py):
+      prefill: 8k (9,354 tok) 1,261 tok/s;  32k (35,255 tok) 1,080 tok/s
+      decode:  ctx 0 78.4 tok/s;  ctx 16,384 94.9 tok/s
+    The prediction in knowledge/research/2026-09-27-flashnext-occamy-256k-memory-budget.md
+    was ~31.0 GiB with ~0.9 GiB of margin; the measured demand was ~34.3 GiB, so the
+    estimate was ~2.4 GiB optimistic - compute buffers and the vision mmproj were
+    estimated, not measured.
+
+    OPERATIONAL WARNING, also recorded on v2: the Vulkan backend does NOT fail when VRAM
+    is exhausted, it silently allocates into host GTT. Bringing a second R9700 build up
+    alongside this one produced vram_used 0.99 GiB / gtt_used 29.55 GiB with /health still
+    answering 200 - the entire model over PCIe. Never bring two R9700 builds up at once,
+    and always check card0's vram_used/gtt_used after starting one.
 
     Deliberately a MINIMAL port of
     occamy-1.0-mtp-q4--llamacpp-vulkan-radv-strix-apu-v1 - the same model, quant, MTP

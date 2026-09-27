@@ -1,0 +1,55 @@
+name: occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q4_K_M, MTP, vision)
+  params: 35B
+  active_params: 3B
+  quant: Q4_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-27. RECOMMENDED R9700 BUILD. Same model, quant and flags as
+    ...-r9700-mtp-v1 with exactly one variable changed: `-ctk q4_0 -ctv q4_0`
+    instead of `-ctk q8_0 -ctv q8_0`.
+
+    RESULT - the KV quant is worth far more than the memory saving suggests:
+
+      metric                  v1 (q8_0)   v2 (q4_0)   delta
+      prefill  8k (9,354 tok)      1261        2190   +73.7%
+      prefill 32k (35,255 tok)     1080        1641   +51.9%
+      decode   ctx 0                 78          87   +11%  (noisy, see below)
+      decode   ctx 16,384            95          80   -16%  (noisy, see below)
+
+    VRAM: v1 used 30.87 GiB of 31.86 plus 3.42 GiB of host GTT. v2 uses 28.99 GiB plus
+    1.55 GiB of GTT - total demand down ~3.75 GiB, matching the predicted q8_0 -> q4_0
+    saving of ~3.76 GiB (3 slots x 262144, 10 of 40 layers full-attention, kv_heads=2,
+    head_dim=256) almost exactly. The prefill gain is the PCIe spill coming off the KV
+    cache, which is touched on every token.
+
+    CONTROL, because the first v2 run was taken with flash-next stopped and could have
+    been an environment effect rather than a KV effect: v2 prefill is 2190 alone and 2189
+    with flash-next resident (32k: 1641 vs 1630). flash-next's presence does not move
+    occamy's prefill, so the +74%/+52% is the KV quant. Decode, by contrast, is noisy
+    run-to-run - the two v2 runs disagree in both directions (c0k 79 vs 87, c16k 103 vs
+    80) - so treat prefill as the measured result and decode as needing repeats.
+
+    REMAINING SPILL: v2 still spills 1.55 GiB to GTT, so there is more to win. Untested
+    candidates: fewer slots under `--kv-unified` (3 x 262144 is generous; np 1 would cut
+    KV to ~1.4 GiB), and `--cache-ram` sizing (32768 here; it is host RAM and does not
+    compete with occamy's own VRAM, but on this box it does compete with flash-next's
+    page cache). Neither is tested - do not assume.
+
+    OPERATIONAL WARNING learned while creating this build: the Vulkan backend does NOT
+    fail when VRAM is exhausted, it silently allocates into host GTT. With v1 still
+    running and card0 full, this build came up reading vram_used 0.99 GiB and gtt_used
+    29.55 GiB - almost the whole model over PCIe - and still answered /health 200. Always
+    check card0's vram_used/gtt_used after bringing one of these up, and never bring two
+    R9700 builds up at once.
+
+    Also learned: modelctl --exclusive reads a build's own build.yaml derived.target_gpu.
+    This build initially had only a docker-compose.yaml, so exclusivity could not resolve
+    its GPU and stopped the wrong build (flash-next on the APU) instead of the intended
+    R9700 one, while leaving v1 in place. The build.yaml now exists; do not create R9700
+    builds without it.
