@@ -41,6 +41,15 @@ from rich.text import Text
 
 CHARS_PER_TOKEN = 4
 
+# Cap on the prefill "warmup 2" context. That step exists only to trigger
+# prefill graph/JIT compilation before measurement - it uses a different body
+# from the measured text, so it cannot warm the measured text's pages. At a
+# large --prefill-contexts value an uncapped warmup becomes a second full-size
+# prefill: at a 256k context it cost 1768s on its own (measured 2026-09-27),
+# roughly doubling the prefill phase. Graphs are built per ubatch shape, so a
+# few thousand tokens is enough.
+WARMUP_MAX_CTX = 8192
+
 # Padding text used to synthesise long-context prompts.
 #
 # This was a fixed list of 20 sentences cycled with
@@ -1366,7 +1375,7 @@ async def run_benchmark(args):
             async with client.stream(
                 "POST", f"{base_url}/v1/chat/completions",
                 json=payload,
-                timeout=httpx.Timeout(600.0, connect=30.0),
+                timeout=httpx.Timeout(args.prefill_timeout, connect=30.0),
             ) as resp:
                 async for line in resp.aiter_lines():
                     if not line or not line.startswith("data: "):
@@ -1415,7 +1424,7 @@ async def run_benchmark(args):
         try:
             resp = await client.post(
                 f"{base_url}/v1/chat/completions", json=payload,
-                timeout=httpx.Timeout(1800.0, connect=30.0),
+                timeout=httpx.Timeout(args.prefill_timeout, connect=30.0),
             )
             data = resp.json()
         except Exception:
@@ -1473,7 +1482,15 @@ async def run_benchmark(args):
                 # context's first-touch sample warm, defeating the cold
                 # measurement at exactly the size that is cheapest to re-run
                 # cold. Same token count, different body.
-                warmup_ctx = prefill_contexts[0]
+                #
+                # Capped, because the prefill contexts can be very large. The
+                # only job left here is triggering prefill graph/JIT
+                # compilation, and llama.cpp builds graphs per ubatch shape, so
+                # a few thousand tokens is enough. Uncapped, a 256k prefill
+                # context made this warmup a *second* full 256k prefill -
+                # measured 2026-09-27 at 1768s on its own, roughly doubling the
+                # prefill phase for nothing.
+                warmup_ctx = min(prefill_contexts[0], WARMUP_MAX_CTX)
                 warmup_prefix = f"[WARMUP_{run_id}] "
                 warmup_text = warmup_prefix + generate_padding_text(
                     warmup_ctx, seed=f"{args.padding_seed}:warmup"
@@ -1616,7 +1633,9 @@ async def run_benchmark(args):
                         await client.post(
                             f"{base_url}/v1/chat/completions",
                             json=warmup_payload,
-                            timeout=httpx.Timeout(600.0, connect=30.0),
+                            # Full-context request: the same timeout the
+                            # prefill phase needs, not a fixed 600s.
+                            timeout=httpx.Timeout(args.prefill_timeout, connect=30.0),
                         )
                     except Exception:
                         pass
@@ -1960,6 +1979,14 @@ def parse_args():
              "later samples are warm re-prefills; both are reported. 0 = default "
              "(3 below 8k, else 2). Set 1 to restore the old single-cold-sample "
              "behaviour at the cost of losing the cold/warm comparison."
+    )
+    parser.add_argument(
+        "--prefill-timeout", type=float, default=7200.0, metavar="SECONDS",
+        help="Read timeout for a single prefill request (default: 7200). Must cover the "
+             "slowest request in the matrix or the measurement silently degrades: a "
+             "250k-token prefill measured 1768s on this box on 2026-09-27, so the old "
+             "hardcoded 1800s left ~2%% of margin and the 600s TTFT fallback could not "
+             "cover it at all."
     )
     parser.add_argument(
         "--padding-seed", default="bench",
