@@ -2,6 +2,10 @@
 
 ## What this repo is
 
+**Start with `PLAN.md`** — the running plan and recovery document for the current
+tuning campaign: live state, decisions already made, dead ends already explored, the
+plan, and the expensive mistakes already made.
+
 The model-engine build catalog, `modelctl`, and the benchmark orchestrator for
 `local-ai-machine`. See `README.md` for the full layout; see `builds/README.md` for the
 per-build compose-file conventions. This repo is vendored into `local-ai-machine` as a
