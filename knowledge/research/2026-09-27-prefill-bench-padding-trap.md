@@ -1,8 +1,8 @@
 ---
 id: 2026-09-27-prefill-bench-padding-trap
 date: 2026-09-27
-source: direct measurement on local-ai-machine (llm_decode_bench.py padding-generator audit + one live run against the running qwen3.8-flash-next build)
-tags: [benchmark, llm-inference-bench, prefill, padding, trigram, ple, engram, qwen3.8-flash-next, methodology]
+source: direct measurement on local-ai-machine — llm_decode_bench.py padding-generator and tokenizer-basis audit, live prefill runs against the running qwen3.8-flash-next build, and dirk's own in-flight prefill log on the R9700
+tags: [benchmark, llm-inference-bench, prefill, padding, trigram, ple, engram, tokenizer, qwen3.8-flash-next, methodology]
 status: active
 ---
 
@@ -54,20 +54,63 @@ indexer (`attention.indexer.top_k = 2048` selecting over a growing key set). Thi
 does not claim to have identified that cost; it claims the old ladder does not identify
 it either, and that re-measuring on realistic text is a prerequisite to attributing it.
 
-## How much the filler flattered the numbers
+## The tokenizer basis bug — and why the first estimate here was wrong
 
-A first live run against the running flash-next server with the new generator
-(8k/16k only, single stream, cold+warm):
+A first attempt to size the effect compared synthetic with real-corpus text at the same
+*requested* context and reported a 43-61% penalty. **That was mostly an artifact of the
+harness, and the correction is recorded rather than quietly dropped.**
 
-| context | old filler (2026-08-30) | new diverse text (2026-09-27) | delta |
+`tok_per_sec` was `requested_ctx / prefill_time`, and `requested_ctx` is a *character*
+budget (`ctx * CHARS_PER_TOKEN`, `CHARS_PER_TOKEN = 4`) — not a token count. Asked to
+tokenize the real texts, the live server reported:
+
+| requested ctx | text | chars | **actual tokens** | actual chars/token |
+|---|---|---|---|---|
+| 8192 | synthetic | 32,768 | 5,608 | 5.84 |
+| 8192 | real corpus | 32,768 | 9,211 | 3.56 |
+| 16384 | synthetic | 65,536 | 11,230 | 5.84 |
+| 16384 | real corpus | 65,536 | 25,079 | **2.61** |
+
+A "16384-token" request was 11,230 tokens of one text and 25,079 of the other — 2.2x
+apart. Dividing by the requested number made the two incomparable and inflated every
+rate, including the historical ones: the recorded ladder's "608 tok/s at 8k" is really
+~430 tok/s over 5,798 real tokens.
+
+Fixed by reading the server's own `timings` block (`prompt_n`, `prompt_ms`,
+`prompt_per_second`) from a non-streaming request with `cache_prompt: false`. Without that
+flag a repeat of the same prefix scores as a near-zero-token prefill at a meaningless
+rate. Results now carry `prompt_tokens` and a `tok_basis` field — `server`, or
+`requested-ctx` for engines that report no timings and so fall back to the old,
+wrong-by-up-to-2x path.
+
+## The corrected magnitude: ~3-5%, not 43-61%
+
+With real token counts, and corpus windows sized to land on matching token counts
+(single stream, cold+warm, same session, same box state):
+
+| actual tokens | synthetic tok/s | real corpus tok/s | delta |
 |---|---|---|---|
-| 8k | 608-611 | 583 | -4.1% |
-| 16k | 596-598 | 562 | -5.9% |
+| ~5.8k (5,798 vs 5,912) | 404 | 382 | **-5.4%** |
+| ~11.7k (11,419 vs 11,933) | 388 | 375 | **-3.4%** |
 
-Caveat, stated plainly: these are different days on a box whose other resident models
-changed between them, so treat the magnitude as indicative and the *direction* as the
-finding. The gap should widen with context, since distinct-trigram count grows with
-context under the new generator and was pinned under the old one.
+Cold and warm again agree to within ~1-2% on both text types.
+
+**What this does not settle.** Production runs at 262k tokens, and that is precisely where
+the two text types diverge most: at 256k the synthetic generator yields 17,610 distinct
+trigrams against 127,235 for real text (a 7.2x gap), while at ~12k tokens the gap is far
+smaller. The 256k regime is *unmeasured* — those runs are slow and the box was contended.
+The honest statement: the repeated-filler problem is real and is now fixed in the harness,
+but **its magnitude at production context lengths is still unknown**, and must be measured
+on a freed box with real text. Do not port anything on the strength of the 43-61% figure.
+
+## Cross-check: the context falloff is not a PLE signature at all
+
+dirk (`qwen35`, 65 layers, 16 full-attention, **no PLE/engram table of any kind**) logs its
+own in-flight prefill on the R9700: 873 tok/s at 4k falling to 593 tok/s at 43k — a 32%
+decline. flash-next's recorded ladder showed 31% over 8k->128k. A model with no n-gram
+table degrades at least as steeply, which independently confirms the argument from the
+trigram data: the context-dependent prefill falloff is a generic attention/KV-scaling
+effect, not evidence of an n-gram-table bottleneck.
 
 ## Also found: the bench misdetects a llama.cpp server as SGLang
 
@@ -105,11 +148,18 @@ measurement.
   Previously `repeats` was `1` for every context >= 8k: a cold number with nothing to
   compare it against. `tok_per_sec` is retained as the blended headline so existing
   result files and dashboards keep working.
+- Prefill rates now come from the server's own `timings` (`measure_prefill_server()`),
+  with `cache_prompt: false` so the prompt is genuinely reprocessed. This removed the
+  `CHARS_PER_TOKEN` assumption described above. TTFT remains the fallback for engines
+  that report no timings, and `tok_basis` records which path produced a number.
 
 ## Open questions
 
-- The re-measured 8k-256k ladder on realistic text, cold and warm, is not yet taken. That
-  is the number the on-direct port should be judged against.
+- The 8k-256k ladder on realistic text, cold and warm, is not yet taken — and that is the
+  regime where the two text types diverge most (7.2x distinct trigrams at 256k vs far less
+  at 12k). It is the number the on-direct port should be judged against, and it needs a
+  freed box. Do not size that port from any figure in this note.
 - Whether the context-scaling prefill cost is dominated by the full-attention layers or
   the indexer is untested. `--prefill-contexts` with `-fa`/indexer A/Bs on throwaway
-  instances would separate them.
+  instances would separate them. dirk's 32% falloff with no PLE table makes the
+  attention/indexer side the leading candidate, not the n-gram tables.

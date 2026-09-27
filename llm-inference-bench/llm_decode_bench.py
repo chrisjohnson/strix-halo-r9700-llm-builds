@@ -1362,6 +1362,56 @@ async def run_benchmark(args):
             pass
         return time.monotonic() - t0
 
+    async def measure_prefill_server(client, messages):
+        """Authoritative prefill measurement for llama.cpp-family servers.
+
+        Returns dict(prompt_tokens, seconds, tok_per_sec, cached_tokens) or
+        None when the server reports no `timings` block (SGLang/vLLM/Ollama).
+
+        This exists because the TTFT path divides the *requested* context by
+        the measured time, which silently assumes CHARS_PER_TOKEN holds for
+        the text in use. It does not: measured against the live server,
+        synthetic prose came out at 5.84 chars/token but this repo's own
+        source at 2.61, so a "16384-token" request was really 11,230 tokens
+        of one text and 25,079 of the other. Reporting a rate against the
+        requested number made the two incomparable, wrong by up to 2.2x.
+
+        `cache_prompt: false` forces the server to reprocess the whole
+        prompt, so `prompt_n` is the real prefill and `cache_n` should be 0 -
+        without it a repeat of the same prefix scores as a ~0-token prefill
+        at a meaningless rate.
+        """
+        payload = {
+            "model": args.model,
+            "messages": messages,
+            "max_tokens": 1,
+            "stream": False,
+            "cache_prompt": False,
+        }
+        try:
+            resp = await client.post(
+                f"{base_url}/v1/chat/completions", json=payload,
+                timeout=httpx.Timeout(1800.0, connect=30.0),
+            )
+            data = resp.json()
+        except Exception:
+            return None
+        timings = data.get("timings")
+        if not isinstance(timings, dict):
+            return None
+        prompt_n = timings.get("prompt_n") or 0
+        prompt_ms = timings.get("prompt_ms") or 0
+        if prompt_n <= 0 or prompt_ms <= 0:
+            return None
+        seconds = prompt_ms / 1000.0
+        return {
+            "prompt_tokens": prompt_n,
+            "cached_tokens": timings.get("cache_n") or 0,
+            "usage_prompt_tokens": (data.get("usage") or {}).get("prompt_tokens") or 0,
+            "seconds": seconds,
+            "tok_per_sec": timings.get("prompt_per_second") or (prompt_n / seconds),
+        }
+
     async with httpx.AsyncClient(limits=limits) as client:
         with Live(build_display(state), refresh_per_second=2, console=console) as live:
 
@@ -1439,6 +1489,7 @@ async def run_benchmark(args):
                     repeats = args.prefill_repeats if args.prefill_repeats > 0 else (3 if ctx < REPEAT_THRESHOLD else 2)
                     repeats = max(repeats, 1)
                     ttft_samples = []
+                    server_samples = []
                     for r in range(repeats):
                         if r == 0:
                             msgs = build_messages(ctx, context_cache[ctx])
@@ -1447,21 +1498,51 @@ async def run_benchmark(args):
                             orig_prefix_len = len(f"[BENCH_{run_id}_CTX_{ctx}] ")
                             variant_text = prefix + context_cache[ctx][orig_prefix_len:]
                             msgs = build_messages(ctx, variant_text)
-                        t = await measure_ttft(client, msgs)
-                        ttft_samples.append(t)
+                        s = await measure_prefill_server(client, msgs)
+                        if s is not None:
+                            server_samples.append(s)
+                        else:
+                            ttft_samples.append(await measure_ttft(client, msgs))
 
-                    raw_ttft = median(ttft_samples)
-                    prefill_time = max(raw_ttft - baseline_ttft, 0.001)
-                    tok_per_sec = ctx / prefill_time
-
-                    first_ttft = ttft_samples[0]
-                    first_prefill = max(first_ttft - baseline_ttft, 0.001)
-                    if len(ttft_samples) > 1:
-                        warm_ttft = median(ttft_samples[1:])
-                        warm_prefill = max(warm_ttft - baseline_ttft, 0.001)
+                    if server_samples:
+                        # Preferred: the server reported real prompt token
+                        # counts, so the rate is correct for whatever text is
+                        # in use instead of assuming CHARS_PER_TOKEN.
+                        rates = [s["tok_per_sec"] for s in server_samples]
+                        times = [s["seconds"] for s in server_samples]
+                        tok_per_sec = median(rates)
+                        prefill_time = median(times)
+                        raw_ttft = prefill_time
+                        first_touch_tok_per_sec = server_samples[0]["tok_per_sec"]
+                        first_touch_ttft = server_samples[0]["seconds"]
+                        warm_tok_per_sec = median(rates[1:]) if len(rates) > 1 else None
+                        warm_ttft = median(times[1:]) if len(times) > 1 else None
+                        prompt_tokens = server_samples[0]["prompt_tokens"]
+                        cached_tokens = max(s["cached_tokens"] for s in server_samples)
+                        usage_prompt_tokens = server_samples[0]["usage_prompt_tokens"]
+                        tok_basis = "server"
+                        n_samples = len(server_samples)
                     else:
-                        warm_ttft = None
-                        warm_prefill = None
+                        # Fallback (SGLang/vLLM/Ollama): no timings block, so
+                        # the requested context stands in for the token count.
+                        # `tok_basis` records that, because it is wrong by up
+                        # to ~2x for token-dense text.
+                        raw_ttft = median(ttft_samples)
+                        prefill_time = max(raw_ttft - baseline_ttft, 0.001)
+                        tok_per_sec = ctx / prefill_time
+                        first_touch_ttft = ttft_samples[0]
+                        first_touch_tok_per_sec = ctx / max(first_touch_ttft - baseline_ttft, 0.001)
+                        if len(ttft_samples) > 1:
+                            warm_ttft = median(ttft_samples[1:])
+                            warm_tok_per_sec = ctx / max(warm_ttft - baseline_ttft, 0.001)
+                        else:
+                            warm_ttft = None
+                            warm_tok_per_sec = None
+                        prompt_tokens = 0
+                        cached_tokens = 0
+                        usage_prompt_tokens = 0
+                        tok_basis = "requested-ctx"
+                        n_samples = len(ttft_samples)
 
                     state.prefill_results[ctx] = {
                         "ttft": raw_ttft,
@@ -1469,11 +1550,16 @@ async def run_benchmark(args):
                         "tok_per_sec": tok_per_sec,
                         "baseline": baseline_ttft,
                         # Additive cold/warm split - see the repeats comment.
-                        "samples": len(ttft_samples),
-                        "first_touch_ttft": first_ttft,
-                        "first_touch_tok_per_sec": ctx / first_prefill,
+                        "samples": n_samples,
+                        "first_touch_ttft": first_touch_ttft,
+                        "first_touch_tok_per_sec": first_touch_tok_per_sec,
                         "warm_ttft": warm_ttft,
-                        "warm_tok_per_sec": (ctx / warm_prefill) if warm_prefill else None,
+                        "warm_tok_per_sec": warm_tok_per_sec,
+                        # Real prompt token count + which basis the rate is on.
+                        "prompt_tokens": prompt_tokens,
+                        "cached_tokens": cached_tokens,
+                        "usage_prompt_tokens": usage_prompt_tokens,
+                        "tok_basis": tok_basis,
                     }
 
                     state.cell_running = False
@@ -1573,6 +1659,12 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
         pt = Table(title=f"Prefill Speed (C=1, baseline TTFT={baseline:.3f}s subtracted)",
                    border_style="magenta")
         pt.add_column("Context", style="bold cyan")
+        # Real prompt token count as the server counted it. The "Context"
+        # column is what was *requested*; when tok_basis is "requested-ctx"
+        # these differ and the rate is only as good as the text's actual
+        # tokens-per-char (see measure_prefill_server).
+        pt.add_column("tokens", justify="right")
+        pt.add_column("basis", justify="right")
         pt.add_column("TTFT (s)", justify="right")
         pt.add_column("Prefill (s)", justify="right")
         pt.add_column("Prefill tok/s", justify="right")
@@ -1585,8 +1677,11 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
             pr = prefill_results[ctx]
             cold = pr.get("first_touch_tok_per_sec")
             warm = pr.get("warm_tok_per_sec")
+            tokens = pr.get("prompt_tokens") or 0
             pt.add_row(
                 format_context(ctx),
+                f"{tokens:,}" if tokens else "?",
+                pr.get("tok_basis", "?"),
                 f"{pr['ttft']:.2f}",
                 f"{pr.get('prefill_time', pr['ttft']):.2f}",
                 f"{pr['tok_per_sec']:,.0f}",
@@ -1702,6 +1797,14 @@ def save_results(results: list, args, filepath: str, prefill_results: dict = Non
             if pr.get("warm_tok_per_sec") is not None:
                 entry["warm_tok_per_sec"] = round(pr["warm_tok_per_sec"], 0)
                 entry["warm_ttft_seconds"] = round(pr["warm_ttft"], 3)
+            # Real prompt token count and the basis the rate is on. On
+            # "server" these come from the server's own timings; on
+            # "requested-ctx" the token count is unknown and the rate assumed
+            # CHARS_PER_TOKEN, which is wrong by up to ~2x for dense text.
+            if pr.get("prompt_tokens"):
+                entry["prompt_tokens"] = pr["prompt_tokens"]
+                entry["cached_tokens"] = pr.get("cached_tokens", 0)
+            entry["tok_basis"] = pr.get("tok_basis", "requested-ctx")
             prefill_summary[str(ctx)] = entry
 
     # target_launch_config: written by the orchestrator (docker inspect +
