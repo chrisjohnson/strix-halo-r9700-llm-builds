@@ -343,6 +343,30 @@ def _corpus_slice(corpus: str, target_chars: int, seed) -> str:
     return (corpus * reps)[:target_chars]
 
 
+def trigram_stats(text: str) -> dict:
+    """Distinct vs total word trigrams in `text`.
+
+    Recorded with every prefill result so a result file documents its own
+    coverage instead of leaving it to be inferred from whatever generated the
+    text. It matters because qwen3.8-flash-next's ~26.8 GiB PLE table is keyed
+    on 3-grams: a periodic prompt pins the distinct count (the old 20-sentence
+    generator sat at 327 at every length) while a real corpus grows it with
+    length. Two numbers that look comparable can therefore exercise that table
+    by 100x different amounts - see knowledge/research/
+    2026-09-27-prefill-bench-padding-trap.md.
+    """
+    words = text.split()
+    total = max(len(words) - 2, 0)
+    if total == 0:
+        return {"trigram_total": 0, "trigram_distinct": 0, "trigram_distinct_ratio": 0.0}
+    distinct = len({(words[i], words[i + 1], words[i + 2]) for i in range(total)})
+    return {
+        "trigram_total": total,
+        "trigram_distinct": distinct,
+        "trigram_distinct_ratio": round(distinct / total, 4),
+    }
+
+
 def build_messages(context_tokens: int, context_text: str) -> list:
     messages = []
     if context_tokens > 0 and context_text:
@@ -1560,6 +1584,11 @@ async def run_benchmark(args):
                         "cached_tokens": cached_tokens,
                         "usage_prompt_tokens": usage_prompt_tokens,
                         "tok_basis": tok_basis,
+                        # What the *text* was, not just how long: the PLE
+                        # table is keyed on 3-grams, so this is the coverage
+                        # that decides whether a prefill number is measuring
+                        # that table at all.
+                        **trigram_stats(context_cache[ctx]),
                     }
 
                     state.cell_running = False
@@ -1658,26 +1687,32 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
         baseline = next(iter(prefill_results.values()), {}).get("baseline", 0)
         pt = Table(title=f"Prefill Speed (C=1, baseline TTFT={baseline:.3f}s subtracted)",
                    border_style="magenta")
-        pt.add_column("Context", style="bold cyan")
-        # Real prompt token count as the server counted it. The "Context"
-        # column is what was *requested*; when tok_basis is "requested-ctx"
-        # these differ and the rate is only as good as the text's actual
-        # tokens-per-char (see measure_prefill_server).
+        pt.add_column("ctx", style="bold cyan")
+        # Real prompt token count as the server counted it. The "ctx" column is
+        # what was *requested*; when tok_basis is "requested-ctx" these differ
+        # and the rate is only as good as the text's actual tokens-per-char
+        # (see measure_prefill_server).
         pt.add_column("tokens", justify="right")
         pt.add_column("basis", justify="right")
-        pt.add_column("TTFT (s)", justify="right")
-        pt.add_column("Prefill (s)", justify="right")
-        pt.add_column("Prefill tok/s", justify="right")
+        pt.add_column("ttft s", justify="right")
+        pt.add_column("prefill s", justify="right")
+        pt.add_column("tok/s", justify="right")
         # Cold (first-touch) vs warm (repeat) - the columns that actually
-        # discriminate a lazy-read change. `Prefill tok/s` remains the blended
-        # headline for continuity with existing result files.
-        pt.add_column("cold tok/s", justify="right")
-        pt.add_column("warm tok/s", justify="right")
+        # discriminate a lazy-read change. `tok/s` remains the blended headline
+        # for continuity with existing result files.
+        pt.add_column("cold", justify="right")
+        pt.add_column("warm", justify="right")
+        # Distinct 3-grams in the prompt: whether this result measured the
+        # PLE/ngram table at all. A periodic prompt pins this; real text grows
+        # it. Two runs with the same "tokens" column and wildly different
+        # values here are not comparable.
+        pt.add_column("3g dist", justify="right")
         for ctx in sorted(prefill_results.keys()):
             pr = prefill_results[ctx]
             cold = pr.get("first_touch_tok_per_sec")
             warm = pr.get("warm_tok_per_sec")
             tokens = pr.get("prompt_tokens") or 0
+            tg = pr.get("trigram_distinct")
             pt.add_row(
                 format_context(ctx),
                 f"{tokens:,}" if tokens else "?",
@@ -1687,6 +1722,7 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
                 f"{pr['tok_per_sec']:,.0f}",
                 f"{cold:,.0f}" if cold is not None else "n/a",
                 f"{warm:,.0f}" if warm is not None else "n/a",
+                f"{tg:,}" if tg is not None else "?",
             )
         console.print(pt)
         console.print()
@@ -1805,6 +1841,12 @@ def save_results(results: list, args, filepath: str, prefill_results: dict = Non
                 entry["prompt_tokens"] = pr["prompt_tokens"]
                 entry["cached_tokens"] = pr.get("cached_tokens", 0)
             entry["tok_basis"] = pr.get("tok_basis", "requested-ctx")
+            # Text coverage, so a result states whether it exercised the
+            # 3-gram/PLE table at all.
+            if "trigram_distinct" in pr:
+                entry["trigram_distinct"] = pr["trigram_distinct"]
+                entry["trigram_total"] = pr["trigram_total"]
+                entry["trigram_distinct_ratio"] = pr["trigram_distinct_ratio"]
             prefill_summary[str(ctx)] = entry
 
     # target_launch_config: written by the orchestrator (docker inspect +
