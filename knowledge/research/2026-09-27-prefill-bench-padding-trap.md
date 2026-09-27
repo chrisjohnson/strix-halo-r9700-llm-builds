@@ -83,25 +83,66 @@ rate. Results now carry `prompt_tokens` and a `tok_basis` field — `server`, or
 `requested-ctx` for engines that report no timings and so fall back to the old,
 wrong-by-up-to-2x path.
 
-## The corrected magnitude: ~3-5%, not 43-61%
+## The corrected picture: context length costs 23-26%, text diversity costs nothing
 
-With real token counts, and corpus windows sized to land on matching token counts
-(single stream, cold+warm, same session, same box state):
+All points below are authoritative (server `timings`, `cache_prompt: false`, real token
+counts), single stream, one session, one box state, cold+warm:
 
-| actual tokens | synthetic tok/s | real corpus tok/s | delta |
+| text | actual tokens | tok/s |
+|---|---|---|
+| synthetic | 5,798 | 404 |
+| real corpus | 5,912 | 382 |
+| synthetic | 11,419 | 388 |
+| real corpus | 11,933 | 375 |
+| real corpus | 35,300 | 330 |
+| synthetic | 45,045 | 297 |
+| real corpus | 47,458 | 307 |
+
+Matched-token pairs:
+
+| ~tokens | synthetic | real corpus | real vs synthetic |
 |---|---|---|---|
-| ~5.8k (5,798 vs 5,912) | 404 | 382 | **-5.4%** |
-| ~11.7k (11,419 vs 11,933) | 388 | 375 | **-3.4%** |
+| 5.85k | 404 | 382 | **-5.4%** |
+| 11.7k | 388 | 375 | **-3.4%** |
+| 46k | 297 | 307 | **+3.4%** |
 
-Cold and warm again agree to within ~1-2% on both text types.
+So text diversity is within noise (about +/-5%) across an 8x span of token counts, and at
+~46k tokens the real text carries roughly 3x more distinct trigrams than the synthetic yet
+is, if anything, slightly *faster*. Cold and warm agree to within 1-2% at every point.
 
-**What this does not settle.** Production runs at 262k tokens, and that is precisely where
-the two text types diverge most: at 256k the synthetic generator yields 17,610 distinct
-trigrams against 127,235 for real text (a 7.2x gap), while at ~12k tokens the gap is far
-smaller. The 256k regime is *unmeasured* — those runs are slow and the box was contended.
-The honest statement: the repeated-filler problem is real and is now fixed in the harness,
-but **its magnitude at production context lengths is still unknown**, and must be measured
-on a freed box with real text. Do not port anything on the strength of the 43-61% figure.
+Context length, by contrast, is large and consistent — **and the falloff is measured
+entirely on periodic text**, where the n-gram working set never grows:
+
+| | 5,798 tok | 11,419 tok | 45,045 tok |
+|---|---|---|---|
+| synthetic tok/s | 404 | 388 | 297 |
+| vs 5.8k | — | -4% | **-26.5%** |
+
+This is the finding that should redirect the work. A **26% prefill falloff occurs with the
+n-gram/PLE working set held constant at a few thousand rows** — text-driven row fetching
+cannot produce that — while enlarging that working set ~3x at the same token count produces
+no measurable cost at all. The context-scaling cost is structural: the 12 full-attention
+layers and/or the DSA indexer (`attention.indexer.top_k = 2048`, selecting over a growing
+key set). It is not the lazy/mmapped n-gram table. dirk's independent 32% falloff with no
+PLE table of any kind points the same way.
+
+## Consequence for the planned PR #29030 port
+
+The inherited plan had porting `--lazy-mode on-direct` (parallel `pread` for the n-gram
+rows) as its centrepiece, on the strength of a "+20-32% cold prefill" figure. On the
+evidence above that port is aimed at a component which is **not the bottleneck in the
+measured regime (5.8k-47k tokens)**.
+
+It may still pay at 256k, where the PLE working set is several times larger and is
+untested — that measurement has not been taken, and taking it is the prerequisite. But it
+should not be built on the assumption that it is the main lever, and the rebase should not
+start before that number exists. The 2.5x figure circulating for the change is a DGX Spark
+with a table roughly twice this build's size; it is evidence that a real effect exists on
+real text, not a prediction for this box.
+
+What the data points at instead is the attention path: whatever scales with context in the
+12 full-attention layers and the indexer. That is where a lever would have to live to move
+the 26%.
 
 ## Cross-check: the context falloff is not a PLE signature at all
 dirk (`qwen35`, 65 layers, 16 full-attention, **no PLE/engram table of any kind**) logs its
@@ -176,11 +217,16 @@ measurement.
 
 ## Open questions
 
-- The 8k-256k ladder on realistic text, cold and warm, is not yet taken — and that is the
-  regime where the two text types diverge most (7.2x distinct trigrams at 256k vs far less
-  at 12k). It is the number the on-direct port should be judged against, and it needs a
-  freed box. Do not size that port from any figure in this note.
-- Whether the context-scaling prefill cost is dominated by the full-attention layers or
-  the indexer is untested. `--prefill-contexts` with `-fa`/indexer A/Bs on throwaway
-  instances would separate them. dirk's 32% falloff with no PLE table makes the
-  attention/indexer side the leading candidate, not the n-gram tables.
+- **256k is still unmeasured.** Everything here is 5.8k-47k tokens. The PLE working set is
+  several times larger at 256k and the falloff may change character there, so the on-direct
+  port is neither endorsed nor ruled out by this note — it is un-prioritised until that
+  number exists. It needs a freed box (dirk contending for memory bandwidth is a real
+  confound on absolute values, though not on the matched synthetic-vs-real comparisons,
+  which were taken back to back).
+- **What in the attention path costs the 26%?** The leading candidates are the 12
+  full-attention layers and the DSA indexer's top-2048 selection over a growing key set.
+  Separating them is cheap on a freed box: `--prefill-contexts` at matched token counts with
+  the indexer's sparse selection disabled (if the build exposes it), and `-fa on/off`.
+  This is now the highest-value measurement, ahead of the port.
+- Whether the 256k KV/cache geometry (see the companion memory-budget note) changes the
+  prefill picture once occamy moves to the R9700 and the APU's page cache has more room.
