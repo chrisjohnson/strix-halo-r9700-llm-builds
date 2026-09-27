@@ -225,7 +225,29 @@ All under `knowledge/research/`. The ones that bear on current decisions:
 Ranges are two measured runs, not an error bar. Attribution: `GGML_HIP_GDN_CHUNK=1`
 +7.4–10.7%; `ROCBLAS_USE_HIPBLASLT=1` +4.6–9.5%; PR #29030 +21.9–29.1% on top of those.
 
-**Decode is not claimed** — the noise floor is 8–11%.
+**Standard bench** (the catalog's own metric, runs 161–163 — `llm-inference-bench`, the same
+harness as the rest of the catalog):
+
+| build | prefill mean (8k→128k) | vs v1 | decode (comparable cells) | vs v1 |
+|---|---|---|---|---|
+| v1 | 538 tok/s | — | 16.3 aggregate / 8.11 per-request | — |
+| v3 | 583 tok/s | +8.3% | 16.6 / 7.89 | +2.2% |
+| **lazy-direct (port)** | **704 tok/s** | **+30.9%** | **22.4 / 10.14** | **+37.8% / +25%** |
+
+Prefill is monotone and consistent at every rung (8k 614→786, 128k 422→525), so it is quotable.
+The port also improves **decode** — not expected when it was promoted, but the PLE gather runs
+on every token, not only during prefill, so removing the fault serialisation helps both.
+
+**Two cells per build had to be excluded** and the reason generalises: cells (32768,c4) for v1
+and (65536,c2) for the port report 81.2 and 113.9 tok/s, 4–7x their neighbours, because their
+`ttft_avg` is ~40 s against ~0.18 s — they contain a **cold prefill where every other cell is a
+prompt-cache hit**. Including them makes the port look like +38% and v3 like **−18.2%**, i.e. a
+headline built from two cells. The exclusion test (`ttft_avg < 5 s`) is stated so it is
+reproducible. **Check `ttft_avg` before trusting any cell in this catalog.**
+
+Decode caveat: the container's bench tool is the pre-fix build (no fixed sampling seed), so
+cell-level decode is worth ±5 points; prefill is unaffected because the padded prompt makes it
+a fixed workload.
 
 **Page-cache warmth was controlled**, not assumed: v3 re-measured on a warm cache gave
 374/407/356 against its earlier 387/416/361, so it gains nothing from warmth, while the port

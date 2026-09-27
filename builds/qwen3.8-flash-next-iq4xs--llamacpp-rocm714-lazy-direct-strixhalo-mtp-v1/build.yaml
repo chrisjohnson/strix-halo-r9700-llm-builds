@@ -63,6 +63,37 @@ derived:
     that still reads the mapping) and the PR is worth 22-29% on top of it. The port was
     cheaper than expected too - 19 of 21 files applied cleanly and the rest were offsets.
 
+
+    STANDARD BENCH (llm-inference-bench, run 163, 2026-09-27T200004Z) - the catalog's own
+    metric, which corroborates the custom prefill ladder above on the harness the rest of the
+    catalog uses:
+
+      prefill   8k     16k     32k     64k    128k    mean
+      v1       614     597     559     498     422     538
+      v3       665     651     609     538     451     583   (+8.3% vs v1)
+      port     786     797     753     660     525     704   (+30.9% vs v1)
+
+    Monotone and consistent at every rung, which is why it is quotable.
+
+    Decode also improves, which was NOT expected when this build was promoted - the PLE gather
+    runs on every token, not just during prefill, so removing the mmap fault serialisation
+    helps decode too. Mean over the structurally comparable cells: aggregate +37.8%, and the
+    more conservative per-request metric +25%; the port is faster in 12 of 14 such cells.
+
+    TWO CELLS PER BUILD HAD TO BE EXCLUDED, and the reason matters for anyone reading raw
+    results. Cells at (32768, c4) for v1 and (65536, c2) for the port report aggregate rates of
+    81.2 and 113.9 tok/s - 4-7x their neighbours. They are not fast cells; they are
+    STRUCTURALLY DIFFERENT cells. Their ttft_avg is ~40 s against ~0.18 s for every other cell,
+    i.e. they contain a cold prefill where the rest are prompt-cache hits. Including them
+    inflates the port's decode mean to +38% and DEPRESSES v3's to -18.2%, which is how a
+    headline number gets built out of two cells. Excluded, with the ttft_avg test stated so the
+    exclusion is reproducible rather than hand-picked.
+
+    CAVEAT on the decode figure: the container's bench tool is the pre-fix build (no fixed
+    sampling seed), so cell-level output lengths vary run to run. A systematic +25-38% across
+    12 of 14 cells is unlikely to be sampling luck, but decode here is worth +-5 points and a
+    confirmation run with the fixed-seed tool would firm it up.
+
     NOT ADOPTED: v1 still runs 8152 and is still what litellm's `big-moe` role points at.
     Adopting this means repointing that role to 127.0.0.1:8178 or changing the standing
     build - Chris's call per AGENTS.md. It is a genuine change of engine, not a flag, so it
