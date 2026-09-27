@@ -62,13 +62,33 @@ as above. Note that the flag lives in rocBLAS, not in `llama-server`, so greppin
 binary for it finds nothing — that is why one claim inherited from the earlier session about
 this flag was true while its companion claim was not.
 
-## Also refuted
+## Correction: `GGML_HIP_GDN_CHUNK` DOES exist - the earlier "refuted" claim was wrong
 
-`GGML_HIP_GDN_CHUNK=1` does not exist in this build. Binary grep of the fork's
-`/usr/local/bin/llama-server` finds zero occurrences of `GDN`, `gdn`, `gated`, `gated_delta`,
-`delta_net` or `DeltaNet`, and no `*_CHUNK` environment variable of any kind. The earlier
-session called this "the lever it missed" for chunked GATED_DELTA_NET prefill; it is not a
-lever at all here.
+An earlier version of this note said this lever "does not exist in this build", on the
+strength of a binary grep. **That was wrong and the claim is withdrawn.** The grep searched
+`/usr/local/bin/llama-server`, which in this image is a **12 KB launcher shim** - the real
+code lives in `/usr/local/lib64/libllama.so` and the `libggml-*.so` family. Grepping those
+finds it immediately (3 occurrences of the literal), alongside 594 of `gated_delta`.
+
+What it is, from `ggml/src/ggml-cuda/gated_delta_net.cu`:
+
+```
+// GDN_RDNA: RDNA3/RDNA4 run the same ggml_cuda_mma path with WMMA
+// (v_wmma_f32_16x16x16_f16). Opt-in via GGML_HIP_GDN_CHUNK=1 until broadly
+// benchmarked; ...
+```
+
+so it opts RDNA3/RDNA4 into the WMMA **chunked** GDN path that is otherwise admitted only
+for NVIDIA Ampere+/CDNA. gfx1151 is RDNA 3.5, so this build is currently on the non-opted-in
+path and the env var is a real, cheap, untested lever - on 36 of 48 layers. The earlier
+session that flagged it as the lever the other agent missed was right, and this note said so
+incorrectly for most of a day.
+
+**Method lesson, worth more than the flag:** `grep -c` counts *lines*, and a binary has
+almost no newlines, so `grep -aoc PATTERN bigbinary` returns 0 or 1 almost regardless of the
+answer - a false negative generator. Use `grep -ao PATTERN file | wc -l`, and make sure the
+file is the code and not a shim (`ls -la` is the check; 12 KB is not a llama.cpp).
+
 
 ## Method
 

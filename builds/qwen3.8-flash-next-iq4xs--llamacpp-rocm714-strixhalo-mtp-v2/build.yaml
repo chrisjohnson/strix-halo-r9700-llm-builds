@@ -60,8 +60,12 @@ derived:
     build. Both are Chris's call (standing-models.txt is explicitly his, per this repo's
     AGENTS.md), which is why v2 was promoted as a build rather than swapped in.
 
-    Also tested and REFUTED, recorded so nobody re-runs it: `GGML_HIP_GDN_CHUNK=1`, which
-    an earlier session in this work claimed was "the lever it missed" for chunked
-    GATED_DELTA_NET prefill, does not exist in this build. Binary grep of
-    /usr/local/bin/llama-server finds zero occurrences of GDN, gdn, gated, gated_delta,
-    delta_net or DeltaNet, and no *_CHUNK environment variable of any kind.
+    CORRECTION (2026-09-27, same day): an earlier version of this note claimed
+    `GGML_HIP_GDN_CHUNK=1` "does not exist in this build", based on a binary grep. That was
+    WRONG and the claim is withdrawn. The grep searched /usr/local/bin/llama-server, which in
+    this image is a 12 KB launcher shim - the real code is in /usr/local/lib64/libllama.so and
+    libggml-*.so. Grepping those finds GGML_HIP_GDN_CHUNK. The lever is real, it is opt-in,
+    and it is UNTESTED here: ggml/src/ggml-cuda/gated_delta_net.cu admits RDNA3/RDNA4 to the
+    WMMA chunked-GDN path only when the env var is set ("Opt-in via GGML_HIP_GDN_CHUNK=1
+    until broadly benchmarked"), and gfx1151 is RDNA 3.5 - so this build is currently on the
+    non-opted-in path. The earlier session that flagged this as a missed lever was right.
