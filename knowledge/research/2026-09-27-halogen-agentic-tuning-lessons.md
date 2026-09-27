@@ -126,3 +126,51 @@ the gap is larger than the noise.
   values.
 - It holds most of the host once loaded (~12 GB free on a 128 GB machine), and its engine port
   (8730) has **no authentication** — keep it unpublished.
+
+## Audit result: our builds pass no reasoning controls at all (2026-09-27)
+
+Checked rather than assumed, because Halogen's central observation is that **the server's
+defaults are what an agent harness runs at** — harnesses send no thinking control to a server
+they were not written for.
+
+`grep -l reasoning builds/qwen3.8-flash-next*/docker-compose.yaml` returns **nothing**. Not one
+of our flash-next builds sets `--reasoning-format`, `--reasoning-effort`, or
+`--reasoning-budget`. So all three sit at their defaults, and the model runs under the
+template's own default effort with **unrestricted thinking**.
+
+But the build *has* the whole surface — from the `--help` of our own image:
+
+| flag | what it does |
+|---|---|
+| `--reasoning-format FORMAT` | `deepseek` puts thoughts in `message.reasoning_content`; `deepseek-legacy` keeps `<think>` in `content` too |
+| `-rea, --reasoning [on\|off\|auto]` | whether thinking is used at all |
+| `--reasoning-effort LEVEL` | passed to the chat template (`LLAMA_ARG_REASONING_EFFORT`) |
+| `--reasoning-budget N` | token budget for thinking: `-1` unrestricted, `0` immediate end |
+| `--reasoning-budget-message MESSAGE` | injected before the end-of-thinking tag when the budget is exhausted |
+| `--reasoning-preserve` / `--no-reasoning-preserve` | whether the reasoning trace stays in the full history |
+
+The last two are **llama.cpp's equivalents of Halogen's "answer room"**: a bound on the think
+block plus a message injected at the cut. They are the primitives, not the policy — Halogen
+reserves `max(1024, 15% of max_tokens)` *proportionally and automatically*, whereas
+`--reasoning-budget` is a fixed absolute number. But the shape of the protection exists and we
+are using none of it.
+
+The template does its part: read from a live server's `/props`, it contains `reasoning_effort`
+8 times and `enable_thinking` 4 times, so both control paths are wired.
+
+**Two concrete consequences, both cheap to act on:**
+
+1. **`--reasoning-format deepseek` is unset**, so the model's thinking does not surface as
+   `message.reasoning_content` the way cloud DeepSeek's API does. For a *drop-in replacement for
+   cloud DeepSeek* that is a wire-format difference the harness will notice — and it is a
+   one-flag change.
+2. **There is no thinking bound and no answer room.** This is exactly the shape of failure
+   Halogen describes as silently breaking compactions: the model thinks past the harness's
+   answer cap, the reply comes back `finish_reason: length` with empty `content`, and the
+   harness retries. It presents as slowness, not as an error. **This is the most likely
+   agentic defect on our stack and it costs nothing to test.**
+
+Note Halogen's advice runs *against* the obvious fix: it says to leave the default effort at
+`xhigh` for agentic work, and bound it rather than lower it. So the candidate build is
+`--reasoning-format deepseek --reasoning-budget N --reasoning-budget-message ...`, not a
+reduced effort level.
