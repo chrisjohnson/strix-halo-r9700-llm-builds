@@ -1,0 +1,91 @@
+---
+id: 2026-09-27-flashnext-flag-sweep
+date: 2026-09-27
+source: direct A/B on local-ai-machine — throwaway llama-server instances on the Strix Halo APU, one variable each, real-corpus prompts via llm_decode_bench.py with server-reported timings
+tags: [qwen3.8-flash-next, prefill, benchmark, hipblaslt, ubatch, tensor-read-lazy, strix-halo, memory, no-win]
+status: active
+---
+
+# flash-next flag sweep: one win (HIPBLASLT), two levers that are memory-doomed
+
+## Summary
+
+Three single-variable A/Bs against build
+`qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v1`, each as a throwaway container
+on the APU with the real-corpus prompt set and the server's own `timings`. Prefill tok/s at
+requested contexts 1k/2k/4k/8k/32k (actual tokens 1,437 / 2,408 / 5,072 / 9,399 / 35,300):
+
+| variant | 1k | 2k | 4k | 8k | 32k |
+|---|---|---|---|---|---|
+| **v1 baseline** (`-ub 2048`, `--tensor-read-lazy on`) | 326 | 335 | 370 | 372 | 325 |
+| **`ROCBLAS_USE_HIPBLASLT=1`** | **357** | **364** | **393** | **391** | **340** |
+| delta | +9.5% | +8.7% | +6.2% | +5.1% | +4.6% |
+| **`-ub 8192`** | 325 | 344 | 245 | 137 | 211 |
+| delta | -0.3% | +2.7% | **-33.8%** | **-63.2%** | **-35.1%** |
+| **`--tensor-read-lazy off`** | 111 | 122 | 172 | 228 | 283 |
+| delta | **-66.0%** | **-63.6%** | **-53.5%** | **-38.7%** | **-12.9%** |
+
+Only HIPBLASLT is a win. The other two are losses, and importantly they are **not compute
+results** — both are the APU's memory budget being exceeded:
+
+- `-ub 8192`: available memory fell to **3 GiB** once healthy. A larger ubatch needs much
+  more compute scratch, and at ≥4k tokens the working set no longer fits. The 1k/2k points
+  (where memory is not under pressure) are neutral-to-slightly-positive, which is the tell.
+- `--tensor-read-lazy off`: makes the ~26.8 GiB n-gram/PLE tensor *resident* instead of
+  demand-paged. Available memory stayed at 37 GiB (so it did not thrash the way `-ub 8192`
+  did), and prefill still collapsed — the resident table costs the same pool the dense
+  weights and KV need. The deficit shrinks with context (-66% at 1k to -13% at 32k) because
+  the constant per-token cost being lost matters less once attention dominates.
+
+## What this means for the constant floor
+
+`knowledge/research/2026-09-27-flashnext-prefill-constant-floor.md` fits a
+context-independent **2.58 ms/token** floor and asks how much of it is the PLE gather. This
+sweep does not answer that directly, but it rules out the cheap explanation on one side: the
+lazy path is **worth having**, not a tax. Turning it off makes prefill far worse, so the
+floor is not "mmap fault overhead on the lazy tensor" — if it were, removing the lazy
+mechanism would have helped.
+
+Combined with the storage-latency bound in that note (16 serialised cold row reads would cost
+~3.2 ms/token, more than the entire floor), the consistent reading is that the gather is
+cheap on this box and the floor is something else: the 36 SSM layers' state updates, MoE
+routing across 512 experts, the context-independent share of the 12 full-attention layers'
+projections, and KV writes. **None of those has a launch flag on this build**, which is why
+the floor remains unattributed rather than unexamined.
+
+## The one win is real and is promoted
+
+`ROCBLAS_USE_HIPBLASLT=1` is supported by this image's rocBLAS
+(`/opt/rocm/lib/librocblas.so.5.5` contains the literal, alongside `USE_HIPBLASLT_BATCHED`).
+It has been promoted to build `...-strixhalo-mtp-v2`, which is `TESTED_VIABLE` and measured
+as above. Note that the flag lives in rocBLAS, not in `llama-server`, so grepping the server
+binary for it finds nothing — that is why one claim inherited from the earlier session about
+this flag was true while its companion claim was not.
+
+## Also refuted
+
+`GGML_HIP_GDN_CHUNK=1` does not exist in this build. Binary grep of the fork's
+`/usr/local/bin/llama-server` finds zero occurrences of `GDN`, `gdn`, `gated`, `gated_delta`,
+`delta_net` or `DeltaNet`, and no `*_CHUNK` environment variable of any kind. The earlier
+session called this "the lever it missed" for chunked GATED_DELTA_NET prefill; it is not a
+lever at all here.
+
+## Method
+
+Each variant was its own `docker run` on the APU with build v1's exact command, changing one
+thing, then the same
+`llm_decode_bench.py --contexts 0 --concurrency 1 --prefill-contexts 1024,2048,4096,8192,32768
+--prefill-repeats 1 --context-file <2.8 MB real corpus>` run against it. v1 was stopped for
+each so only one flash-next instance used the APU. `free -g` and card1's GTT were read once
+healthy, which is what identified the two losses as memory effects rather than compute ones
+— read the tok/s table alone and `--tensor-read-lazy off` looks like a kernel regression
+rather than the pool running out.
+
+## Caveats
+
+- One sample per point, `--prefill-repeats 1`. The HIPBLASLT gain is five monotonic points
+  and is trusted; the two losses are large enough that sampling error is irrelevant to their
+  sign, but their magnitudes are not precise.
+- The memory readings are point-in-time once healthy, not peak during prefill.
+- `-ub 4096` was not tested. Given 8192's failure is memory-driven, 4096 may be mildly
+  positive or mildly negative; it is the one obvious gap.
