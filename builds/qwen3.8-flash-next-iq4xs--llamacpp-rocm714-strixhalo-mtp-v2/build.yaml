@@ -1,0 +1,67 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v2
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. Same build as ...-strixhalo-mtp-v1 with ONE variable added:
+    `ROCBLAS_USE_HIPBLASLT: "1"` in the environment. Everything else - image, command,
+    flags, MTP settings, volumes - is byte-identical to v1 apart from the build name and
+    the host port (8172 here; 8152 on v1, because this repo gives every build version its
+    own port - see dirk v1=8157 / v9=8169 / v10=8161).
+
+    RESULT - real and consistent, +4.6% to +9.5% prefill, largest at small context:
+
+      requested  actual tokens   v1 (stock)   v2 (HIPBLASLT)   delta
+            1k           1,437          326              357   +9.5%
+            2k           2,408          335              364   +8.7%
+            4k           5,072          370              393   +6.2%
+            8k           9,399          372              391   +5.1%
+           32k          35,300          325              340   +4.6%
+
+    Real-corpus prompts, single stream, server-reported timings, v1 measured immediately
+    before v2 in the same session with the same corpus and seed. The shape is the point:
+    the gain is largest where the constant per-token floor dominates (see
+    knowledge/research/2026-09-27-flashnext-prefill-constant-floor.md) and shrinks as
+    context-dependent attention work takes over. That is what a better GEMM library should
+    look like, and it is why this is not just noise - all five points move the same way,
+    monotonically with context.
+
+    WHY IT APPLIES AT ALL: `ROCBLAS_USE_HIPBLASLT` is a supported rocBLAS option, not
+    something invented here - confirmed present as a literal in this image's
+    /opt/rocm/lib/librocblas.so.5.5 (alongside USE_HIPBLASLT_BATCHED) before any run, via
+    binary grep. Note it lives in rocBLAS, not in llama-server, so grepping the server
+    binary for it finds nothing.
+
+    DECODE: unresolved, with no evidence of a regression. Three same-session runs of
+    ctx 0/16k/32k at 25s cells:
+
+      run         ctx0   ctx16k   ctx32k
+      stock #1    20.1     16.5     17.0
+      stock #2    20.9     14.6     14.3
+      v2          21.8     15.0     14.6
+
+    v1's own two runs differ by 19% at ctx32k, and v2 sits inside that spread - so an
+    earlier one-sample reading of "-14.5% decode" was noise, not a regression. At ctx 0,
+    where the spread is tight (20.1-20.9), v2 is above both at 21.8. Decode needs repeats
+    with a fixed sampling seed before anything is claimed; MTP acceptance is content
+    dependent and the model samples at temperature 1.0, which is where the variance comes
+    from.
+
+    NOT ADOPTED INTO THE STANDING SET. v1 is still the build running on 8152 and still what
+    litellm's `big-moe` role points at. Switching to v2 is a deliberate step - either
+    repoint `big-moe` to 127.0.0.1:8172 via scripts/set-role.sh, or make v2 the standing
+    build. Both are Chris's call (standing-models.txt is explicitly his, per this repo's
+    AGENTS.md), which is why v2 was promoted as a build rather than swapped in.
+
+    Also tested and REFUTED, recorded so nobody re-runs it: `GGML_HIP_GDN_CHUNK=1`, which
+    an earlier session in this work claimed was "the lever it missed" for chunked
+    GATED_DELTA_NET prefill, does not exist in this build. Binary grep of
+    /usr/local/bin/llama-server finds zero occurrences of GDN, gdn, gated, gated_delta,
+    delta_net or DeltaNet, and no *_CHUNK environment variable of any kind.
