@@ -83,3 +83,32 @@ Harness state at the time of measurement: commit `cbde1af` or later, i.e. with t
 `CHARS_PER_TOKEN` rate bug fixed and real token counts recorded. Note that `--skip-prefill`
 means the prefill table is empty and the `tok_basis` / `prompt_tokens` fields do not appear
 for this run — decode cells do not carry them.
+
+## Addendum: decode has a ~8-11% run-to-run noise floor, and a sampling seed does not remove it
+
+Every decode number in this note is one run. Before trusting any *comparison* between two
+configs, the measurement needed error bars, so the harness gained a fixed sampling seed
+(`--gen-seed`, default 1234) on the theory that decode variance comes from MTP draft
+acceptance, which depends on the generated content, and the model samples at temperature 1.0.
+
+**That theory is only part of it.** Two seeded runs of the *same* build, same cell, same
+prompt, same seed:
+
+| run | ctx 0 | ctx 16k | ctx 32k |
+|---|---|---|---|
+| seeded #1 | 21.9 | 17.3 | 15.2 |
+| seeded #2 | 20.3 | 15.9 | 16.9 |
+| spread | 7.9% | 8.8% | **11.2%** |
+
+So the seed is still the right thing to send, but it leaves 8-11% of variance that is *not*
+sampling content — graph-compilation warmth in the first cell, KV/allocator placement, and
+whatever else varies between runs on this box. The practical consequence is worth stating
+plainly:
+
+**Decode differences below roughly 10% are not resolvable here** without many repeats, and
+every decode figure in this note should be read with that band. In particular, the
+`ROCBLAS_USE_HIPBLASLT` question - whether it helps or hurts decode - is **not resolvable**
+at practical sample sizes: the observed v1-vs-v2 difference sits inside v1's own spread, so
+the honest answer is "no measurable effect" rather than "no regression we happened to find".
+The prefill case for that change does not depend on decode: five monotonic points, +4.6% to
++9.5%, measured on server-reported timings that are not subject to this variance.

@@ -621,6 +621,7 @@ async def run_one_cell(
     state: TUIState,
     live: Live,
     engine: str = ENGINE_SGLANG,
+    gen_seed: int = 0,
 ) -> CellResult:
     messages = build_messages(context_tokens, context_text)
     payload = {
@@ -630,6 +631,16 @@ async def run_one_cell(
         "max_tokens": max_tokens,
         "stream_options": {"include_usage": True},
     }
+    # Fixed sampling seed, so two runs of the same cell generate the same
+    # tokens. Without it decode throughput is not comparable run to run: the
+    # model samples at temperature 1.0 by default, so the generated content -
+    # and therefore MTP draft acceptance, which tok/s depends on - differs
+    # every run. Measured 2026-09-27: two identical stock flash-next runs
+    # differed by 19% at ctx 32k, which is larger than the effect being
+    # measured. Temperature is deliberately NOT set: the seed makes the
+    # sequence reproducible without changing the workload distribution.
+    if gen_seed:
+        payload["seed"] = gen_seed
 
     url = f"{base_url}/v1/chat/completions"
     cancel_event = asyncio.Event()
@@ -1671,6 +1682,7 @@ async def run_benchmark(args):
                             state=state,
                             live=live,
                             engine=engine,
+                            gen_seed=args.gen_seed,
                         )
                         all_results.append(result)
                         _partial_results = all_results
@@ -1987,6 +1999,17 @@ def parse_args():
              "250k-token prefill measured 1768s on this box on 2026-09-27, so the old "
              "hardcoded 1800s left ~2%% of margin and the 600s TTFT fallback could not "
              "cover it at all."
+    )
+    parser.add_argument(
+        "--gen-seed", type=int, default=1234,
+        help="Sampling seed sent with every decode request (default: 1234; 0 = send none). "
+             "Decode throughput depends on MTP draft acceptance, which depends on the "
+             "generated content, and the model samples at temperature 1.0 by default, so a "
+             "fixed seed is the right thing to do. It does NOT make this box's decode "
+             "measurements repeatable on its own - measured 2026-09-27, two seeded runs of "
+             "the same cell still differed by 8-11%%, so decode effects below roughly that "
+             "are not resolvable here without many repeats. Temperature is deliberately left "
+             "at the model default so the workload distribution is unchanged."
     )
     parser.add_argument(
         "--padding-seed", default="bench",
