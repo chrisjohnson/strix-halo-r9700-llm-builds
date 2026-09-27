@@ -35,11 +35,33 @@ derived:
     run-to-run - the two v2 runs disagree in both directions (c0k 79 vs 87, c16k 103 vs
     80) - so treat prefill as the measured result and decode as needing repeats.
 
-    REMAINING SPILL: v2 still spills 1.55 GiB to GTT, so there is more to win. Untested
-    candidates: fewer slots under `--kv-unified` (3 x 262144 is generous; np 1 would cut
-    KV to ~1.4 GiB), and `--cache-ram` sizing (32768 here; it is host RAM and does not
-    compete with occamy's own VRAM, but on this box it does compete with flash-next's
-    page cache). Neither is tested - do not assume.
+    SLOT SWEEP - np 3 is the largest that fits, and the remaining spill is cheap. The
+    whole point of --kv-unified here is total KV capacity, so the question is how many
+    262144-token slots fit. Measured by starting a throwaway instance per np and reading
+    card0's counters once healthy (VRAM saturates at 31.86 GiB; anything beyond it is host
+    GTT over PCIe):
+
+      np   vram GiB   gtt GiB   total demand
+       1      23.79      0.54           24.33
+       2      26.39      1.04           27.43
+       3      28.99      1.55           30.54   <- fits
+       4      30.59      3.05           33.64   <- overcommits
+       5      31.82      4.95           36.77
+       6      31.46      8.44           39.90
+
+    np 1-3 grow ~3.1 GiB per slot; np 4 is where VRAM saturates and the spill jumps. Given
+    that v1's 3.42 GiB spill cost 74% of prefill throughput, np 4 (3.05 GiB) is expected to
+    be in that bad regime, and np 5-6 certainly are.
+
+    But the last gigabyte of spill is worth almost nothing, which is why np 3 stays: np 1
+    measured 2208/1636 tok/s against np 3's 2189/1630 - +0.9% / +0.4%, i.e. noise - while
+    np 3 carries three times the slot count. Removing spill is only worth doing down to
+    about 1.5 GiB; below that it buys nothing measurable. So np 3 + q4_0 KV is the
+    recommendation, not np 1.
+
+    STILL UNTESTED: `--cache-ram` sizing (32768 here). It is host RAM, so it does not
+    compete for occamy's VRAM - but on this box it does compete with flash-next's page
+    cache, which is separate and unmeasured.
 
     OPERATIONAL WARNING learned while creating this build: the Vulkan backend does NOT
     fail when VRAM is exhausted, it silently allocates into host GTT. With v1 still
