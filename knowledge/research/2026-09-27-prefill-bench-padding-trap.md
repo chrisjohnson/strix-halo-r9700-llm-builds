@@ -104,13 +104,34 @@ but **its magnitude at production context lengths is still unknown**, and must b
 on a freed box with real text. Do not port anything on the strength of the 43-61% figure.
 
 ## Cross-check: the context falloff is not a PLE signature at all
-
 dirk (`qwen35`, 65 layers, 16 full-attention, **no PLE/engram table of any kind**) logs its
 own in-flight prefill on the R9700: 873 tok/s at 4k falling to 593 tok/s at 43k — a 32%
 decline. flash-next's recorded ladder showed 31% over 8k->128k. A model with no n-gram
 table degrades at least as steeply, which independently confirms the argument from the
 trigram data: the context-dependent prefill falloff is a generic attention/KV-scaling
 effect, not evidence of an n-gram-table bottleneck.
+
+## The external number for the lazy-read fix is much larger than the one this work cited
+
+The session that started this work cited PR #29030 as *"+20-32% cold prefill on Strix
+Halo"*. The primary discussion is more pointed, and it is explicitly a **real-text**
+number: for this model, `--lazy-mode on-direct` reads the 16 rows per token with `pread`
+instead of mmap, and *"on a Spark it took real-text prefill from about 300 to 750 tok/s"* —
+roughly **2.5x**, on a DGX Spark, with the table stored Q8_0 at 50.66 GiB
+([forums.developer.nvidia.com](https://forums.developer.nvidia.com/t/theoretical-feasibility-of-running-qwen-3-8-flash-next-q5-quant-vision-enabled-80k-context-on-dgx-spark/382088)).
+
+Two things follow. First, the size of the win depends enormously on the baseline text, which
+is the entire point of this note — a repeated-filler baseline is the one measurement that
+cannot see it. Second, the 2.5x figure is a *different machine with a table roughly twice
+the size* (50.66 GiB Q8_0 vs this build's 26.8 GiB IQ4-class), so it does not transfer as a
+predicted gain here; it is a strong indication that a real effect exists and is measurable,
+not a number to plan against.
+
+The same thread's operating advice is worth keeping: leave the table lazy (do not set
+`--lazy-mode off`, which makes all 50.66 GiB resident, and do not force it to a GPU with
+`-ot` — that is issue #28201), keep `--cache-ram 0` and `-np 1`, and on that platform *"no
+userland limit makes a run fail cleanly"* — so stage context sizes up rather than jumping
+straight to 256k.
 
 ## Also found: the bench misdetects a llama.cpp server as SGLang
 

@@ -64,6 +64,29 @@ The prediction lands within 9% of observed with the residual fully explained by 
 projector dirk loads (`--mmproj ... F16`) plus compute buffers, so the formula is trusted
 for sizing.
 
+## Independent validation of the same geometry
+
+An NVIDIA DGX Spark thread on this exact model (2026-09-02) states its KV geometry as
+*"12 full-attention layers at 24 KiB per token"*
+([forums.developer.nvidia.com](https://forums.developer.nvidia.com/t/theoretical-feasibility-of-running-qwen-3-8-flash-next-q5-quant-vision-enabled-80k-context-on-dgx-spark/382088)).
+That is an independent number derived from a different quant and a different machine, so it
+is a real check on the arithmetic above:
+
+```
+12 layers x 2(K,V) x 2 kv_heads x 256 head_dim = 12,288 elem/token
+  at f16   -> 24.00 KiB/token   <- matches the forum's 24 KiB/token exactly
+  at q8_0  -> 12.75 KiB/token
+  at q4_0  ->  6.75 KiB/token
+```
+
+The same thread also states the ~26.8 GiB table is `per_layer_token_embd.weight`
+(54,400,261,312 bytes = 50.66 GiB stored Q8_0 in the Q5/Q6 files, IQ4_NL at 26.8 GiB in the
+Q4 file) — consistent with this build's UD-IQ4_XS, and confirming the compose comment's
+26.8 GiB is the IQ4-class size, not the Q8_0 one.
+
+So the geometry behind these numbers is confirmed twice over, from independent directions:
+observed VRAM on this box, and a third-party figure for the same model.
+
 ## occamy on the R9700 at 256k
 
 | occamy (`qwen3_5_moe_text`) | value |
