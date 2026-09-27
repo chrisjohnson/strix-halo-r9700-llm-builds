@@ -3,10 +3,23 @@ id: 2026-09-27-29030-port-deprioritised-measure-floor-first
 date: 2026-09-27
 source: measurement work on local-ai-machine, 2026-09-27 — knowledge/research/2026-09-27-flashnext-prefill-constant-floor.md and 2026-09-27-prefill-bench-padding-trap.md; supersedes 2026-09-27-no-29030-port-attention-path-instead.md, which was written from partial data and over-claimed
 tags: [qwen3.8-flash-next, prefill, performance, llama.cpp, lazy-mode, mmap, ple, ngram, pr-29030, scope, superseded-earlier-revision]
-status: active
+status: superseded
 ---
 
-# Deprioritise the PR #29030 port for the falloff — but measure the 2.58 ms/token constant floor before dropping it
+
+> **RETRACTED 2026-09-27, same day.** The recommendation below - do not start this rebase -
+> is **wrong**, and it was measured wrong rather than merely argued wrong. The port was done
+> and is worth **+21.9% to +29.1% prefill over the equivalent unported build**, and +33% to
+> +43% over the standing flash-next. The reasoning it rested on ("the fork already implements
+> batched row prefetch, so the PR adds little") confused two different mechanisms: the fork's
+> `prefetch_rows()` queues *mmap faults* for a gather that still reads the mapping, while
+> PR #29030 replaces the gather so it never touches the mapping. The port was also cheaper
+> than this entry implied - 19 of 21 files applied cleanly, the rest were offsets.
+>
+> Superseded by `2026-09-27-29030-port-adopted-measured-win.md`. Kept rather than deleted
+> because a retracted recommendation with its reasoning is more useful than a gap.
+
+# (RETRACTED) Deprioritise the PR #29030 port for the falloff — but measure the 2.58 ms/token constant floor before dropping it
 
 **Decision**: the EngramHalo-fork rebase onto PR #29030 (`--lazy-mode on-direct`, parallel
 `pread` for the n-gram/PLE rows) does **not** address the context-length prefill falloff, and

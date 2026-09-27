@@ -1,0 +1,69 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. RECOMMENDED APU BUILD - the largest single win found in this work, and it
+    supersedes ...-strixhalo-mtp-v3 (+10.7-14.8% over v1) by another 22-29%.
+
+    WHAT IT IS: the EngramHalo fork with PR #29030 ("qwen4exp/gemma4: gather lazy tensor rows
+    with direct reads") applied. The PR is still OPEN upstream, so it is vendored as
+    docker/qwen4exp-strix-halo-mtp/llama-cpp-29030-lazy-direct.patch and applied by
+    Dockerfile.rocm-7.14-lazy-direct. It replaces the gather itself: llm_graph_input_ple::rows
+    goes from an I32 index tensor fed to ggml_get_rows(per_layer_tok_embd, rows) to
+    llm_graph_lazy_rows, built via lazy_reader() and filled by rows.set_rows(), so the gather
+    stops reading the mmap'd tensor at all. Environment and every other flag match v3 exactly.
+
+    FLAG RENAME, which matters operationally: the PR replaces `--tensor-read-lazy` with
+    `--lazy-mode`, and `on` now means DIRECT READS rather than mmap demand-faulting. There is
+    no separate `on-direct` value - `on` is it. A build on this image passing
+    `--tensor-read-lazy on` will not start.
+
+    MEASURED, real-corpus prompts, single stream, server-reported timings:
+
+      requested  tokens    v1    v3(both)   PORT   port vs v1   port vs v3
+            2k     2,409   337        387    483       +43.3%       +29.1%
+            8k     9,400   371        416    504       +35.8%       +23.8%
+           32k    35,301   326        361    434       +33.1%       +21.9%
+
+    CONTROL FOR PAGE-CACHE WARMTH - this was checked, not assumed, because the first port
+    run was faster than its own confirmation run and that is the signature of a warming
+    cache rather than a real effect. v3 was stopped and re-measured on the same warm cache
+    immediately after the port run:
+
+      requested   v3 (first)   v3 (warm, now)   PORT (warm)
+            2k           387              374           483
+            8k           416              407           504
+           32k           361              356           434
+
+    v3 does not get faster with warmth - it measured marginally lower the second time - so
+    the port's advantage is not a cache artefact.
+
+    WHY THE PER-BUFFER-MMAP PATCH IS ABSENT, which is the one caveat: PR #29030 and the
+    fork's own llama-cpp-qwen38-per-buffer-mmap.patch both rewrite
+    src/llama-model-loader.{cpp,h}, and that patch neither applies nor reverses on top of the
+    PR. The upstream Dockerfile already treats it as optional ("skipped as obsolete
+    otherwise"), so this build follows its documented fallback. That means this A/B measures
+    "PR #29030 present, per-buffer-mmap patch absent" against v3, which carries both. A
+    control build with neither would isolate the PR alone; that has NOT been done, and it is
+    the one thing that could change the attribution, so it is stated rather than glossed.
+
+    CONTEXT - THIS REVERSES AN EARLIER RECOMMENDATION IN THIS REPO. The decision entry
+    2026-09-27-29030-port-deprioritised-measure-floor-first.md advised against starting this
+    rebase, on the reasoning that the fork already implements batched row prefetch via its own
+    prefetch_rows() and that the lazy path is not the bottleneck. That reasoning was wrong:
+    the fork's prefetch_rows() does something different (it queues mmap faults for a gather
+    that still reads the mapping) and the PR is worth 22-29% on top of it. The port was
+    cheaper than expected too - 19 of 21 files applied cleanly and the rest were offsets.
+
+    NOT ADOPTED: v1 still runs 8152 and is still what litellm's `big-moe` role points at.
+    Adopting this means repointing that role to 127.0.0.1:8178 or changing the standing
+    build - Chris's call per AGENTS.md. It is a genuine change of engine, not a flag, so it
+    should be a deliberate swap.
