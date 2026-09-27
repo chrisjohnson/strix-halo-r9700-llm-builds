@@ -200,14 +200,21 @@ merely "not proven to be the bottleneck":
   periodic text, and by more (14%) the larger the context;
 - and dirk, which has no PLE table at all, shows a 32% falloff of its own.
 
-Three independent lines point the same way. **Recommendation: do not start the rebase.** The
-2.5x figure circulating for the change is a DGX Spark with a table roughly twice this build's
-size, and it is a real-text number — but on this box the real-text comparison comes out in
-the opposite direction, so there is no basis here for expecting that gain.
+Three independent lines point the same way: **the port is not the answer to this falloff.**
+The 2.5x figure circulating for the change is a DGX Spark with a table roughly twice this
+build's size, and it is a real-text number — but on this box the real-text comparison comes
+out in the opposite direction, so there is no basis here for expecting that gain from it.
 
-What the data points at instead is the attention path: whatever scales with context in the
-12 full-attention layers and the DSA indexer. That is where a lever would have to live to
-move the 65%.
+That is a narrower claim than "the port is worthless", and the difference matters. The gather
+is a *constant* per-token cost (16 rows per token, mmap-backed, demand-faulted), and there
+turns out to be a large constant floor to attack — ~2.58 ms/token, which is ~37% of the
+per-token cost at 250k. Whether the PLE gather is a significant share of that floor is
+**unmeasured**; see `2026-09-27-flashnext-prefill-constant-floor.md` for the fit and the
+flag-level plan to decompose it.
+
+What the falloff data points at instead is the attention path: whatever scales with context
+in the 12 full-attention layers and the DSA indexer. That is where a lever would have to live
+to move the 65%.
 
 ## Cross-check: the context falloff is not a PLE signature at all
 
