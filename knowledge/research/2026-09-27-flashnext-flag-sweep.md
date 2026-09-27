@@ -84,6 +84,20 @@ path and the env var is a real, cheap, untested lever - on 36 of 48 layers. The 
 session that flagged it as the lever the other agent missed was right, and this note said so
 incorrectly for most of a day.
 
+**Result (measured 2026-09-27, same session, same corpus and seed):** the lever is worth
+it. `GGML_HIP_GDN_CHUNK=1` alone gives **+7.4% to +10.7% prefill**, and roughly *flat* across
+context (1k: 326->350, 32k: 326->351) - the signature of a constant per-token cost, which is
+what 36 of 48 GDN layers are. Combined with `ROCBLAS_USE_HIPBLASLT=1` the two are additive:
+**+10.7% to +14.8% over v1**. Promoted as build `...-strixhalo-mtp-v3`.
+
+| requested | tokens | v1 base | +HIPBLASLT | +GDN_CHUNK | both (v3) | v3 vs v1 |
+|---|---|---|---|---|---|---|
+| 1k | 1,437 | 326 | 357 | 350 | 366 | +12.3% |
+| 2k | 2,408 | 337 | 364 | 373 | 387 | +14.8% |
+| 4k | 5,072 | 370 | 393 | 401 | 414 | +11.9% |
+| 8k | 9,399 | 371 | 391 | 403 | 416 | +12.1% |
+| 32k | 35,300 | 326 | 340 | 351 | 361 | +10.7% |
+
 **Method lesson, worth more than the flag:** `grep -c` counts *lines*, and a binary has
 almost no newlines, so `grep -aoc PATTERN bigbinary` returns 0 or 1 almost regardless of the
 answer - a false negative generator. Use `grep -ao PATTERN file | wc -l`, and make sure the

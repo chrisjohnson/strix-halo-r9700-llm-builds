@@ -68,4 +68,7 @@ derived:
     and it is UNTESTED here: ggml/src/ggml-cuda/gated_delta_net.cu admits RDNA3/RDNA4 to the
     WMMA chunked-GDN path only when the env var is set ("Opt-in via GGML_HIP_GDN_CHUNK=1
     until broadly benchmarked"), and gfx1151 is RDNA 3.5 - so this build is currently on the
-    non-opted-in path. The earlier session that flagged this as a missed lever was right.
+    non-opted-in path. The earlier session that flagged this as a missed lever was right,
+    and MEASURING IT WAS WORTH +7.4% TO +10.7% prefill (flat across context, so a
+    constant per-token win). It is now build v3, combined with this build's HIPBLASLT
+    for +10.7% to +14.8% over v1. Superseded for use; kept for the record.

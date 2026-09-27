@@ -1,0 +1,58 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v3
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-mtp-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. RECOMMENDED APU BUILD - the best measured configuration found in this work.
+    Same build as ...-strixhalo-mtp-v2 with ONE variable added:
+    `GGML_HIP_GDN_CHUNK: "1"`. So it carries both HIPBLASLT and the chunked-GDN opt-in,
+    and nothing else differs apart from the build name and host port (8177; v1 is 8152,
+    v2 is 8172 - this repo gives every build version its own port).
+
+    RESULT - the two levers are additive, +10.7% to +14.8% prefill over v1. Real-corpus
+    prompts, single stream, server-reported timings, every variant measured back-to-back in
+    one session with the same corpus and seed:
+
+      requested  actual tok   v1 base   +HIPBLASLT   +GDN_CHUNK   BOTH(v3)   v3 vs v1
+            1k         1,437       326          357          350        366      +12.3%
+            2k         2,408       337          364          373        387      +14.8%
+            4k         5,072       370          393          401        414      +11.9%
+            8k         9,399       371          391          403        416      +12.1%
+           32k        35,300       326          340          351        361      +10.7%
+
+    WHY GDN CHUNKING APPLIES: `ggml/src/ggml-cuda/gated_delta_net.cu` admits RDNA3/RDNA4 to
+    the WMMA chunked-GDN path only when this env var is set -
+
+      // GDN_RDNA: RDNA3/RDNA4 run the same ggml_cuda_mma path with WMMA
+      // (v_wmma_f32_16x16x16_f16). Opt-in via GGML_HIP_GDN_CHUNK=1 until broadly
+      // benchmarked; ...
+
+    - and gfx1151 is RDNA 3.5. So without it this build runs the non-opted-in path on all 36
+    of its 48 GDN layers. The gain being roughly FLAT across context (+7.4% at 1k, +7.7% at
+    32k) is the evidence that it improves a constant per-token cost rather than anything
+    context-dependent - which is also why it stacks cleanly with HIPBLASLT (a rocBLAS GEMM
+    library selection, its own independent mechanism).
+
+    CORRECTION HISTORY, kept because it is the reason this lever was nearly missed twice: an
+    earlier note in this repo stated that GGML_HIP_GDN_CHUNK "does not exist in this build",
+    on the strength of a binary grep. That grep searched /usr/local/bin/llama-server, which
+    in this image is a 12 KB launcher shim - the real code is in /usr/local/lib64/libllama.so.
+    The claim was withdrawn (commit c9934cf) and the lever turned out to be worth ~+8-11% on
+    its own. The session that originally flagged it was right and this repo was wrong about
+    it for most of a day.
+
+    DECODE: not re-measured for v3 and not claimed. Decode on this box has an ~8-11%
+    run-to-run noise floor that a fixed sampling seed does not remove, so nothing below that
+    is resolvable without many repeats.
+
+    NOT ADOPTED INTO THE STANDING SET. v1 is still what runs on 8152 and still what litellm's
+    `big-moe` role points at. Adopting v3 is a deliberate step - repoint the role to
+    127.0.0.1:8177 via scripts/set-role.sh, or make v3 the standing build - and
+    standing-models.txt is explicitly Chris's call per AGENTS.md.
