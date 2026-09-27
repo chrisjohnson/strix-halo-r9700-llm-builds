@@ -58,6 +58,14 @@ ARG REPO=https://github.com/Aristo94/EngramHalo.cpp.git
 ARG BRANCH=strix-halo-qwen4exp
 RUN git clone -b ${BRANCH} --single-branch --recursive ${REPO} .
 
+# Pin the exact fork commit this image was built from. The clone above tracks
+# the BRANCH HEAD, which is third-party and can move without warning - so
+# without this the image is not reproducible even with the patches vendored.
+# Bump deliberately, and re-measure if you do.
+ARG COMMIT=17260d5f0b8234befdcaea5cc4595acbd3f35dfb
+RUN git fetch --depth 1 origin ${COMMIT} && git checkout ${COMMIT} \
+  && git submodule update --init --recursive
+
 # iGPU host-buffer workaround for ggml-org/llama.cpp#25992 (based on the open upstream PR #25863,
 # packaged in kyuz0/amd-strix-halo-toolboxes). It disables ROCm host-buffer compute on integrated
 # GPUs: a correctness workaround for the multi-slot response mix-up reported in #25992. It also

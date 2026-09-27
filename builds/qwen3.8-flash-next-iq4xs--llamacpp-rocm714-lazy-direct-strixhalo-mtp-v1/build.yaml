@@ -67,3 +67,32 @@ derived:
     Adopting this means repointing that role to 127.0.0.1:8178 or changing the standing
     build - Chris's call per AGENTS.md. It is a genuine change of engine, not a flag, so it
     should be a deliberate swap.
+
+    HOW TO REBUILD THE IMAGE this build references (it is local to the box, not in a
+    registry - these engine images are built by hand, unlike llm-inference-bench):
+
+      cd docker/qwen4exp-strix-halo-mtp
+      docker build -f Dockerfile.rocm-7.14-lazy-direct \
+        -t strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14-lazy-direct .
+
+    Everything that needs to be checked in IS checked in: that Dockerfile, the vendored PR
+    patch, the #25992 patch it also applies, and the fork commit is pinned by ARG COMMIT.
+    See docker/qwen4exp-strix-halo-mtp/README.md for all three Dockerfiles in that directory
+    and which builds use which.
+
+    HONEST GAP on that Dockerfile: the image measured here was NOT produced from it. It was
+    produced from an equivalent COPY-based Dockerfile against a local checkout of the same
+    fork commit with the same patches applied, because the port lived on a local branch with
+    no remote to clone from. The checked-in clone-based Dockerfile is intended to reproduce
+    it and pins the commit the tree was taken from, but it has NOT been executed - treat it
+    as unverified until someone runs it and compares.
+
+    REPRODUCING THE NUMBERS: the A/B used a real-text corpus via
+    llm_decode_bench.py --context-file, not the synthetic padding generator, because a
+    repeated-filler prompt cannot exercise the n-gram/PLE table (see
+    knowledge/research/2026-09-27-prefill-bench-padding-trap.md). That corpus is
+    deliberately NOT committed - it was harvested from both this repo and
+    local-ai-machine, and contains credential-shaped strings from the latter, and this
+    repo is public. scripts/build_bench_corpus.sh builds a deterministic equivalent from
+    this repo alone; absolute rates will differ slightly on it, the build-to-build
+    comparison does not.
