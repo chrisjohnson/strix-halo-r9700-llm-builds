@@ -89,3 +89,36 @@ rather than the pool running out.
 - The memory readings are point-in-time once healthy, not peak during prefill.
 - `-ub 4096` was not tested. Given 8192's failure is memory-driven, 4096 may be mildly
   positive or mildly negative; it is the one obvious gap.
+
+## Addendum: more concurrent slots - feasible, but it spends the stability margin
+
+The "maximum useful cache" half of this work's goal suggests raising flash-next's slot count
+from the 1 it runs to match occamy's 3 (which has three 262144-token slots). Tested as a
+throwaway with `-c 786432 --parallel 3`, which makes `n_ctx_slot` exactly 262144 - the model's
+native limit - so no `--override-kv` or YaRN is involved. It works: `/props` reports
+`total_slots = 3` and it serves.
+
+| requested | v1 (`--parallel 1`) | np 3 | delta |
+|---|---|---|---|
+| 1k | 326 | 296 | **-9.2%** |
+| 2k | 335 | 315 | **-6.0%** |
+| 4k | 370 | 375 | +1.4% |
+| 8k | 372 | 375 | +0.8% |
+| 32k | 325 | 328 | +0.9% |
+
+Cost is concentrated at short contexts and vanishes by 4k, which is consistent with a larger
+KV pool costing more to touch per token when there is little context to amortise it over.
+
+The reason to **not** recommend it is memory, not throughput. Available memory went from
+37 GiB (np 1) to 27 GiB idle and **19 GiB during the prefill ladder** - the two extra slots
+cost ~10 GiB of APU pool, well above the ~6.4 GiB the KV alone would predict. That matters
+because this same sweep shows how sharp the cliff is: `-ub 8192` reached 3 GiB available and
+lost 63% of prefill. Trading a third of the remaining headroom for concurrency that a
+`--parallel 1` agentic loop may never use is a bad trade against a goal that emphasises a
+*stable* experience.
+
+Note the asymmetry with occamy, decided the other way: occamy's np 3 is kept, because it runs
+on the R9700's own 32 GiB of VRAM and costs the APU pool only ~1.6 GiB of GTT. flash-next's
+np 3 comes out of the shared pool. Same flag, opposite answer, because the memory is not the
+same memory.
+
