@@ -7,7 +7,7 @@ deliberately explicit about live state, decisions already made (so they are not 
 dead ends already explored (so they are not re-run), and the expensive mistakes already made
 (so they are not repeated).
 
-- **Last updated**: 2026-09-27
+- **Last updated**: 2026-09-27 (agentic reframe of the goal added to §2)
 - **Sibling documents**: `AGENTS.md` (repo permissions/conventions), `README.md` (repo layout),
   `builds/README.md` (per-build conventions), `knowledge/decisions/` (why, per decision),
   `knowledge/research/` (what was measured, per investigation).
@@ -50,9 +50,31 @@ no RAM or VRAM left on the table, and a stable experience**:
 - **`qwen3.8-flash-next`** — slow/smart, Strix Halo APU (`gfx1151`, ~256 GB/s, 124 GiB unified).
 - **`occamy`** — fast/light, R9700 eGPU (32 GiB dedicated GDDR6, its own memory).
 
+**The goal, restated 2026-09-27 (supersedes "maximise tok/s"): the target is overall *agentic*
+performance — these models run as a drop-in replacement for cloud DeepSeek behind the same kind
+of dsh sessions Chris already runs.** A dsh session is a long conversation that grows: every turn
+re-sends the whole history plus tool definitions and tool results, and a compaction periodically
+re-reads all of it cold. So the metric is **end-to-end latency of a turn in a growing
+conversation**, which decomposes into three terms and one gate:
+
+1. **Cache-hit fraction** — does the next turn resume where the last one stopped? This is the
+   largest term by far, and the one we have measured *incidentally* rather than tracked. A
+   production server's own numbers show a **44x spread between its best and worst cache mode**
+   (~2 s vs ~88 s for a follow-up turn at 100k), which dwarfs any kernel win in this repo's
+   history. See `knowledge/research/2026-09-27-halogen-agentic-tuning-lessons.md`.
+2. **Increment prefill rate** — the ~1–4k new tokens a turn adds. This is where our measured
+   deficit actually is (~235 tok/s effective on the increment vs ~500 for a production server),
+   and where the engine work (PR #29030, tiled delta-net) moves the needle.
+3. **Decode with speculation** — streaming the tool call. Ours ~20–27 tok/s against ~52.
+4. **The gate: reliability.** A turn that returns an *empty answer* because the thinking block
+   consumed the whole budget is worse than a slow turn, and it presents to the harness as a
+   retry. **Un-audited on our stack** — see §9.
+
 Standing rules that came out of it: prefer *measured* wins; promote every improvement to its own
 versioned build directory rather than editing a committed build in place; every build version
-gets its own host port; record the numbers with the build.
+gets its own host port; record the numbers with the build. **And measure the metric that is
+actually experienced** — a prefill tok/s figure that improves a term the harness never waits on
+is not a win.
 
 ---
 
@@ -176,6 +198,7 @@ All under `knowledge/research/`. The ones that bear on current decisions:
 | Note | What it establishes |
 |---|---|
 | `2026-09-27-strix-halo-engine-landscape.md` | **The other engines, and where the remaining speed is.** `kyuz0/gufo` 1,628 pp; pwilkin/strix-llama ~1,200; the tiled delta-net is 2.37x and we don't have it |
+| `2026-09-27-halogen-agentic-tuning-lessons.md` | **The reframe.** A production Flash-Next server's cache-mode spread is 44x; the answer-room failure mode (empty answers on compaction); disk-persistent prompt cache; the shared-KV-pool concurrency model. Read before planning any further tuning. |
 | `2026-09-27-prefill-bench-padding-trap.md` | Repeated filler cannot exercise the PLE table; rates inflate. **Read before designing any prefill measurement.** |
 | `2026-09-27-flashnext-prefill-constant-floor.md` | The 2.58 ms/token floor, and that it is *not* mmap fault overhead |
 | `2026-09-27-flashnext-flag-sweep.md` | HIPBLASLT win; `-ub 8192` and `lazy off` losses; the GDN correction |
@@ -232,6 +255,22 @@ gave 483/504/434.
 7. **The tiled gated delta-net (2.37x) is not ported** and is the single largest known win.
 8. litellm `medium-moe` / `medium-dense` point at dead backends.
 9. Dirk (the R9700 model) is stopped and cannot coexist with occamy on the R9700.
+10. **The agentic loop has never been measured end-to-end.** No per-turn latency, cache-hit
+    fraction, or TTFT numbers exist for a realistic growing conversation with tool calls and a
+    compaction. Everything so far is single-shot prefill/decode. This is the biggest measurement
+    gap given the goal in §2.
+11. **The "answer room" is un-audited.** If a request's answer cap is consumed by the thinking
+    block, some servers return `finish_reason: length` with **empty `content`** — and an agent
+    harness reads that as a failed compaction and retries. Cheap to test: send a request with a
+    small `max_tokens` while thinking is on and check whether `content` is empty.
+12. **llama.cpp has no disk-persistent prompt cache.** `--cache-ram` is memory-only, so a dsh
+    session resumed after a *model* restart re-prefills its whole history. A production server
+    persists it (~27 KiB/token) and turns ~40 s cold into a few seconds. No fix visible on our
+    side; worth knowing it is a real cost.
+13. **Concurrency is architecturally underexplored.** Our `--parallel` work allocates per-slot
+    context; a production server shares one KV pool across conversations and separates "max per
+    request" from "positions resident", which is how several full-length conversations fit.
+    dsh subagents make this a real axis.
 
 ---
 
@@ -239,6 +278,12 @@ gave 483/504/434.
 
 Ordered. Costs are real; don't start a heavy one while a benchmark is running (§11).
 
+0. **Agentic measurement first, before any more engine work** (§2, §9.10). Build a replay that
+   looks like a real dsh session — growing context, tool calls, a compaction — and report
+   per-turn latency, cache-hit fraction, and TTFT. Without it, every engine comparison below is
+   ranked on the wrong axis. `llm_decode_bench.py` already has an incremental-prefill mode to
+   start from. **Then the answer-room audit** (§9.11), which is minutes of work and a
+   correctness-shaped failure.
 1. **Let runs 161–163 finish** (~2h). They are the before/after on the *standard* metric rather
    than the custom prefill ladder. Report the result.
 2. **Build the retained-PM4 image**:
