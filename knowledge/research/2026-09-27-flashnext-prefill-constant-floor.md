@@ -49,14 +49,49 @@ measurement above is the difference between those two claims:
   parallel instead of one at a time.
 
 So the port targets a **constant per-token cost**, not the falloff. Whether it is worth
-building therefore depends entirely on how much of the 2.58 ms floor is that gather — and
-**that is not measured.** 16 rows in 2.58 ms would be 161 us per row if fully serialised,
-which is in the plausible range for cold random reads on this box's storage, but the floor
-also contains the 36 SSM layers' state updates, MoE routing, the context-independent part of
-the 12 attention layers' projections, and KV writes. Compute alone should be a fraction of a
-millisecond; the rest is unaccounted.
+building therefore depends on how much of the 2.58 ms floor is that gather. When this note
+was first written that was unmeasured, and 161 us per row (2.58 ms / 16) looked plausible for
+cold random reads. **The storage-latency measurement in the next section closes most of that
+gap and points the other way** — see below.
 
-## How to settle it (needs docker access)
+## The storage latency bound: the floor is not the PLE gather (at least at small context)
+
+Measured directly on the filesystem holding the model files (a 30-line O_DIRECT benchmark,
+random 4K reads, QD1, 2,000 samples against the 49.8 GB shard 2):
+
+| metric | value |
+|---|---|
+| mean | 204 us |
+| p50 | 202 us |
+| p90 | 226 us |
+| p99 | 360 us |
+| max | 1004 us |
+
+This bounds the PLE hypothesis hard. The gather is **16 rows per token**; if those were 16
+serialised cold random reads, the cost would be 16 x 200 us = **3.2 ms/token — which is more
+than the entire measured 2.58 ms/token floor**. A prefill rate of 388 tok/s is therefore
+incompatible with "16 serialised cold row reads per token". One of these must hold:
+
+- the rows are **page-cached**, not cold — and this is now the likely answer, because at
+  9,400 tokens the phrase has only ~4,288 distinct trigrams, i.e. ~34k rows at ~88 bytes
+  ~= **3 MB of working set**, which the page cache holds trivially; or
+- the reads are **already overlapped** with compute rather than serialised; or
+- both.
+
+The second consequence is that it **resolves the exact cold==warm equality** recorded in the
+padding-trap note (297.0 vs 297.0, 330 vs 330). That identity is not "the rows are always
+cold, so a repeat cannot help" — it is "the working set is small enough that *both* passes
+read the same rows out of the page cache". The first pass faults ~3 MB in once; after that
+neither pass touches the SSD for the table.
+
+So at 1k-9.4k tokens, where the floor was fitted, **the PLE gather is not the floor** — its
+working set is single-digit megabytes. At 250,867 tokens the distinct-trigram count is
+127,235 for real text, i.e. ~1M rows ~= **~90 MB** of table — still comfortably inside this
+box's ~12 GiB page cache. That does not prove the gather is free at full context, but it does
+mean the premise that motivates a parallel-`pread` port (many *serialised cold* row reads per
+token) is **not supported by measurement on this box at any context size tested**.
+
+## How to settle it definitively (needs docker access)
 
 The floor's composition is separable with launch flags on a throwaway instance, all of which
 are cheap because the contexts involved are tiny:

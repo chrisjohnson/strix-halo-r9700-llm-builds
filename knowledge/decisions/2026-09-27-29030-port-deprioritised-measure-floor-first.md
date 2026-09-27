@@ -68,3 +68,29 @@ constant-floor fit, its caveats, and the flag-level plan to decompose it are in
 `knowledge/research/2026-09-27-flashnext-prefill-constant-floor.md`. The port itself came
 from the opencode session named in the padding-trap note, which inherited it from an external
 chatbot's advice.
+
+## Addendum, same day — the floor is not the PLE gather, measured
+
+The section above says the decision turns on how much of the 2.58 ms floor the gather
+accounts for, and treats that as needing docker access. Part of it turned out to be
+answerable from the host with no model run at all: a 30-line O_DIRECT benchmark measured this
+box's random 4K read latency at **p50 202 us** (p99 360 us).
+
+That bound is decisive for small context. 16 serialised cold row reads per token would cost
+**3.2 ms/token — more than the entire measured floor of 2.58 ms**. A 388 tok/s prefill is
+therefore incompatible with "16 serialised cold row reads per token", so the rows must be
+page-cached, or the reads already overlapped, or both. And the working set says which: at
+9,400 tokens the text carries ~4,288 distinct trigrams, i.e. ~34k rows ~= **3 MB**, which the
+page cache holds trivially. At 250,867 tokens real text is ~127k trigrams ~= **~90 MB**,
+still well inside the ~12 GiB page cache.
+
+This also dissolves the exact cold==warm equality this work kept reporting: it is not "the
+rows are always cold so repeats cannot help", it is "both passes read the same small working
+set out of the page cache".
+
+**Effect on the decision**: unchanged in direction, stronger in support, and the "measure the
+floor first" caveat is now largely satisfied from the host. The gather is not the floor at any
+context size tested; the premise that motivates a parallel-`pread` port is not supported by
+measurement here. The port stays deprioritised and still not formally dropped — the definitive
+test remains `--tensor-read-lazy off` / `--lazy-mode off` at 250k on a throwaway instance,
+where the working set (~90 MB) is largest, and that still needs docker access.
