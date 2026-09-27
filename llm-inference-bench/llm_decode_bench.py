@@ -41,27 +41,141 @@ from rich.text import Text
 
 CHARS_PER_TOKEN = 4
 
-PADDING_SENTENCES = [
-    "The history of European architecture spans thousands of years and encompasses a wide variety of styles and movements.",
-    "From the ancient Greek temples to the Gothic cathedrals of the Middle Ages, each era has left its distinctive mark on the built environment.",
-    "The Renaissance brought a renewed interest in classical forms, while the Baroque period introduced dramatic ornamentation and grandeur.",
-    "In the modern era, architects have experimented with new materials such as steel, glass, and reinforced concrete.",
-    "The development of skyscrapers in the late 19th century transformed urban landscapes around the world.",
-    "Sustainable architecture has become increasingly important as societies grapple with climate change and resource depletion.",
-    "The principles of good design include functionality, durability, and aesthetic appeal.",
-    "Urban planning plays a crucial role in shaping how cities develop and how their inhabitants experience daily life.",
-    "Public spaces such as parks, plazas, and waterfronts contribute significantly to the quality of urban living.",
-    "The integration of technology into building design has opened up new possibilities for energy efficiency and comfort.",
-    "Historical preservation efforts seek to maintain the cultural heritage embodied in older structures.",
-    "The relationship between architecture and nature has been explored by many influential designers throughout history.",
-    "Building codes and regulations ensure that structures meet minimum standards for safety and accessibility.",
-    "The choice of materials in construction affects not only the appearance of a building but also its environmental impact.",
-    "Innovative structural engineering techniques have made it possible to create buildings of unprecedented scale and complexity.",
-    "The study of vernacular architecture reveals how different cultures have adapted their building practices to local conditions.",
-    "Interior design complements architecture by addressing the arrangement and decoration of interior spaces.",
-    "Landscape architecture deals with the design of outdoor areas, landmarks, and structures to achieve environmental or aesthetic outcomes.",
-    "The concept of smart cities integrates information technology with urban infrastructure to improve efficiency and quality of life.",
-    "Affordable housing remains one of the most pressing challenges facing urban planners and policymakers worldwide.",
+# Padding text used to synthesise long-context prompts.
+#
+# This was a fixed list of 20 sentences cycled with
+# `PADDING_SENTENCES[idx % len(PADDING_SENTENCES)]`. That produced a context
+# whose *entire* trigram set is a few hundred entries, so a model carrying an
+# n-gram/PLE table (qwen3.8-flash-next: a ~26.8 GiB PLE table keyed on
+# 3-grams) only ever touched a working set small enough to stay
+# cache-resident. Prefill measured on such text under-reports the real
+# cold-read cost - exactly the trap called out on llama.cpp PR #29030 ("any
+# benchmark built from repeated filler will show this PR doing nothing"), and
+# the reason this generator was replaced 2026-09-27.
+#
+# Sentence count here is combinatorial rather than fixed - templates x slot
+# vocabularies - so distinct trigrams scale with context length the way real
+# prose does and the PLE table is genuinely exercised. Everything is drawn
+# from a seeded RNG, so a given (padding seed, context) always reproduces
+# byte-identical text and two builds can be A/B'd against identical input.
+PADDING_TEMPLATES = [
+    "{subject} {verb} {object}{clause}.",
+    "In {era}, {subject} {verb} {object}{clause}.",
+    "{adverb}, {subject} {verb} {object}{clause}.",
+    "{subject} {verb} {object}, while {subject2} {verb2} {object2}{clause}.",
+    "Although {subject} {verb} {object}, {subject2} {verb2} {object2}{clause}.",
+    "The {adj} {noun} {verb} {object}{clause}.",
+    "{subject} {verb} that {subject2} {verb2} {object2}{clause}.",
+    "Whenever {subject} {verb} {object}, the {adj} {noun} {verb2} {object2}{clause}.",
+]
+
+PADDING_SUBJECTS = [
+    "the scheduler", "the compiler", "the runtime", "the memory controller",
+    "the prefetch engine", "the attention kernel", "the router network",
+    "the quantization pass", "the tokenizer", "the embedding table",
+    "the page cache", "the scratch allocator", "the tensor loader",
+    "the collective backend", "the inference server", "the batch scheduler",
+    "the kernel dispatcher", "the graph rewriter", "the cache invalidation pass",
+    "the speculative decoder", "the expert dispatcher", "the gradient checkpoint",
+    "the fusion pass", "the sharding planner", "the KV manager",
+    "the admission controller", "the profiler", "the trace collector",
+    "the weight streaming layer", "the numerics library", "the sampler",
+    "the pipeline stage", "the reduction tree", "the device queue",
+    "the command processor", "the bandwidth estimator", "the layout planner",
+    "the calibration routine", "the fallback path", "the verification harness",
+]
+
+PADDING_VERBS = [
+    "reorders", "coalesces", "throttles", "relaxes", "rebalances", "serializes",
+    "overlaps", "batches", "partitions", "annotates", "fuses", "tiles",
+    "streams", "checkpoints", "evicts", "promotes", "demotes", "speculates",
+    "amortizes", "pins", "prefetches", "compresses", "quantizes", "aligns",
+    "pipelines", "duplicates", "migrates", "drains", "backpressures", "unrolls",
+    "specializes", "inlines", "schedules", "estimates", "reconciles",
+    "arbitrates", "caches", "invalidates", "replays", "truncates",
+]
+
+PADDING_OBJECTS = [
+    "the incoming request stream", "tensor fragments across the fabric",
+    "the resident weight set", "every outstanding memory transaction",
+    "the hot path through the kernel", "the per-layer activation buffer",
+    "the sparse expert selection", "the long-context key blocks",
+    "the staging buffer pool", "the instruction window",
+    "the shared embedding rows", "the intermediate reductions",
+    "the device-side queue", "the host-side ring buffer",
+    "the scratchpad allocation", "the compressed weight pages",
+    "the attention mask layout", "the position encoding tables",
+    "the router logits", "the output projection", "the residual stream",
+    "the paged KV blocks", "the descriptor ring", "the completion queue",
+    "the prefetch distances", "the occupancy heuristic", "the tile shapes",
+    "the boundary conditions", "the alignment requirements",
+    "the eviction order", "the reuse distance", "the working set estimate",
+    "the bandwidth budget", "the latency target", "the throughput ceiling",
+    "the thermal envelope", "the power state transition",
+    "the clock domain crossing", "the memory fence",
+    "the synchronization barrier",
+]
+
+PADDING_CLAUSES = [
+    "", "", "", "",
+    " without stalling the pipeline",
+    " before the next barrier",
+    " under sustained load",
+    " at the cost of extra bandwidth",
+    " as the working set grows",
+    " once the queue saturates",
+    " while the device stays busy",
+    " in the steady state",
+    " for reasons that remain unclear",
+    " with predictable latency",
+    " despite the added complexity",
+    " whenever the cache misses",
+    " across every active slot",
+    " long before the deadline",
+    " at roughly constant cost",
+    " and the measurement confirms it",
+]
+
+PADDING_ERAS = [
+    "the early days of the project", "the first optimization pass",
+    "the initial bring-up", "the migration to a new backend",
+    "the transition to paged memory", "the second generation of hardware",
+    "the pre-quantization era", "the era of hand-written kernels",
+    "the consolidation phase", "the period before batching",
+    "the initial benchmark sweep", "the long debugging session",
+    "the port to a new instruction set", "the rewrite of the loader",
+    "the introduction of speculative decoding",
+    "the switch to unified memory", "the era of static graphs",
+    "the first production deployment", "the capacity planning exercise",
+    "the second round of profiling",
+]
+
+PADDING_ADVERBS = [
+    "Curiously", "In practice", "By design", "On closer inspection",
+    "Empirically", "For the most part", "Under contention", "Predictably",
+    "Counterintuitively", "With enough headroom", "At steady state",
+    "Given the constraints", "In the common case", "As a rule",
+    "Despite the overhead", "After warmup", "Without warning",
+    "More often than not", "In the worst case",
+    "Subject to measurement error",
+]
+
+PADDING_ADJS = [
+    "resident", "sparse", "dense", "paged", "unified", "pinned", "streamed",
+    "compressed", "fused", "tiled", "sharded", "replicated", "speculative",
+    "adaptive", "static", "dynamic", "asynchronous", "coalesced", "vectorized",
+    "quantized", "hierarchical", "distributed", "synchronous",
+    "opportunistic", "conservative", "aggressive", "idempotent", "monotonic",
+    "amortized", "latency-bound",
+]
+
+PADDING_NOUNS = [
+    "scheduler", "allocator", "dispatcher", "decoder", "collective",
+    "prefetcher", "estimator", "profiler", "checkpoint", "reduction",
+    "barrier", "fence", "queue", "ring", "tile", "kernel", "shard",
+    "replica", "pipeline", "cache", "buffer", "descriptor", "window",
+    "heuristic", "threshold", "budget", "envelope", "estimate", "planner",
+    "harness",
 ]
 
 GENERATION_PROMPT = (
@@ -167,17 +281,66 @@ class TUIState:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def generate_padding_text(target_tokens: int) -> str:
+def _compose_sentence(rng: random.Random) -> str:
+    """One synthetic sentence from a random template + random slot fills."""
+    return rng.choice(PADDING_TEMPLATES).format(
+        subject=rng.choice(PADDING_SUBJECTS),
+        subject2=rng.choice(PADDING_SUBJECTS),
+        verb=rng.choice(PADDING_VERBS),
+        verb2=rng.choice(PADDING_VERBS),
+        object=rng.choice(PADDING_OBJECTS),
+        object2=rng.choice(PADDING_OBJECTS),
+        clause=rng.choice(PADDING_CLAUSES),
+        era=rng.choice(PADDING_ERAS),
+        adverb=rng.choice(PADDING_ADVERBS),
+        adj=rng.choice(PADDING_ADJS),
+        noun=rng.choice(PADDING_NOUNS),
+    )
+
+
+def generate_padding_text(target_tokens: int, seed=0) -> str:
+    """Synthesise ~target_tokens of high-trigram-diversity prose.
+
+    Deterministic for a given (seed, target_tokens) - the whole point of the
+    seed is that two benchmark runs, or two builds being A/B'd, receive
+    byte-identical input. Callers wanting genuinely different text for
+    different context lengths pass a per-context seed (see the context_cache
+    build in main()).
+    """
     target_chars = target_tokens * CHARS_PER_TOKEN
-    lines = []
+    rng = random.Random(seed)
+    sentences = []
     current_chars = 0
-    idx = 0
+    previous = None
     while current_chars < target_chars:
-        sentence = PADDING_SENTENCES[idx % len(PADDING_SENTENCES)]
-        lines.append(sentence)
+        sentence = _compose_sentence(rng)
+        if sentence == previous:
+            # Immediate repeats are the one pattern worth suppressing
+            # outright: they would hand the model a duplicated trigram it
+            # just looked up.
+            continue
+        previous = sentence
+        sentences.append(sentence)
         current_chars += len(sentence) + 1
-        idx += 1
-    return " ".join(lines)
+    return " ".join(sentences)
+
+
+def _corpus_slice(corpus: str, target_chars: int, seed) -> str:
+    """A deterministic window of `target_chars` taken from a real corpus.
+
+    Each context takes its own seeded offset rather than a shared prefix, so
+    a longer context is not a superset of a shorter one - measuring the
+    longer context second would otherwise read text whose pages an earlier
+    measurement had already faulted in, which is the exact cost under test.
+    A corpus shorter than the requested context has to be tiled; that
+    reintroduces repetition, so main() warns when it happens.
+    """
+    if len(corpus) >= target_chars:
+        rng = random.Random(seed)
+        start = rng.randrange(0, len(corpus) - target_chars + 1)
+        return corpus[start:start + target_chars]
+    reps = (target_chars // max(len(corpus), 1)) + 1
+    return (corpus * reps)[:target_chars]
 
 
 def build_messages(context_tokens: int, context_text: str) -> list:
@@ -837,17 +1000,29 @@ def build_display(state: TUIState) -> Layout:
         prefill_table.add_column("TTFT", justify="right", min_width=6)
         prefill_table.add_column("Prefill", justify="right", min_width=6)
         prefill_table.add_column("tok/s", justify="right", min_width=8)
+        # Cold vs warm are the numbers that actually discriminate a lazy-read
+        # change; the blended tok/s column is kept for continuity with
+        # existing result files and dashboards.
+        prefill_table.add_column("cold", justify="right", min_width=8)
+        prefill_table.add_column("warm", justify="right", min_width=8)
         for ctx in state.prefill_contexts:
             if ctx in state.prefill_results:
                 pr = state.prefill_results[ctx]
+                cold = pr.get("first_touch_tok_per_sec")
+                warm = pr.get("warm_tok_per_sec")
                 prefill_table.add_row(
                     format_context(ctx),
                     f"{pr['ttft']:.2f}s",
                     f"{pr.get('prefill_time', pr['ttft']):.2f}s",
                     f"[bold green]{pr['tok_per_sec']:,.0f}[/bold green]",
+                    f"{cold:,.0f}" if cold is not None else "[dim]n/a[/dim]",
+                    f"{warm:,.0f}" if warm is not None else "[dim]n/a[/dim]",
                 )
             else:
-                prefill_table.add_row(format_context(ctx), "[dim]...[/dim]", "[dim]...[/dim]", "[dim]...[/dim]")
+                prefill_table.add_row(
+                    format_context(ctx), "[dim]...[/dim]", "[dim]...[/dim]",
+                    "[dim]...[/dim]", "[dim]...[/dim]", "[dim]...[/dim]",
+                )
 
         results_layout = Layout()
         results_layout.split_row(
@@ -1070,19 +1245,46 @@ async def run_benchmark(args):
     # --- Step 3: Generate unique padding text per context length ---
     # Each context gets a unique prefix so radix cache cannot match across lengths.
     # Within same length, same text is reused → decode phase gets cache hit.
+    #
+    # Each context also gets its own *body*, not a truncated copy of one shared
+    # base text. The old shared-base scheme made every longer context inherit
+    # the pages an earlier, shorter context had already faulted in - i.e. it
+    # measured a partly warm cache for exactly the cold-read cost under test,
+    # on top of the repeated-filler problem. Deriving the body from
+    # (padding seed, ctx) keeps runs reproducible while making each context's
+    # text genuinely first-touch for the page cache.
     all_ctx_sizes = sorted(set(prefill_contexts + [c for c in context_lengths if c > 0]))
     max_ctx = max(all_ctx_sizes) if all_ctx_sizes else 0
     context_cache = {}
     run_id = ''.join(random.choices(string.ascii_lowercase, k=12))
     if max_ctx > 0:
+        corpus = ""
+        if args.context_file:
+            try:
+                with open(args.context_file, "r", errors="replace") as f:
+                    corpus = f.read()
+            except OSError as e:
+                console.print(f"[red]--context-file unreadable ({e}); falling back to synthetic text[/red]")
+                corpus = ""
+            if corpus and len(corpus) < max_ctx * CHARS_PER_TOKEN:
+                console.print(
+                    f"[yellow]--context-file is shorter than the largest context "
+                    f"({len(corpus):,} chars < {max_ctx * CHARS_PER_TOKEN:,}) - it will be "
+                    f"tiled, which reintroduces the repetition this generator exists to "
+                    f"avoid. Prefer a corpus at least that long.[/yellow]"
+                )
+            if corpus:
+                console.print(f"[cyan]Using real corpus:[/cyan] {args.context_file} ({len(corpus):,} chars)")
         console.print(f"[bold]Generating padding texts (run={run_id}, up to {format_context(max_ctx)})...[/bold]")
-        base_text = generate_padding_text(max_ctx)
         for ctx in all_ctx_sizes:
             # Unique prefix per run + context length → no cross-run or cross-length cache hits
             prefix = f"[BENCH_{run_id}_CTX_{ctx}] "
             target_chars = ctx * CHARS_PER_TOKEN
-            text = prefix + base_text
-            context_cache[ctx] = text[:target_chars]
+            if corpus:
+                body = _corpus_slice(corpus, target_chars, f"{args.padding_seed}:{ctx}")
+            else:
+                body = generate_padding_text(ctx, seed=f"{args.padding_seed}:{ctx}")
+            context_cache[ctx] = (prefix + body)[:target_chars]
     context_cache[0] = ""
     console.print("[green]Done.[/green]\n")
 
@@ -1191,9 +1393,17 @@ async def run_benchmark(args):
                     pass
 
                 # Warmup 2: prefill with smallest test context (triggers prefill CUDA graphs)
+                #
+                # Deliberately NOT the real context_cache text for this size:
+                # warming with the measured text would make the smallest
+                # context's first-touch sample warm, defeating the cold
+                # measurement at exactly the size that is cheapest to re-run
+                # cold. Same token count, different body.
                 warmup_ctx = prefill_contexts[0]
                 warmup_prefix = f"[WARMUP_{run_id}] "
-                warmup_text = warmup_prefix + (context_cache.get(warmup_ctx, "") or generate_padding_text(warmup_ctx))
+                warmup_text = warmup_prefix + generate_padding_text(
+                    warmup_ctx, seed=f"{args.padding_seed}:warmup"
+                )
                 warmup_text = warmup_text[:warmup_ctx * CHARS_PER_TOKEN]
                 warmup_msgs = build_messages(warmup_ctx, warmup_text)
                 await measure_ttft(client, warmup_msgs)
@@ -1218,7 +1428,16 @@ async def run_benchmark(args):
                     state.cell_duration = 0
                     live.update(build_display(state))
 
-                    repeats = 3 if ctx < REPEAT_THRESHOLD else 1
+                    # First sample is first-touch for this context's own text
+                    # (cold page cache); the rest are warm re-prefills of the
+                    # same token count. Both are recorded: the lazy-read /
+                    # on-direct change this harness exists to evaluate is
+                    # specifically a *cold* win that is near-flat cold-to-warm,
+                    # so a single blended number hides it either way. The old
+                    # `repeats = 1` for ctx >= 8192 reported a cold number with
+                    # no warm comparison at all.
+                    repeats = args.prefill_repeats if args.prefill_repeats > 0 else (3 if ctx < REPEAT_THRESHOLD else 2)
+                    repeats = max(repeats, 1)
                     ttft_samples = []
                     for r in range(repeats):
                         if r == 0:
@@ -1235,11 +1454,26 @@ async def run_benchmark(args):
                     prefill_time = max(raw_ttft - baseline_ttft, 0.001)
                     tok_per_sec = ctx / prefill_time
 
+                    first_ttft = ttft_samples[0]
+                    first_prefill = max(first_ttft - baseline_ttft, 0.001)
+                    if len(ttft_samples) > 1:
+                        warm_ttft = median(ttft_samples[1:])
+                        warm_prefill = max(warm_ttft - baseline_ttft, 0.001)
+                    else:
+                        warm_ttft = None
+                        warm_prefill = None
+
                     state.prefill_results[ctx] = {
                         "ttft": raw_ttft,
                         "prefill_time": prefill_time,
                         "tok_per_sec": tok_per_sec,
                         "baseline": baseline_ttft,
+                        # Additive cold/warm split - see the repeats comment.
+                        "samples": len(ttft_samples),
+                        "first_touch_ttft": first_ttft,
+                        "first_touch_tok_per_sec": ctx / first_prefill,
+                        "warm_ttft": warm_ttft,
+                        "warm_tok_per_sec": (ctx / warm_prefill) if warm_prefill else None,
                     }
 
                     state.cell_running = False
@@ -1342,13 +1576,22 @@ def print_final_results(results: list, concurrency_levels: list, context_lengths
         pt.add_column("TTFT (s)", justify="right")
         pt.add_column("Prefill (s)", justify="right")
         pt.add_column("Prefill tok/s", justify="right")
+        # Cold (first-touch) vs warm (repeat) - the columns that actually
+        # discriminate a lazy-read change. `Prefill tok/s` remains the blended
+        # headline for continuity with existing result files.
+        pt.add_column("cold tok/s", justify="right")
+        pt.add_column("warm tok/s", justify="right")
         for ctx in sorted(prefill_results.keys()):
             pr = prefill_results[ctx]
+            cold = pr.get("first_touch_tok_per_sec")
+            warm = pr.get("warm_tok_per_sec")
             pt.add_row(
                 format_context(ctx),
                 f"{pr['ttft']:.2f}",
                 f"{pr.get('prefill_time', pr['ttft']):.2f}",
                 f"{pr['tok_per_sec']:,.0f}",
+                f"{cold:,.0f}" if cold is not None else "n/a",
+                f"{warm:,.0f}" if warm is not None else "n/a",
             )
         console.print(pt)
         console.print()
@@ -1445,10 +1688,21 @@ def save_results(results: list, args, filepath: str, prefill_results: dict = Non
     prefill_summary = {}
     if prefill_results:
         for ctx, pr in sorted(prefill_results.items()):
-            prefill_summary[str(ctx)] = {
+            entry = {
                 "ttft_seconds": round(pr["ttft"], 3),
                 "tok_per_sec": round(pr["tok_per_sec"], 0),
             }
+            # Additive cold/warm split: `tok_per_sec` stays the blended
+            # headline (so existing consumers keep working), while
+            # first_touch_* is the cold number and warm_* the repeat number.
+            if "first_touch_tok_per_sec" in pr:
+                entry["first_touch_tok_per_sec"] = round(pr["first_touch_tok_per_sec"], 0)
+                entry["first_touch_ttft_seconds"] = round(pr["first_touch_ttft"], 3)
+                entry["samples"] = pr.get("samples", 1)
+            if pr.get("warm_tok_per_sec") is not None:
+                entry["warm_tok_per_sec"] = round(pr["warm_tok_per_sec"], 0)
+                entry["warm_ttft_seconds"] = round(pr["warm_ttft"], 3)
+            prefill_summary[str(ctx)] = entry
 
     # target_launch_config: written by the orchestrator (docker inspect +
     # git rev-parse at the moment it started this benchmark's target - see
@@ -1554,6 +1808,29 @@ def parse_args():
         help="Comma-separated prefill context sizes to benchmark (e.g. '8192,16384,32768'). "
              "Empty = auto (all candidates up to 128k or server limit). Use to cap the prefill "
              "phase for slow engines like Ollama so the run fits the build timeout."
+    )
+    parser.add_argument(
+        "--prefill-repeats", type=int, default=0,
+        help="Samples per prefill context. Sample 0 is first-touch (cold page cache), "
+             "later samples are warm re-prefills; both are reported. 0 = default "
+             "(3 below 8k, else 2). Set 1 to restore the old single-cold-sample "
+             "behaviour at the cost of losing the cold/warm comparison."
+    )
+    parser.add_argument(
+        "--padding-seed", default="bench",
+        help="Seed for synthetic padding text. Same seed + context length produces "
+             "byte-identical text, so two builds can be A/B'd on identical input "
+             "(default: bench)."
+    )
+    parser.add_argument(
+        "--context-file", default="",
+        help="Read padding text from this file instead of synthesising it. Real text "
+             "is the authoritative input for lazy-read / cold-prefill work: synthetic "
+             "prose has a fixed vocabulary and plateaus well below the distinct-trigram "
+             "count real prompts reach. Each context length takes its own seeded window "
+             "into the file, so contexts are not prefixes of one another. The file must "
+             "already be visible inside whatever runs this script (mounted into the "
+             "bench container, or a local path standalone)."
     )
     parser.add_argument(
         "--engine", default=ENGINE_AUTO, choices=[ENGINE_AUTO, ENGINE_SGLANG, ENGINE_VLLM, ENGINE_OLLAMA],
