@@ -1,0 +1,46 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-strixhalo-mtp-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. The engine behind the "1.2k t/s prefill on Strix Halo" result -
+    pwilkin/llama.cpp@strix-halo on a custom retained-PM4 ROCr/HIP runtime, ROCm 10.0. Its
+    writeup is the best-measured work in this space: 16+ commits each with error bars and a
+    stated multiplier, negative results kept (its sparse-attention path measures break-even and
+    it says so), the out-of-tree reference stack re-run the same day as a control, and a
+    150,300-token needle-in-a-haystack test before trusting the sparse kernels. Route: 191 ->
+    ~1,200 tok/s pp16384, i.e. 6.07x. See
+    knowledge/research/2026-09-27-strix-halo-engine-landscape.md.
+
+    THE RELATIONSHIP TO THIS REPO'S OWN BEST BUILD: this is the SAME mechanism we already ported
+    as upstream PR #29030 and measured at +21.9-29.1% - "on-direct" lazy reading - but on a
+    different engine with 15 further commits we do not have. The single largest of those is a
+    TILED gated delta-net at 2.37x. That is the prize here, and it is kernel work rather than a
+    flag. Our own GDN win (GGML_HIP_GDN_CHUNK=1, +7.4-10.7%) is the CHUNKED path, which their
+    writeup explicitly measured at ~3% and dropped when compared against tiled - so the two
+    results agree, and it is worth knowing they were reached independently.
+
+    WHAT THEIR OWN DOCS WARN ABOUT, carried here because each would cost real time:
+      - never set GGML_CUDA_ENABLE_UNIFIED_MEMORY. It routes allocation through
+        hipMallocManaged, and under HIP graphs the MTP draft context corrupts - garbage tokens,
+        or the server dying with "init: invalid token".
+      - the custom /opt/strix/lib must stay on LD_LIBRARY_PATH and out of /etc/ld.so.conf, since
+        it shadows the ROCm SDK's libamdhip64/libhsa-runtime64 by ordering.
+      - under rootless Docker, do not use host networking: it masks /sys, /sys/class/kfd
+        disappears, and ROCr reports no ROCm-capable device. This build publishes a port.
+      - HIP graphs do NOT engage for prefill (each chunk shape occurs once per request and capture
+        needs two consecutive identical graphs); retained PM4 pays off in decode. States so
+        itself, which is why the prefill win is attributed to the kernels rather than the runtime.
+
+    BLOCKERS, both one step each: the image is not built yet (see the compose header for the
+    command), and the shared MTP head is committed to local-ai-machine but not deployed.
+
+    NOT YET RUN. Nothing here is a claim about how this engine behaves on our weights; their
+    numbers are their own, on IQ4_NL, through llama-bench.
