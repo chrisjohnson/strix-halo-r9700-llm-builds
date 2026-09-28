@@ -46,7 +46,7 @@ derived:
     starting one.
 
 
-    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image
-    (tag plus the exact build or pull command), weights and where they go,
-    the engine's non-obvious failure modes, and how to run it. The notes above
-    carry what was measured and why.
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.

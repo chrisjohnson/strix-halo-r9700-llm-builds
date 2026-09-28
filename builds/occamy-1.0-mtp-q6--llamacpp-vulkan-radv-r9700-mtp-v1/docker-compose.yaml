@@ -30,4 +30,4 @@ services:
       --port 8080 -a occamy-1.0-mtp-q6-r9700 --metrics
       '
     ports:
-    - 127.0.0.1:8173:8080
+    - 127.0.0.1:8192:8080

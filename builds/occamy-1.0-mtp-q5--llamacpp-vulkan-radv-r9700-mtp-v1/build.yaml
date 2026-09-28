@@ -1,5 +1,5 @@
 name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-v1
-status: TESTING
+status: TESTED_VIABLE
 derived:
   engine: llamacpp-vulkan-radv-v1
   model: Occamy-1.0 (Q5_K_M, MTP, self-grafted)
@@ -41,7 +41,25 @@ derived:
     starting one.
 
 
-    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image
-    (tag plus the exact build or pull command), weights and where they go,
-    the engine's non-obvious failure modes, and how to run it. The notes above
-    carry what was measured and why.
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.
+
+    HEALTH CHECK 2026-09-28, done before promoting it to standing, and it PASSES:
+      - FITS: with it loaded the R9700 shows 30.7 GiB of VRAM used of 31.9 total, against the q4
+        build's 29.0. So Q5 fits with about 1.2 GiB of headroom - less than q4's 2.9 GiB, which is
+        the cost of the higher quant and worth knowing before adding anything else to that card.
+      - BOOTS AND SERVES: modelctl up brings it healthy and primes it; /health returns 200.
+      - WORKS: at the role's declared maxTokens of 8192 it answers a hard multi-step prompt
+        properly - finish=stop, 656 characters of content ending in the right conclusion, with
+        2214 characters of reasoning. At a 64-token cap it returns empty content instead, which
+        is the same thinking-budget asymmetry documented for flash-next: the cap ends generation
+        before the think block closes. It does NOT bite at 8192, which is what medium-moe uses.
+
+    PORT MOVED 8172 -> 8191. It was created on 8172, which this repo had already assigned to
+    qwen3.8-flash-next-iq4xs--llamacpp-rocm714-strixhalo-mtp-v2 - a cross-model clash where
+    whichever starts second fails. The newcomer moved, since the older build's port is referenced
+    in its own docs. The q6 r9700 build had the same collision on 8173 and moved to 8192.
+
+    Being promoted to standing alongside the tuned flash-next build on the APU.

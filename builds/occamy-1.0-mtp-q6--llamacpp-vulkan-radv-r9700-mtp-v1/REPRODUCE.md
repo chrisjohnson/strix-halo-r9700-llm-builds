@@ -18,8 +18,8 @@ Engine: llama.cpp compiled for Vulkan RADV on gfx1151. External public image - n
 Weights under `/var/lib/ai-models/`, declared in `local-ai-machine`'s `configuration.nix` `models` list:
 
 ```sh
-/var/lib/ai-models/occamy-1.0-mtp-q6/occamy-1.0-mtp-Q6_K.gguf   # self-grafted Q6_K, ~27.2 GiB
-/var/lib/ai-models/occamy-1.0-mmproj/                              # vision projector
+/var/lib/ai-models/llamacpp-occamy-1.0-mtp-q4/occamy-1.0-mtp-Q4_K_M.gguf      # one file
+/var/lib/ai-models/occamy-1.0-mmproj/                                      # vision projector
 ```
 
 ## Running it
