@@ -26,7 +26,7 @@ cross-model comparison.
   modelctl up [<build-id>...]
   modelctl up --standing <path-to-standing-list> [--exclusive]
   modelctl down [<build-id>...]
-  modelctl logs [<build-id>...]
+  modelctl logs [<logs-options>] [<build-id>...]
   modelctl list
   modelctl ps
   modelctl exec <build-id> [<cmd>...]
@@ -36,6 +36,13 @@ cross-model comparison.
   directory; `logs`: every currently-running build container). `--standing` without
   `--exclusive` refuses to start anything if a build outside the standing list is already
   running, leaving the decision to the caller; `--exclusive` stops those first instead.
+  `logs` takes `docker logs`' own options (`-f/--follow`, `-n/--tail`, `--since`,
+  `--until`, `-t/--timestamps`, `--details`) and fans them out per build — one
+  `docker logs` per id, since `docker logs` itself only ever takes one container. A
+  single id prints exactly what `docker logs` prints; several prefix every line with
+  `[<build-id>]`, following in parallel and printing one build at a time without `-f`.
+  So `modelctl logs -f --tail 100` is the "tail everything, last hundred lines each"
+  command.
 - **`builds/`** — one directory per verified model+engine combination (67+ today):
   `build.yaml` (identity, tuning history, measured results), `docker-compose.yaml` (the
   single-service compose file `modelctl` drives), `benchmarks/` (raw per-run JSON +

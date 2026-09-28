@@ -15,7 +15,7 @@ Usage:
   modelctl up [<build-id>...] [--exclusive]
   modelctl up --standing <path-to-standing-list> [--exclusive]
   modelctl down [<build-id>...]
-  modelctl logs [<build-id>...]
+  modelctl logs [<logs-options>] [<build-id>...]
   modelctl list
   modelctl ps
   modelctl exec <build-id> [<cmd>...]
@@ -41,6 +41,22 @@ use this instead of stopping things itself.
 list shows every build in the catalog (running or not); ps shows only
 currently-running ones, like `docker compose ps`. exec defaults to `sh`
 if no command is given.
+
+logs options are `docker logs`' own, passed through, and may appear before
+or after the build ids:
+  -f, --follow      keep streaming new output instead of printing and exiting
+  -n, --tail <n>    only the last <n> lines per build (integer or "all")
+      --since <ts>  only logs since this timestamp ("10m", "2026-09-28T00:00Z")
+      --until <ts>  only logs before this timestamp
+  -t, --timestamps  prefix each line with its container-log timestamp
+      --details     show extra details provided to logs
+`docker logs` itself takes exactly one container, so for several ids modelctl
+runs one per build: a single id prints output exactly as `docker logs` does,
+several prefix every line with [<build-id>] so interleaved output stays
+attributable - followed in parallel (Ctrl-C to stop), printed one build at a
+time without -f. Ids resolve by container name, which is every build's own
+id (its compose `container_name`), so a stopped build still prints its
+history - it just has nothing to follow.
 EOF
   exit 1
 }
@@ -458,10 +474,90 @@ cmd_down() {
   fi
 }
 
+# `docker logs` takes exactly one container (its own usage line says so), so
+# tailing several builds means one docker process per id and a prefix per line
+# to keep the interleaving attributable. Everything the caller passes is
+# handed to docker verbatim so `modelctl logs` behaves like `docker logs`
+# rather than a subset of it: no -f prints and exits, -f follows, and
+# -n/--since/--until/-t/--details all mean what they mean there.
 cmd_logs() {
-  local ids=("$@")
+  local follow=0 tail_n="" since="" until="" timestamps=0 details=0
+  local ids=()
+  local end_of_opts=0
+
+  # Hand-rolled, not getopts: getopts stops at the first non-option, and
+  # `modelctl logs <id> -f` has to work as well as `modelctl logs -f <id>`.
+  local opt
+  while [ "$#" -gt 0 ]; do
+    if [ "$end_of_opts" -eq 1 ]; then
+      ids+=("$1")
+      shift
+      continue
+    fi
+    case "$1" in
+      -h|--help)       usage ;;
+      -f|--follow)     follow=1 ;;
+      -t|--timestamps) timestamps=1 ;;
+      --details)       details=1 ;;
+      -n|--tail|--since|--until)
+        opt="$1"
+        shift
+        if [ "$#" -eq 0 ] || [ -z "${1:-}" ]; then
+          echo "modelctl logs: $opt requires a value" >&2
+          exit 1
+        fi
+        case "$opt" in
+          -n|--tail) tail_n="$1" ;;
+          --since)   since="$1" ;;
+          --until)   until="$1" ;;
+        esac
+        ;;
+      --tail=*|--since=*|--until=*)
+        opt="${1%%=*}"
+        local val="${1#*=}"
+        if [ -z "$val" ]; then
+          echo "modelctl logs: $opt requires a value" >&2
+          exit 1
+        fi
+        case "$opt" in
+          --tail)  tail_n="$val" ;;
+          --since) since="$val" ;;
+          --until) until="$val" ;;
+        esac
+        ;;
+      -n*)
+        tail_n="${1#-n}"
+        if [ -z "$tail_n" ]; then
+          echo "modelctl logs: -n requires a value" >&2
+          exit 1
+        fi
+        ;;
+      --) end_of_opts=1 ;;
+      -*)
+        echo "modelctl logs: unknown option '$1' (ids come after 'logs', options above; use -- before an id that starts with '-')" >&2
+        exit 1
+        ;;
+      *) ids+=("$1") ;;
+    esac
+    shift
+  done
+
+  # Validated here rather than left for docker to reject, because with several
+  # ids one bad flag would otherwise be re-rejected once per build.
+  if [ -n "$tail_n" ] && ! [[ "$tail_n" =~ ^(all|[0-9]+)$ ]]; then
+    echo "modelctl logs: --tail wants an integer or \"all\", got '$tail_n'" >&2
+    exit 1
+  fi
+
+  local dargs=()
+  [ "$follow" -eq 1 ] && dargs+=("-f")
+  [ "$timestamps" -eq 1 ] && dargs+=("-t")
+  [ "$details" -eq 1 ] && dargs+=("--details")
+  [ -n "$tail_n" ] && dargs+=("--tail" "$tail_n")
+  [ -n "$since" ] && dargs+=("--since" "$since")
+  [ -n "$until" ] && dargs+=("--until" "$until")
+
   if [ "${#ids[@]}" -eq 0 ]; then
-    ids=()
     local bid
     while IFS= read -r bid; do
       ids+=("$bid")
@@ -472,19 +568,58 @@ cmd_logs() {
     exit 1
   fi
 
-  # docker logs only ever follows one container per invocation - run one
-  # per requested id in parallel, prefixed so interleaved output stays
-  # attributable. A single id skips the prefix/background dance entirely.
+  # One build: pure passthrough - no prefix, docker's own exit status, no
+  # subshell in the way of Ctrl-C. `--` before the id (accepted by docker's
+  # own CLI parser, checked) so an id that begins with '-' is still an id.
   if [ "${#ids[@]}" -eq 1 ]; then
-    exec docker logs -f "${ids[0]}"
+    exec docker logs "${dargs[@]}" -- "${ids[0]}"
   fi
-  local pids=()
-  local id
+
+  local id failed=0
+  if [ "$follow" -eq 0 ]; then
+    # Not following: one build at a time, so each build's history is a
+    # readable block instead of a scramble. pipefail (set at the top of this
+    # file) makes the pipeline fail if docker does, not just if sed does.
+    for id in "${ids[@]}"; do
+      docker logs "${dargs[@]}" -- "$id" 2>&1 | sed -u "s/^/[$id] /" || failed=$((failed + 1))
+    done
+    if [ "$failed" -gt 0 ]; then
+      echo "modelctl: $failed build(s) had unreadable logs" >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  echo "modelctl: tailing ${#ids[@]} build(s), Ctrl-C to stop" >&2
+  local pids=() rc=0 p
+  trap 'for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done' INT TERM
   for id in "${ids[@]}"; do
-    (docker logs -f "$id" 2>&1 | sed "s/^/[$id] /") &
+    # Process substitution, not `docker ... | sed &`: bash forks a subshell to
+    # own a backgrounded pipeline, and that subshell - not docker - is what
+    # $! (and so the trap above) would point at, leaving `docker logs -f`
+    # running after modelctl itself is gone. This way the recorded pid IS the
+    # docker process. -u so lines reach a pipe as they arrive instead of
+    # sitting in sed's block buffer.
+    docker logs "${dargs[@]}" -- "$id" > >(sed -u "s/^/[$id] /") 2>&1 &
     pids+=("$!")
   done
-  wait "${pids[@]}"
+  # Wait for each follower by pid rather than a bare `wait`: a bare `wait`
+  # reports success no matter what its children did, which would swallow
+  # docker's own failure status (a mistyped id, an unreadable container) on
+  # the way out. Statuses stay available until reaped, so waiting each
+  # recorded pid once still sees the ones that already exited.
+  for p in "${pids[@]}"; do
+    wait "$p" || rc=$?
+  done
+  trap - INT TERM
+  # Give the prefixers a moment to flush what they already have: the sed
+  # processes come from process substitution, so `wait` above does not wait
+  # for them and they would otherwise be writing into a half-exited script.
+  sleep 0.1
+  # A stop signal (128+SIGNUM from `wait`) is a normal end to following, not
+  # an error; anything else is docker's own failure on at least one build.
+  [ "$rc" -ge 128 ] && return 0
+  return "$rc"
 }
 
 always_up_for() {
