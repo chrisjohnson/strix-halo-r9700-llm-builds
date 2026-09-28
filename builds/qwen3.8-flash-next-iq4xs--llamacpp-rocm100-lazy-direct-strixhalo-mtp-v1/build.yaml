@@ -72,6 +72,46 @@ derived:
     Cache-hit fraction is identical across all four, so as before the gain is entirely in the
     increment and compaction terms.
 
+
+    STANDARD BENCH (llm-inference-bench run 165, 20260928T050350Z) - the same harness as the
+    recorded baseline, so these are directly comparable rather than an estimate:
+
+      ctx     v1 (baseline)   v3    port    pwilkin    pwilkin vs baseline
+      8k               614    665     786       1080    1.76x
+      16k              597    651     797       1213    2.03x
+      32k              559    609     753       1256    2.25x
+      64k              498    538     660       1306    2.62x
+      128k             422    451     525       1264    3.00x
+      MEAN             538    583     704       1224    2.28x
+
+    Decode at 64k, aggregate tok/s:
+
+      build            c=1    c=2    c=4    c=8
+      v1 (baseline)   14.4   11.8   13.7   11.6
+      v3              12.1   18.9   12.1   12.0
+      port            17.8  113.9*  17.7   15.1     (*the excluded cold-prefill outlier)
+      pwilkin         33.9   26.6   24.5   24.1
+
+    THE ANSWER, against the 498 / 14.4 baseline quoted for the "how far have we come" question:
+
+      PP @64k  1306 tok/s  (+162%, 2.62x)
+      TG @64k    33.9 tok/s (+136%, 2.36x)
+
+    Two things worth reading off the shape rather than the single point:
+
+    - Their prefill PEAKS at 64k (1306), dipping slightly at 128k (1264). Ours peaks early and
+      declines. So 64k - an ordinary agentic session length - is where this engine is strongest
+      relative to ours, and the 3.00x at 128k is the largest ratio anywhere in the table.
+    - Their DECODE IS FLAT AND HIGH across every concurrency (33.9/26.6/24.5/24.1) where ours is
+      both lower and erratic. That is a stability property, not just a speed one: it means four
+      or eight concurrent agent turns do not degrade, which matters directly for subagents.
+
+    An extrapolated estimate made before this run, from the real-text ratio at 4k/8k/32k
+    (1.30/1.47/1.77, growing) anchored to our port build's 660, predicted 1,170-1,410 tok/s.
+    Measured 1306. The estimate was sound, but the DECODE number was deliberately NOT
+    estimated and that was right: the only prior data point was a single short-context cell at
+    15.9 tok/s that hinted decode might be WORSE, and the truth is 2.36x better.
+
     THE CAVEAT THAT MATTERS, stated because it is the obvious next question: THIS IS NOT A PURE
     ENGINE COMPARISON. This build also runs different launch flags - the documented ones -
     notably --load-mode none and a 16384 batch/ubatch against our 2048, plus f16 KV where we
