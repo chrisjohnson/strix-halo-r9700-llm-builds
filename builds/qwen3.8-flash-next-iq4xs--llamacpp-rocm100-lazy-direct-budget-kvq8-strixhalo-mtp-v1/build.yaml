@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-kvq8-strixhalo-mtp-v1
-status: TESTING
+status: TESTED_NOT_VIABLE
 derived:
   engine: llamacpp-rocm100-lazy-direct-v1
   model: Qwen3.8-Flash-Next
@@ -24,3 +24,16 @@ derived:
     scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
     into the same pool, and the new one died at load with a ~60GB allocation failure that looked
     like a verdict on the lever but was a memory collision.
+
+    RESULT: KV QUANTISATION IS IMPOSSIBLE ON THIS ENGINE. Both KV levers are closed by a hard
+    assertion in the engine's own attention path:
+
+      qwen4exp.cpp:1365: GGML_ASSERT(q->ne[0] == 256 && k->type == GGML_TYPE_F16 &&
+                                       v->type == GGML_TYPE_F16) failed
+
+    The container crash-loops on it, so f16 KV is not a preference of pwilkin's documented config
+    but a REQUIREMENT of this engine. That also means the 3.2-4.7 GiB that KV quantisation would
+    have freed is not available, which constrains the other levers.
+
+    The constraint is specific to this engine's qwen4exp path: the R9700/occamy build is a
+    different engine and does run q4_0 KV, where it measured +73.7% prefill at 8k over q8_0.
