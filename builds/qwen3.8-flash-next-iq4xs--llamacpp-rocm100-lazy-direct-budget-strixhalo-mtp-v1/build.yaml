@@ -1,0 +1,48 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-28. ADOPTED - this is what litellm's `big-moe` role (and its
+    -continue-json / -plan-json / -review-json siblings) points at.
+
+    It is ...-rocm100-lazy-direct-strixhalo-mtp-v1 - the fastest engine measured in this
+    catalog, 2.62x baseline prefill and 2.36x baseline decode at 64k - WITH a thinking bound
+    added, and the bound is not decoration.
+
+    WHY THE BOUND, MEASURED THROUGH THE REAL ROLE: the plain build reproduces the empty-answer
+    failure on this engine too. Through litellm on role big-moe at max_tokens=600, thinking on:
+
+      reasoning_effort=low     finish=length  reasoning=1925ch  content=0ch
+      reasoning_effort=medium  finish=length  reasoning=1745ch  content=0ch
+      reasoning_effort=xhigh   finish=length  reasoning=1843ch  content=0ch
+
+    Empty content at every effort level, so it is a property of the model plus llama.cpp's
+    defaults rather than of either engine - the same failure was measured on the EngramHalo
+    build. big-moe leaves maxTokens unset, so pi-ai's 32768 default is the cap, and the failure
+    needs >32k of thinking to bite. Rare, but it is exactly the failed-compaction shape, and the
+    harness reads it as slowness rather than as an error.
+
+    THE FIX, MEASURED ON THIS BUILD (--reasoning-budget 8192):
+
+      cap 16384   finish=stop   reasoning=25451ch  content=2164ch   ANSWER
+      cap 32768   finish=stop   reasoning=20813ch  content=1909ch   ANSWER
+
+    and end-to-end through litellm on role big-moe at cap 32768: finish=stop, reasoning 26143ch,
+    content 2750ch ending in the right answer.
+
+    8192 is chosen against pi-ai's 32768 default: it bounds thinking while leaving ~24k for the
+    answer. It does NOT help a caller whose own cap is below it - a thinking budget only acts
+    when the cap exceeds it, so the 600-token repro above would still be empty. --reasoning-budget
+    -message is deliberately not set.
+
+    KNOWN LIMIT, not yet addressed: if big-moe's maxTokens is ever set explicitly to a small
+    number, this build returns empty answers again, and the only cures are a smaller budget or
+    the client turning thinking off.

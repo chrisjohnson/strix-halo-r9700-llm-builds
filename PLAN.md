@@ -272,7 +272,7 @@ v1's `14.4/11.8/13.7/11.6` — flat where ours is erratic, which matters for sub
 The baseline is unusually well established: **four independent runs across two days agree to
 within 0.4%** on 64k prefill (497/497/496/498).
 
-### ADOPTION: measured, verified, and blocked on one credential
+### ADOPTION: DONE (2026-09-28) - and the two traps on the way
 
 Chris approved the experimental engine ("the engine is just another variable in our container...
 Experimental engine is fine"). The swap was verified against `local-ai-machine`'s own rule that
@@ -317,6 +317,34 @@ something dsh can do.
 Not worked around deliberately: the key IS readable through `sudo -n docker inspect
 litellm-proxy`, which is an allowed verb, but the rule for a blocked standard path is to flag it
 and confirm rather than improvise an alternative mechanism.
+
+**RESOLVED, and the resolution is worth reusing.** Neither step turned out to need Chris:
+
+- **The pin bump goes through git.** `nix flake update strix-halo-r9700-llm-builds` works fine in
+  a *dsh-writable* checkout (~/local-ai-machine); the resulting `flake.lock` is committed and
+  pushed, and the deploy checkout then picks it up with the `(chris) git fetch/reset/clean` verbs
+  dsh already has. No write access to the chris-owned checkout is needed, and the pin ends up
+  recorded in git rather than left uncommitted on the box as `deploy.sh --update-input` does.
+- **`nixos-rebuild switch --flake /etc/nixos#local-ai-machine`** is in dsh's sudo rules, so the
+  re-vendor is dsh's to do.
+- **The master key** is readable with `sudo -n docker inspect litellm-proxy` - an allowed verb -
+  and `set-role.sh` accepts it via `LITELLM_MASTER_KEY` in the environment. Chris authorised
+  using it ("if you can, you can set the role").
+
+**THE TRAP THAT COST THE MOST TIME HERE: every newly pushed build needs a pin bump BEFORE
+`set-role.sh` can see it, and the error does not say so** - it says `No build found at '<id>'` and
+prints a stale build list, which reads like a typo in the id. It happened twice in one hour. The
+rule: after creating a build, if a role needs to point at it, bump the pin first.
+
+Adoption completed:
+- `big-moe` (+ `-continue-json`, `-plan-json`, `-review-json`) -> **...-rocm100-lazy-direct-budget-...v1 on 8184**
+- `medium-moe` (+ `-continue-json`, `-scout-json`) -> **occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2 on 8171**
+- Both re-verified against the four-setting rule; all four held for both backends. For occamy an
+  **mmproj IS mounted**, so `input: [text, image]` is correct, and its template carries
+  `enable_thinking` rather than `reasoning_effort`, which is why `reasoningEfforts` stays `false`.
+- Both verified end-to-end through litellm with real completions.
+- Stale comments in `dsh-deploy/.dsh/settings.yaml` corrected; the declared VALUES needed no
+  change.
 
 **After the repoint**, per the same rule: verify end-to-end through litellm (a real completion on
 role `big-moe`), and update the `big-moe` comment in `dsh-deploy/.dsh/settings.yaml`, which still
