@@ -255,6 +255,56 @@ Prefill is monotone and consistent at every rung (8k 614→786, 128k 422→525),
 The port also improves **decode** — not expected when it was promoted, but the PLE gather runs
 on every token, not only during prefill, so removing the fault serialisation helps both.
 
+### Standard bench at 64k: the headline numbers
+
+Same harness as the recorded baseline, so directly comparable:
+
+| | baseline (v1) | our best (port) | **pwilkin** | **vs baseline** |
+|---|---|---|---|---|
+| **PP @64k** | 498 | 660 | **1,306** | **+162% (2.62x)** |
+| **TG @64k** | 14.4 | 17.8 | **33.9** | **+136% (2.36x)** |
+
+Prefill by context: v1 `614/597/559/498/422` against pwilkin `1080/1213/1256/1306/1264` at
+8k/16k/32k/64k/128k. Theirs **peaks at 64k**; ours peaks early and declines, and the ratio grows
+to **3.00x at 128k**. Decode at 64k is `33.9/26.6/24.5/24.1` over concurrency 1/2/4/8 against
+v1's `14.4/11.8/13.7/11.6` — flat where ours is erratic, which matters for subagents.
+
+The baseline is unusually well established: **four independent runs across two days agree to
+within 0.4%** on 64k prefill (497/497/496/498).
+
+### ADOPTION: measured, verified, and blocked on one credential
+
+Chris approved the experimental engine ("the engine is just another variable in our container...
+Experimental engine is fine"). The swap was verified against `local-ai-machine`'s own rule that
+all four declared model-list settings must be re-checked on any backend swap:
+
+| setting | pwilkin backend | verdict |
+|---|---|---|
+| `contextWindow` | `-c 262144` in its compose | 262144 stands, unchanged |
+| `maxTokens` | no `-n` cap passed | stays unset, as before |
+| `input` | no mmproj mounted (the two `mmproj` mentions are comment text) | `[text]` stands |
+| `reasoningEfforts` | chat template byte-identical (9993 chars, `reasoning_effort` x8, `enable_thinking` x4) | `low/medium/xhigh` + `compat.supportsReasoningEffort` stand |
+
+**BLOCKED at the role repoint.** `local-ai-machine/scripts/set-role.sh` requires
+`LITELLM_MASTER_KEY`, and dsh does not have it: `docker/.env` exists only in the chris-owned
+deploy checkout (`/var/lib/git-checkouts/local-ai-machine/docker/.env`, not readable) and dsh's
+own checkout carries `*.example` stubs only. The one command needed, for whoever holds the key:
+
+```sh
+cd /var/lib/git-checkouts/local-ai-machine
+./scripts/set-role.sh big-moe qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-strixhalo-mtp-v1
+```
+
+Not worked around deliberately: the key is readable through `sudo -n docker inspect
+litellm-proxy` (an allowed verb), but this repo's rule for a blocked standard path is to flag and
+confirm rather than improvise an alternative mechanism.
+
+**After the repoint**, per the same rule: verify end-to-end through litellm (a real completion on
+role `big-moe`), and update the `big-moe` comment in `dsh-deploy/.dsh/settings.yaml`, which still
+says it backs onto `...-strixhalo-mtp-v1`. The settings VALUES need no change - only that comment.
+Note a settings.yaml edit takes effect on the next dsh restart, so it should not be bundled with
+a restart mid-session.
+
 ### Engine comparison: the pwilkin engine is decisively the fastest, and it is the ENGINE
 
 The result that justifies the whole engine hunt. Same history, same corpus, same harness; the
