@@ -107,7 +107,15 @@ contains() {
 model_dir_for() {
   local f="$1"
   local mount
-  mount="$(grep -oE '/var/lib/ai-models/[^:[:space:]]+' "$f" | head -1 || true)"
+  # Match only real volume LIST ITEMS, not any mention of the path: this greps
+  # the whole file, and a compose whose documentation comment names a model path
+  # would otherwise be read as that build's model directory. That happened - a
+  # comment saying where the shared MTP head lands made the preflight check
+  # "<that dir>/MTP/.download-complete" and refuse to start a build whose actual
+  # model was present. Restricting to a leading "- " also excludes commented-out
+  # mounts, since those begin with "#".
+  mount="$(grep -E '^[[:space:]]*-[[:space:]]*/var/lib/ai-models/[^:[:space:]]+' "$f" \
+             | grep -oE '/var/lib/ai-models/[^:[:space:]]+' | head -1 || true)"
   if [ -n "$mount" ]; then
     echo "$mount"
     return
