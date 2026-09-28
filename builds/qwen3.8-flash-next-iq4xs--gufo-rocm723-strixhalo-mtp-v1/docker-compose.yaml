@@ -26,9 +26,14 @@ services:
   qwen3.8-flash-next-iq4xs--gufo-rocm723-strixhalo-mtp-v1:
     image: ghcr.io/gufo-org/toolboxes/gufo-runtime:latest
     container_name: qwen3.8-flash-next-iq4xs--gufo-rocm723-strixhalo-mtp-v1
+    # Explicit source:target, matching every other build in this repo. A bare
+    # `- /dev/dri` looks equivalent and is NOT: it passed an EMPTY /dev/dri into
+    # the container, so ROCr reported "no ROCm-capable device is detected" and
+    # llama-server died on `-dev ROCm0`. Verified by listing /dev/dri inside the
+    # container - empty with the bare form, card0/card1/renderD128 with this one.
     devices:
-      - /dev/kfd
-      - /dev/dri
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
     group_add:
       - "26"    # video
       - "303"   # render
