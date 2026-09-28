@@ -58,3 +58,14 @@ derived:
     see that build's own notes for why plain -c division under -np was
     wrong) rather than the -np 1 used for tuning, since this build is meant
     as a full drop-in replacement, not just a single-stream config.
+
+    PORT MOVED 8165 -> 8193 (2026-09-28). It shared 8165 with
+    ornith-1.5-35b-a3b-mtp-q4--llamacpp-vulkan-radv-strix-apu-v8 and -v9, which is a
+    CROSS-MODEL clash - two different models fight over one host port, and whichever starts
+    second fails. This one moved because it is a single edit and is no longer in the standing
+    set, whereas the ornith pair share that port with each other (a deliberate same-model
+    version family, like dirk v1/v2/v3 on 8157).
+
+    Audited the whole catalog for this at the same time: 8165 was the only cross-model case
+    left. 8146, 8157 and 8161 are same-model version families, which is intended - only one
+    version of a model runs at a time.
