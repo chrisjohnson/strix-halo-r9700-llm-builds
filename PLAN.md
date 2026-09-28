@@ -238,6 +238,38 @@ Prefill is monotone and consistent at every rung (8k 614→786, 128k 422→525),
 The port also improves **decode** — not expected when it was promoted, but the PLE gather runs
 on every token, not only during prefill, so removing the fault serialisation helps both.
 
+### Agentic turn profile (the §2 metric, first measurement)
+
+`llm-inference-bench/agentic_replay.py`, on the port build, a 12-turn session growing a real
+code-reading history with a compaction at turn 8. Server-reported timings, so the cache figures
+are the server's own:
+
+| turn | prompt tokens | reused | hit | evaluated | prefill s | wall s | eval tok/s |
+|---|---|---|---|---|---|---|---|
+| 1 | 3,770 | 0 | 0.0% | 3,770 | 7.9 | 10.1 | 476 |
+| 2 | 6,674 | 3,766 | 56.4% | 2,908 | 6.3 | 8.4 | 460 |
+| 6 | 17,343 | 14,487 | 83.5% | 2,856 | 6.9 | 9.8 | 413 |
+| 7 | 19,382 | 17,339 | 89.5% | 2,043 | 5.2 | 7.5 | 394 |
+| **8 (compaction)** | **20,336** | **936** | **4.6%** | **19,400** | **41.7** | **45.3** | 466 |
+| 12 | 31,022 | 28,158 | 90.8% | 2,864 | 8.2 | 10.5 | 348 |
+
+**Steady state: 82.1% cache hit, 9.05 s mean wall per turn, ~404 tok/s on the increment.**
+
+Three things this makes concrete:
+
+- **The cache architecture is doing its job, and the hit rate climbs with session length**
+  (56% → 91%) because each turn adds a roughly constant ~2,900 tokens on top of a growing
+  prefix. This is why the cache term, not raw prefill, dominates §2.
+- **A compaction is a cold re-read of the whole session and costs ~45 s at 20k tokens** — and it
+  scales with session length, because it is a prefill at the cold rate (466 tok/s here, matching
+  the ladder). At 100k that is minutes, and it is the term the engine work actually improves.
+- **The increment runs at ~404 tok/s**, consistent with the prefill ladder, which is the honest
+  way to say that the engine comparisons apply to the compaction and increment terms.
+
+Caveat: thinking is disabled for this replay (`enable_thinking: false`) so turns are short and
+the measurement is of prompt processing. A real dsh turn also pays decode, which is where the
+52.3-vs-20-27 tok/s gap in the engine survey bites.
+
 **Two cells per build had to be excluded** and the reason generalises: cells (32768,c4) for v1
 and (65536,c2) for the port report 81.2 and 113.9 tok/s, 4–7x their neighbours, because their
 `ttft_avg` is ~40 s against ~0.18 s — they contain a **cold prefill where every other cell is a
