@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-strixhalo-mtp-v1
-status: TESTING
+status: TESTED_VIABLE
 derived:
   engine: llamacpp-rocm100-lazy-direct-v1
   model: Qwen3.8-Flash-Next
@@ -34,7 +34,13 @@ derived:
     Both are needed; either alone is a silent no-op, which is exactly the failure mode
     local-ai-machine's own AGENTS.md warns about for hand-declared routes.
 
-    NOT YET VALIDATED end-to-end with a real image request - status TESTING.
+    VALIDATED 2026-09-28 with real image requests, and it works. The server log confirms the
+    projector is in use rather than merely mounted:
+      load_model: loaded multimodal model, '/mmproj/mmproj-BF16.gguf'
+    and two screenshots were described accurately and concretely - it read the on-screen text of
+    a three-pane "PI WEB" agent UI (sidebar of projects/workspaces/sessions, central chat log)
+    and of the "pi-web-factory" run visualizer, including a running task's own words and a
+    STEPS timeline. That is genuine vision, not a plausible-sounding hallucination.
 
     REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
     plus the exact build or pull command), weights and where they go, the engine's
