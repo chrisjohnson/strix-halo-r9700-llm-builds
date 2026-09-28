@@ -31,9 +31,28 @@ derived:
     ~3.2 GiB margin, comfortably in VRAM with no GTT spill expected. To be
     confirmed on first launch by reading card0's vram_used/gtt_used.
 
-    Not yet benchmarked on the R9700. Sweep plan: prefill 8k/32k and decode
-    ctx 0/16384, matched against the Q4 v2 baseline (2189/1630 tok/s at
-    8k/32k prefill, 87/80 tok/s decode at ctx 0/16384).
+    BENCHMARKED 2026-09-28 on R9700 (32 GiB GDDR6), matched against the Q4 v2
+    baseline (2189/1630 tok/s prefill 8k/32k, 87/80 tok/s decode ctx 0/16384):
+
+      metric                  Q5_K_M      Q4_K_M (v2)   delta
+      prefill  8k (~9,354 tok)   1,425       2,190        -35%
+      prefill  32k (~35,255 tok)  1,008       1,641        -39%
+      decode   ctx 0             119.3        87          +37%
+      decode   ctx 16,384         96.8        80          +21%
+
+    MTP draft acceptance (Q5_K_M): 85% at ctx 0, 71% at ctx 16384.
+
+    WHY: Q5 weights are 25.3 GiB vs Q4's 20.2 GiB (+25%), so prefill (which
+    processes all prompt tokens in one forward pass) is ~35-39% slower -
+    matching the weight size increase. But decode is ~21-37% FASTER because the
+    higher quantization quality gives the MTP draft head better token
+    prediction, raising draft acceptance from ~73% (Q4) to ~85% (Q5). Since MTP
+    accepts draft tokens without running the full model, higher acceptance =
+    fewer full forward passes = faster decode.
+
+    For agentic workloads (long conversations with incremental prefill), the
+    decode improvement likely outweighs the prefill cost - and prefill is still
+    very fast at >1,000 tok/s even at 32k context.
 
     OPERATIONAL WARNING: the Vulkan backend does NOT fail when VRAM is
     exhausted, it silently allocates into host GTT. Never bring two R9700
