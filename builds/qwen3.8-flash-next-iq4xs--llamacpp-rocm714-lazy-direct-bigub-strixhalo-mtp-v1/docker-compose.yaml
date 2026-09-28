@@ -1,0 +1,110 @@
+# ISOLATION EXPERIMENT: our engine carrying the pwilkin build's CONFIG.
+#
+# The pwilkin build measures 1.30-1.77x our prefill at 4k-32k and is 41%
+# faster on a compaction, but it changes BOTH the engine and the launch flags
+# - notably --load-mode none and a 16384 batch/ubatch against our 2048, plus
+# f16 KV where we use q8_0. A rate that RISES with context is exactly what a
+# much larger ubatch produces, so the win may be mostly config.
+#
+# This build is our lazy-direct engine (EngramHalo + PR #29030) with ONLY the
+# pwilkin config applied, so the three separate the two factors:
+#   lazy-direct         our engine, our config
+#   THIS                our engine, their config
+#   pwilkin rocm100     their engine, their config
+#
+# Our own -ub 8192 attempt blew the memory budget, but that was WITH mmap;
+# this config is --load-mode none, a different layout entirely.
+#
+# RESULT OF THE 16384 ATTEMPT: our engine CANNOT run the pwilkin config. It dies
+# at load with
+#   allocating 57405.38 MiB on device 0: cudaMalloc failed: out of memory
+#   failed to allocate ROCm0 buffer of size 60193899264
+# i.e. it wants a ~60GB compute buffer at -ub 16384, where pwilkin's engine runs
+# the same ubatch in the same total memory. So the pwilkin win is NOT purely
+# config: their engine can use a config ours cannot. Lowered to 4096 to chart the
+# trend where our engine CAN run - 4096 is also the untested gap flagged in
+# knowledge/research/2026-09-27-flashnext-flag-sweep.md.
+#
+# One known difference from the pwilkin build on the DECODE side only: this
+# keeps our non-shared MTP head while pwilkin uses the shared one. The prefill
+# comparison, which is what this build exists for, is unaffected by the draft
+# head.
+# EngramHalo fork + PR #29030 (direct-read lazy gather). The PR is OPEN
+# upstream, so it is vendored as docker/qwen4exp-strix-halo-mtp/
+# llama-cpp-29030-lazy-direct.patch and applied by
+# Dockerfile.rocm-7.14-lazy-direct. Two consequences for this file:
+#   - the image tag is the patched one
+#   - `--tensor-read-lazy` no longer exists; the PR renames it to
+#     `--lazy-mode`, and `on` now means direct reads rather than mmap
+#     demand-faulting, so there is no separate "on-direct" value.
+# Everything else matches ...-strixhalo-mtp-v3 exactly.
+name: docker
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-bigub-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-bigub-strixhalo-mtp-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    mem_limit: 115g
+    volumes:
+    - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+    - /var/lib/ai-models/qwen3.8-flash-next-mtp-q8:/models-mtp:ro
+    # M-138: ROCm/HIP build of Qwen3.8-Flash-Next with a working MTP draft
+    # head - built from docker/qwen4exp-strix-halo-mtp/Dockerfile.rocm-7.14
+    # (a real, tested Dockerfile pulled from
+    # github.com/Aristo94/EngramHalo.cpp, branch strix-halo-qwen4exp - see
+    # that Dockerfile's own provenance header for why this fork was chosen
+    # over two other candidates and how its two local patches were
+    # reviewed before use). ROCm/HIP only by design, NOT Vulkan - the
+    # fork's own docs report Vulkan as a net loss for MTP on this chip
+    # (short-prompt prefill roughly halved, MTP path collapsing to 6-7
+    # tok/s), consistent with our own earlier finding that mainline
+    # llama.cpp's Vulkan RADV build silently no-ops the same MTP flags
+    # rather than erroring - two different failure modes on the same
+    # backend, same underlying "MTP isn't real here" conclusion.
+    # "Config B" launch profile from the fork's own docs (long-context
+    # capable, engram table SSD-backed via mmap, not RAM-pinned) - chosen
+    # over their faster "config A" (RAM mode, -lm none) since it's the more
+    # production-realistic mode and doesn't pin ~27GB of RAM just for the
+    # n-gram table. -c 262144 = the model's full native training context -
+    # a real context-ceiling ladder (32768 through 262144, see M-138's
+    # decision log) validated every rung clean with real completions,
+    # including both context sizes the fork's own docs flag as a
+    # previously-reproduced first-request deadlock risk (143360, 163840 -
+    # neither hangs on this build). Going past native 262144 requires YaRN
+    # + an --override-kv workaround for a hardcoded llama-server cap (see
+    # M-138's decision log for the full mechanism) - tried, and a real
+    # ~310K-token request crashed with a ROCm kernel error 82% through
+    # processing. Not reliable enough to be the default; native 262144 is
+    # the production/committed config.
+    # -dev ROCm0: confirmed via --list-devices that THIS build's HIP
+    # device numbering is the OPPOSITE of Vulkan's (ROCm0 = Strix Halo
+    # APU/126976 MiB, ROCm1 = R9700/32624 MiB) - do not assume it matches
+    # the Vulkan1=APU convention used in the base-model build.
+    environment:
+      # Measured 2026-09-27: +4.6% to +9.5% prefill across 1k-32k tokens
+      # (largest at small context, where the constant per-token floor
+      # dominates). This is a rocBLAS-supported library selection -
+      # confirmed present in this image's librocblas.so.5.5, not assumed.
+      ROCBLAS_USE_HIPBLASLT: "1"
+      # Measured 2026-09-27: +7.4% to +10.7% prefill, roughly flat across
+      # context - the signature of a constant per-token cost, which is what
+      # the GDN layers are (36 of 48). This opts RDNA3/RDNA4 (gfx1151 is
+      # RDNA 3.5) into the WMMA chunked-GDN path that gated_delta_net.cu
+      # otherwise admits only for NVIDIA Ampere+/CDNA. Combined with
+      # HIPBLASLT above the two are additive: +10.7% to +14.8% over v1.
+      GGML_HIP_GDN_CHUNK: "1"
+      HIP_VISIBLE_DEVICES: "0"
+    command: 'llama-server -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl 999 -fa on -ctk f16 -ctv f16 --load-mode none --lazy-mode on -c 262144 -b 4096 -ub 4096 -t 4 --parallel 1 -md /models-mtp/mtp-Qwen3.8-Flash-Next-Q8_0.gguf
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 4 --spec-draft-p-min
+      0.75 --host 0.0.0.0 --port 8080 -a qwen3.8-flash-next-iq4xs-strixhalo-mtp
+      --metrics
+
+      '
+    ports:
+    - 127.0.0.1:8183:8080

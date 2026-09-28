@@ -1,0 +1,49 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-bigub-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm714-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. THE ISOLATION EXPERIMENT, and it settles the question the pwilkin result raised.
+    Identical to ...-lazy-direct-strixhalo-mtp-v1 EXCEPT that it carries the launch config the
+    pwilkin build uses: --load-mode none (no mmap), -b/-ub 4096, and f16 KV. So the three
+    separate engine from config:
+
+      build     engine   config   cache hit  wall/turn  increment  compaction
+      port      ours     ours         82.1%      9.35s   403 tok/s       46.1s
+      THIS      ours     THEIRS       82.2%      8.70s   405 tok/s       45.6s
+      pwilkin   THEIRS   theirs       82.2%      6.78s   497 tok/s       27.4s
+
+    CONCLUSION: THE PWILKIN ADVANTAGE IS THE ENGINE, NOT THE CONFIG. Our engine on their config
+    is indistinguishable from our engine on ours - 405 vs 403 tok/s on the increment, 45.6 vs
+    46.1s on the compaction, both inside noise. Every bit of the -41% compaction and +23%
+    increment belongs to their kernels.
+
+    WHY -ub WAS 4096 AND NOT THEIR 16384: our engine CANNOT RUN their config. At -ub 16384 it
+    dies at load:
+
+      allocating 57405.38 MiB on device 0: cudaMalloc failed: out of memory
+      failed to allocate ROCm0 buffer of size 60193899264
+
+    a ~60GB compute buffer, against a 124GB machine. Their engine runs the same ubatch in the
+    same total memory, so this is not merely a tuning difference - their kernels' scratch
+    demand at large batch is a different order. That alone is worth knowing before assuming a
+    config transplant could capture their numbers.
+
+    4096 was also the untested gap flagged in knowledge/research/2026-09-27-flashnext-flag-sweep.md,
+    and the answer is that it does not help: 405 tok/s at 32k against our own config's 434.
+
+    Prefill on this build measured 393/469/433/466/405 tok/s at 1k/2k/4k/8k/32k, i.e. flat with
+    context like every other build on this engine, against pwilkin's rising 368/481/617/740/769.
+    The rising shape is their kernels amortising a fixed per-token cost over a larger batch; ours
+    does not, which is the same finding from the other direction.
+
+    Kept as a build rather than discarded because it is the control that makes the pwilkin claim
+    meaningful - and because "-ub 4096 with --load-mode none" was an open question in this repo
+    before it existed.
