@@ -1,0 +1,32 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-cacheram-strixhalo-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Sweep variant of qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1 -
+    ONE lever changed, so the comparison is clean and attributable.
+
+    Lever 1 of knowledge/research/2026-09-28-flashnext-agentic-tuning-levers.md: the prompt
+    cache raised to 32 GiB. The adopted build leaves --cache-ram UNSET, i.e. llama.cpp's 8192 MiB
+    default, while the R9700/occamy build already runs 32768. Cache-hit fraction is the dominant
+    term in agentic turn latency (PLAN.md section 2) and the measured hit rate was 82.1% with the
+    small default. Costs RAM and degrades gracefully rather than failing if it does not fit.
+    MEASURED 2026-09-28 (same session, same method as the base): PP 765 vs 793 tok/s at ~75k real
+    tokens, TG 23.0 vs 23.3, cache hit IDENTICAL at 82.2%, wall 6.80 vs 6.68s, compaction 28.4 vs
+    26.9s. So it does not help, and marginally hurts. IMPORTANT CAVEAT: the replay is a SINGLE
+    conversation of ~31k tokens, which fits inside the 8 GiB default with room to spare, so this
+    sweep CANNOT exercise the lever. A verdict needs several concurrent conversations or a session
+    larger than the default cache - not more runs of this test.
+
+    WHY target_gpu MATTERS HERE, recorded because omitting it caused a real failure: without a
+    build.yaml, `modelctl up --exclusive` cannot read derived.target_gpu, so it has nothing to
+    scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
+    into the same pool, and the new one died at load with a ~60GB allocation failure that looked
+    like a verdict on the lever but was a memory collision.

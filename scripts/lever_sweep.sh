@@ -26,8 +26,10 @@ for id in "$@"; do
   echo "  --- PP/TG at $((${CTX}/1024))k ---"
   "$REPO/scripts/pp_tg_at_context.sh" "$port" "$CTX" "$(echo "$id" | sed 's/.*budget-//;s/-strixhalo.*//')"
   echo "  --- agentic replay ---"
+  # NOT piped through tail: that buffers until the replay finishes, so a sweep
+  # appears frozen for minutes at a time. Stream it; the log is the progress view.
   "$PY" "$REPO/llm-inference-bench/agentic_replay.py" --port "$port" --turns "${SWEEP_TURNS:-12}" \
-       --compact-at 8 --label "$(echo "$id" | sed 's/.*budget-//;s/-strixhalo.*//')" 2>&1 | tail -16
+       --compact-at 8 --label "$(echo "$id" | sed 's/.*budget-//;s/-strixhalo.*//')" 2>&1
 done
 
 echo

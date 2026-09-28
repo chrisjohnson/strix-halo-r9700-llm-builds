@@ -35,3 +35,8 @@ derived:
     local-ai-machine's own AGENTS.md warns about for hand-declared routes.
 
     NOT YET VALIDATED end-to-end with a real image request - status TESTING.
+
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.

@@ -1,0 +1,26 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-par2-strixhalo-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Sweep variant of qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1 -
+    ONE lever changed, so the comparison is clean and attributable.
+
+    Lever 3: two concurrent full-length slots. -c is the TOTAL context split across slots, so
+    --parallel 2 alone would halve the per-request context; --kv-unified is what lets two
+    full-length slots share one pool - Halogen's shared-pool idea. dsh subagents make it real.
+    NOT MEASURED yet. NOTE this is also the one lever the single-conversation replay cannot judge,
+    since the whole point is concurrent conversations.
+
+    WHY target_gpu MATTERS HERE, recorded because omitting it caused a real failure: without a
+    build.yaml, `modelctl up --exclusive` cannot read derived.target_gpu, so it has nothing to
+    scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
+    into the same pool, and the new one died at load with a ~60GB allocation failure that looked
+    like a verdict on the lever but was a memory collision.

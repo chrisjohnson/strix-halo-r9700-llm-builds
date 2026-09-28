@@ -1,0 +1,26 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-kvq8-strixhalo-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Sweep variant of qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1 -
+    ONE lever changed, so the comparison is clean and attributable.
+
+    Lever 2a: q8_0 KV instead of f16, freeing ~3.2 GiB of the 6.3 GiB f16 KV and cutting
+    per-token memory traffic. The occamy build already runs q4_0 KV, where KV quant was worth
+    +73.7% prefill at 8k against q8_0. NOT MEASURED: the first sweep attempt loaded it alongside a
+    still-running variant (see below) and died with 'allocating 61222.13 MiB on device 0:
+    cudaMalloc failed: out of memory', which is a memory collision, not a verdict on the lever.
+
+    WHY target_gpu MATTERS HERE, recorded because omitting it caused a real failure: without a
+    build.yaml, `modelctl up --exclusive` cannot read derived.target_gpu, so it has nothing to
+    scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
+    into the same pool, and the new one died at load with a ~60GB allocation failure that looked
+    like a verdict on the lever but was a memory collision.

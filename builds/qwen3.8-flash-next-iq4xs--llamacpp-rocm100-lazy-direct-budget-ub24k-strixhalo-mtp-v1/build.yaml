@@ -1,0 +1,25 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub24k-strixhalo-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Sweep variant of qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1 -
+    ONE lever changed, so the comparison is clean and attributable.
+
+    Lever 4: -b/-ub 24576. pwilkin's own back-to-back measurement puts it about 1% ahead of
+    16384 at depth 40000, so it is expected to be marginal, and it needs the largest compute
+    buffer of the four. Included so the sweep is complete, not because it is promising.
+    NOT MEASURED yet.
+
+    WHY target_gpu MATTERS HERE, recorded because omitting it caused a real failure: without a
+    build.yaml, `modelctl up --exclusive` cannot read derived.target_gpu, so it has nothing to
+    scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
+    into the same pool, and the new one died at load with a ~60GB allocation failure that looked
+    like a verdict on the lever but was a memory collision.
