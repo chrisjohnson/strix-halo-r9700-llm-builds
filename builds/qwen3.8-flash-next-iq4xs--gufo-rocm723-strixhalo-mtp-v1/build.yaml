@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--gufo-rocm723-strixhalo-mtp-v1
-status: PLANNED-NOT-DOWNLOADED
+status: TESTED_NOT_VIABLE
 derived:
   engine: gufo-rocm723-v1
   model: Qwen3.8-Flash-Next
@@ -42,5 +42,30 @@ derived:
          (note the nested MTP/ - hf download keeps repo structure). Until that deploys, this
          build starts and cannot find its draft head.
 
-    NOT YET RUN, so nothing here is a claim about gufo's behaviour on our weights. Its published
-    numbers are its own, on its own quant, through its own harness.
+    FIRST RESULT (2026-09-27) - IT CANNOT LOAD OUR WEIGHTS, and the reason is structural rather
+    than fixable:
+
+      Error loading model ...: Failed to create Qwen3.8-Flash-Next model:
+      tensor blk.0.ffn_gate_exps.weight has unsupported format IQ3_S
+
+    UD-IQ4_XS is a DYNAMIC quant - Unsloth mixes formats per tensor, and this checkpoint uses
+    IQ3_S for some expert tensors, which gufo's kernel set does not implement. gufo's own
+    flash-next doc is explicit that it supports exactly one target: "Supported target:
+    unsloth/Qwen3.8-Flash-Next-GGUF, **UD-Q4_K_XL** (four shards)".
+
+    SO THE "HOLD THE WEIGHTS FIXED" PLAN DOES NOT WORK FOR THIS ENGINE, and that is the useful
+    part of the finding. It was the whole basis for choosing gufo as the cheapest high-ceiling
+    experiment: 2.79GB of draft head instead of a 111.3GB target. Measuring gufo now costs the
+    full 111.3GB UD-Q4_K_XL download (four shards, added to local-ai-machine's models list so it
+    is git-declared rather than hand-fetched), and even then the comparison is
+    engine-vs-engine-vs-quant unless llama.cpp is also run on UD-Q4_K_XL - which this repo's own
+    builds CAN do, since llama.cpp supports every quant format while gufo supports one.
+
+    This sets the honest price of the gufo experiment: one 111.3GB download plus a second
+    llama.cpp build series on that quant if the comparison is to be quant-clean. Worth it only
+    if the claimed 1,628 tok/s pp is taken seriously, which is a judgement call rather than a
+    measurement.
+
+    The container also restart-looped on this error, since the compose sets restart:
+    unless-stopped - stopped manually. Worth knowing before pointing any engine at a quant it
+    does not implement.
