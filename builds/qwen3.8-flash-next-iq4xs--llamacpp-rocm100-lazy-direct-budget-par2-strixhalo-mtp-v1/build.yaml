@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-par2-strixhalo-mtp-v1
-status: TESTING
+status: TESTED_NOT_VIABLE
 derived:
   engine: llamacpp-rocm100-lazy-direct-v1
   model: Qwen3.8-Flash-Next
@@ -24,3 +24,13 @@ derived:
     scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
     into the same pool, and the new one died at load with a ~60GB allocation failure that looked
     like a verdict on the lever but was a memory collision.
+
+    RESULT: DOES NOT FIT. The container fails to start:
+      graph_reserve: failed to allocate compute buffers
+      llama_init_from_model: failed to initialize the context: failed to allocate compute pp buffers
+    so two full-length slots are not affordable in the APU's RAM even with --kv-unified sharing
+    one pool. The context is not the problem - the compute buffers are.
+
+    This is consistent with the other memory results on this build: -ub 16384 already wants a
+    ~60GB compute buffer, and the engine asserts f16 KV so none of it can be reclaimed by
+    quantising the cache. The APU build is at its memory ceiling with one slot.
