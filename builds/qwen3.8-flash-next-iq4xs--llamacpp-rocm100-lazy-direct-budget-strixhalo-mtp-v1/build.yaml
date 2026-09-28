@@ -43,6 +43,26 @@ derived:
     when the cap exceeds it, so the 600-token repro above would still be empty. --reasoning-budget
     -message is deliberately not set.
 
+
+    REPRODUCING THIS - what someone with the same hardware needs, none of which is implicit:
+      - IMAGE, built locally, not in any registry (~7.6GB, 40-60 min):
+          cd docker/pwilkin-strix-halo
+          docker build -f Dockerfile.rocm-10.0-strix-llama \
+            -t strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct .
+        The Dockerfile pins both upstream commits and self-gates on
+        test-backend-sched-ring, a grep for DEBUG_HIP_GRAPH_PM4 in the built
+        libamdhip64.so, and an ldd check of the custom libraries.
+      - WEIGHTS: unsloth/Qwen3.8-Flash-Next-GGUF, 'UD-IQ4_XS/*' into
+        /var/lib/ai-models/qwen3.8-flash-next-iq4xs, and the SHARED MTP head
+        'MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf' into
+        /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8 (nested MTP/ path kept).
+        Declared in local-ai-machine's configuration.nix models list, not hand-fetched.
+      - THE COMPOSE CARRIES TWO NON-OBVIOUS FIXES, both with the evidence in comments:
+        HSA_OVERRIDE_GFX_VERSION cleared (the image bakes 11.5.1, which makes ROCr
+        find no device here) and devices as '/dev/kfd:/dev/kfd' rather than a bare
+        path (a bare path passes an EMPTY /dev/dri).
+      - FULL WALKTHROUGH: docs/reproducing-the-pair.md.
+
     KNOWN LIMIT, not yet addressed: if big-moe's maxTokens is ever set explicitly to a small
     number, this build returns empty answers again, and the only cures are a smaller budget or
     the client turning thinking off.

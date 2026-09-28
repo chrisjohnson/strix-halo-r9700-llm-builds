@@ -22,11 +22,25 @@ dead ends already explored (so they are not re-run), and the expensive mistakes 
 
 Snapshot 2026-09-27, git HEAD `1e3de30`, working tree clean, both repos clean.
 
+**THE ADOPTED PAIR (2026-09-28)** - these two are the stable unit, and each litellm role points
+at a specific build:
+
+| role | build | port | engine |
+|---|---|---|---|
+| `big-moe` (+ continue/plan/review-json) | `qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-...v1` | 8184 | pwilkin on retained-PM4 ROCm 10.0 |
+| `medium-moe` (+ continue/scout-json) | `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | kyuz0 toolbox, Vulkan RADV |
+
+Reproduction walkthrough for both: **`docs/reproducing-the-pair.md`**.
+
 **Running:**
 | Container | Port | Notes |
 |---|---|---|
-| `qwen3.8-flash-next-...-strixhalo-mtp-v1` | 8152 | litellm role `big-moe` points here. NOTE `standing-models.txt` is actually **dirk + occamy**, not this — correct as of 2026-09-27. |
-| `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | the standing R9700 build |
+| `qwen3.8-flash-next-...-rocm100-lazy-direct-budget-...v1` | 8184 | what `big-moe` serves |
+| `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | what `medium-moe` serves |
+
+`standing-models.txt` is still **dirk + occamy-strix-apu** and does NOT contain either adopted
+build, so **neither role is backed after a reboot** — Chris's call, held deliberately until he has
+tested the pair.
 | `litellm-proxy`, `open-webui`, `searxng`, `grafana`, `prometheus`, `caddy`, … | — | not part of this work |
 
 **In flight:** `llm-inference-bench` runs **161** (v1, running), **162** (v3, queued), **163**
@@ -215,6 +229,7 @@ All under `knowledge/research/`. The ones that bear on current decisions:
 | Note | What it establishes |
 |---|---|
 | `2026-09-27-strix-halo-engine-landscape.md` | **The other engines, and where the remaining speed is.** `kyuz0/gufo` 1,628 pp; pwilkin/strix-llama ~1,200; the tiled delta-net is 2.37x and we don't have it |
+| `2026-09-28-flashnext-agentic-tuning-levers.md` | **The remaining levers.** GTT is NOT the constraint (its ceiling already covers all RAM); physical RAM is. The pair is memory-independent, and the R9700 half is already better configured than the APU half. |
 | `2026-09-27-halogen-agentic-tuning-lessons.md` | **The reframe.** A production Flash-Next server's cache-mode spread is 44x; the answer-room failure mode (empty answers on compaction); disk-persistent prompt cache; the shared-KV-pool concurrency model. Read before planning any further tuning. |
 | `2026-09-27-prefill-bench-padding-trap.md` | Repeated filler cannot exercise the PLE table; rates inflate. **Read before designing any prefill measurement.** |
 | `2026-09-27-flashnext-prefill-constant-floor.md` | The 2.58 ms/token floor, and that it is *not* mmap fault overhead |
@@ -511,13 +526,24 @@ gave 483/504/434.
 
 Ordered. Costs are real; don't start a heavy one while a benchmark is running (§11).
 
-0. **Agentic measurement first, before any more engine work** (§2, §9.10). Build a replay that
+0. **The remaining tuning levers, ranked** — `--cache-ram 32768` on the APU build (unset today,
+   so it runs llama.cpp's 8192 MiB default while occamy has 32 GiB, and cache-hit fraction is the
+   dominant agentic term); `-ctk/-ctv q8_0`→`q4_0` on the APU build (frees 3.2-4.7 GiB and may
+   repeat the +73.7% occamy KV result); `--parallel 2 --kv-unified` for subagents; `-ub 24576`
+   last. See `2026-09-28-flashnext-agentic-tuning-levers.md`.
+   **BLOCKED ON A MAINTENANCE WINDOW, deliberately:** every one of these needs the APU, and the
+   APU now serves `big-moe`, dsh's default model — possibly the very session reading this. The
+   earlier sweeps ran in the background precisely because nothing live depended on them; that is
+   no longer true.
+   Also noted while auditing: the reference for these is the APU build, because **occamy is
+   already configured the way the APU build should be.**
+1. **Agentic measurement first, before any more engine work** (§2, §9.10). Build a replay that
    looks like a real dsh session — growing context, tool calls, a compaction — and report
    per-turn latency, cache-hit fraction, and TTFT. Without it, every engine comparison below is
    ranked on the wrong axis. `llm_decode_bench.py` already has an incremental-prefill mode to
    start from. **Then the answer-room audit** (§9.11), which is minutes of work and a
    correctness-shaped failure.
-1. **Let runs 161–163 finish** (~2h). They are the before/after on the *standard* metric rather
+2. **Let runs 161–163 finish** (~2h). They are the before/after on the *standard* metric rather
    than the custom prefill ladder. Report the result.
 2. **Build the retained-PM4 image**:
    `docker build -f docker/pwilkin-strix-halo/Dockerfile.rocm-10.0-strix-llama -t ...:rocm-10.0-lazy-direct .`
@@ -595,6 +621,7 @@ point, not a problem.
 | Decision log | `knowledge/decisions/` |
 | Investigation log | `knowledge/research/` |
 | Corpus builder | `scripts/build_bench_corpus.sh` |
+| **Reproduction walkthrough** | `docs/reproducing-the-pair.md` — the whole recipe for the adopted pair, for someone with none of this history |
 | Scratch (host-only, not in repo) | `~/scratch/tuning/` (venv, corpora, A/B scripts), `~/scratch/port/` (patched fork + PR diff), `~/scratch/pwilkin/` (upstream clones) |
 | This repo | `~/strix-halo-r9700-llm-builds` (public) |
 | Host config | `~/local-ai-machine` (NixOS; not this repo) |

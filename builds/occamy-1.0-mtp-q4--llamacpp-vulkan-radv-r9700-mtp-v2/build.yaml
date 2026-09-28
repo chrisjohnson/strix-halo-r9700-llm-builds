@@ -75,3 +75,17 @@ derived:
     its GPU and stopped the wrong build (flash-next on the APU) instead of the intended
     R9700 one, while leaving v1 in place. The build.yaml now exists; do not create R9700
     builds without it.
+
+    REPRODUCING THIS: the image is EXTERNAL and public - `docker pull
+    docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv`. Nothing is built. Weights are one
+    file, /var/lib/ai-models/llamacpp-occamy-1.0-mtp-q4/occamy-1.0-mtp-Q4_K_M.gguf, plus
+    /var/lib/ai-models/occamy-1.0-mmproj for vision; both declared in local-ai-machine's
+    configuration.nix models list. Full walkthrough, including the number to expect and the
+    memory split with the APU build: docs/reproducing-the-pair.md.
+
+    THIS IS THE ROLE medium-moe POINTS AT (2026-09-28), and it is the better-configured half of
+    the pair: it runs --cache-ram 32768 where the APU build leaves llama.cpp's 8192 MiB default,
+    and q4_0 KV where the APU build runs f16. Both of those were measured here - q4_0 KV was
+    worth +73.7% prefill at 8k and +51.9% at 32k against q8_0 - which is why
+    knowledge/research/2026-09-28-flashnext-agentic-tuning-levers.md treats the APU build as the
+    one that is behind, and these as the settings to try there.
