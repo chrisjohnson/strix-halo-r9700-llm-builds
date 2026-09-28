@@ -42,6 +42,21 @@ services:
     group_add:
       - "26"    # video
       - "303"   # render
+    environment:
+      # OVERRIDE THE IMAGE'S OWN ENV, which is why this is here at all.
+      # Dockerfile.rocm-10.0-strix-llama bakes HSA_OVERRIDE_GFX_VERSION=11.5.1
+      # unconditionally, and on this box that makes ROCr find NO DEVICE AT ALL:
+      #   ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+      #   error while handling argument "-dev": invalid device: ROCm0
+      # Verified with --list-devices, one variable at a time:
+      #   HSA_OVERRIDE_GFX_VERSION=11.5.1 (image default) -> (none)
+      #   HSA_OVERRIDE_GFX_VERSION=                      -> ROCm0: Radeon 8060S
+      #   HSA_OVERRIDE_GFX_VERSION=11.0.0                -> (none)
+      # gfx1151 is natively supported by ROCm 10.0 here, so the override is both
+      # unnecessary and fatal. An empty value is how HSA reads it as unset.
+      # This is a HOST-SPECIFIC setting baked into a shared image - worth
+      # remembering when an upstream-proven container misbehaves on this box.
+      HSA_OVERRIDE_GFX_VERSION: ""
     volumes:
       - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
       - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
