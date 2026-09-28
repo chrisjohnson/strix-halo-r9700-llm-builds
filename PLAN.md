@@ -27,10 +27,12 @@ at a specific build:
 
 | role | build | port | engine |
 |---|---|---|---|
-| `big-moe` (+ continue/plan/review-json) | `qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-...v1` | 8184 | pwilkin on retained-PM4 ROCm 10.0 |
+| `big-moe` (+ continue/plan/review-json) | `qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-...v1` | 8190 | pwilkin on retained-PM4 ROCm 10.0, **with vision** |
 | `medium-moe` (+ continue/scout-json) | `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | kyuz0 toolbox, Vulkan RADV |
 
-Reproduction walkthrough for both: **`docs/reproducing-the-pair.md`**.
+Reproduction: **every build directory carries a `REPRODUCE.md`** with its image recipe, weights
+and engine gotchas, and its `build.yaml` carries what was measured and why. There is deliberately
+no central docs file - someone reproducing a build starts at the build.
 
 **Running:**
 | Container | Port | Notes |
@@ -38,9 +40,9 @@ Reproduction walkthrough for both: **`docs/reproducing-the-pair.md`**.
 | `qwen3.8-flash-next-...-rocm100-lazy-direct-budget-...v1` | 8184 | what `big-moe` serves |
 | `occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2` | 8171 | what `medium-moe` serves |
 
-`standing-models.txt` is still **dirk + occamy-strix-apu** and does NOT contain either adopted
-build, so **neither role is backed after a reboot** — Chris's call, held deliberately until he has
-tested the pair.
+**`standing-models.txt` is now the adopted pair** (2026-09-28), replacing dirk + occamy-strix-apu,
+so both roles are backed after a reboot. Both are in the standing set with the vision build on the
+APU.
 | `litellm-proxy`, `open-webui`, `searxng`, `grafana`, `prometheus`, `caddy`, … | — | not part of this work |
 
 **In flight:** `llm-inference-bench` runs **161** (v1, running), **162** (v3, queued), **163**
@@ -526,7 +528,15 @@ gave 483/504/434.
 
 Ordered. Costs are real; don't start a heavy one while a benchmark is running (§11).
 
-0. **The remaining tuning levers, ranked** — `--cache-ram 32768` on the APU build (unset today,
+0. **Tuning levers: SWEPT, and the answer is that the build is at the box's ceiling.** All four
+   resolved - `--cache-ram` no help, KV quantisation **impossible** (the engine asserts f16 at
+   `qwen4exp.cpp:1365`), `--parallel 2` **does not fit** (compute buffers), `-ub 24576` a wash.
+   One genuine loose end: the cache-ram test could not exercise its own lever (a single ~31k
+   conversation fits the 8 GiB default many times over, so the hit rate was identical), so it is
+   **unresolved rather than refuted** and needs a multi-conversation test.
+   Historical note: this was the item that needed a maintenance window, because the APU serves
+   `big-moe`. It got one.
+1. **The remaining tuning levers, ranked** — `--cache-ram 32768` on the APU build (unset today,
    so it runs llama.cpp's 8192 MiB default while occamy has 32 GiB, and cache-hit fraction is the
    dominant agentic term); `-ctk/-ctv q8_0`→`q4_0` on the APU build (frees 3.2-4.7 GiB and may
    repeat the +73.7% occamy KV result); `--parallel 2 --kv-unified` for subagents; `-ub 24576`
