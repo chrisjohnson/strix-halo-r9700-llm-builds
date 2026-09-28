@@ -1,0 +1,102 @@
+# SWEEP VARIANT: ub24k. ONE lever changed against
+# qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-strixhalo-mtp-v1
+#
+# Lever 4: a larger batch/ubatch. pwilkin's own back-to-back measurement puts 24576 about 1% ahead of
+# 16384 at depth 40000, so this is expected to be marginal - and it is the largest compute buffer of
+# the four. Included so the sweep is complete, not because it is promising.
+# The ADOPTED pwilkin build PLUS a thinking bound, because the empty-answer
+# defect reproduces on this engine through the real production role.
+#
+# Measured through litellm on role big-moe at max_tokens=600, thinking on:
+#   reasoning_effort=low     finish=length  reasoning=1925ch  content=0ch
+#   reasoning_effort=medium  finish=length  reasoning=1745ch  content=0ch
+#   reasoning_effort=xhigh   finish=length  reasoning=1843ch  content=0ch
+# The thinking block consumes the entire budget and the answer is empty, at
+# every effort level - which is the same failure measured on the EngramHalo
+# build, so it is a property of the model + llama.cpp defaults rather than of
+# either engine. big-moe leaves maxTokens unset, so pi-ai's 32768 default is
+# what applies, and the failure needs >32k of thinking to bite - rare, but it
+# is exactly the failed-compaction shape: the harness sees finish=length with
+# empty content and retries, which reads as slowness, not as an error.
+#
+# 8192 is chosen against that 32768 cap: it bounds thinking while leaving
+# ~24k for the answer. It does NOT help callers whose own cap is below it -
+# measured on the EngramHalo build, a thinking budget only acts when the
+# caller's cap exceeds it, so the 600-token repro above would still be empty.
+# --reasoning-budget-message is deliberately not set here.
+# pwilkin/strix-halo on the retained-PM4 ROCm 10.0 runtime - the stack behind the
+# "1.2k t/s prefill on Strix Halo" result, whose writeup is the best-measured work
+# in this space: 16+ commits each with error bars, negative results kept, and a
+# 150k-token needle test before trusting the sparse kernels.
+# See knowledge/research/2026-09-27-strix-halo-engine-landscape.md.
+#
+# IMAGE MUST BE BUILT FIRST (40-60 min, CPU-heavy):
+#   cd docker/pwilkin-strix-halo
+#   docker build -f Dockerfile.rocm-10.0-strix-llama \
+#     -t strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct .
+#
+# The launch flags below are the ones kyuz0 measured 1207 tok/s pp2048 / 43.9
+# tok/s decode with, NOT invented here. Two of them are aggressive against this
+# repo's experience and are the first things to suspect if it misbehaves:
+#   -b 16384 -ub 16384      this repo's own -ub 8192 attempt blew the memory
+#                           budget, but that was WITH mmap; the documented
+#                           config is --load-mode none, a different layout
+#   -ctk f16 -ctv f16       f16 KV, where this repo settled on q8_0 for the same
+#                           256k context; f16 needs roughly double the KV
+#
+# Deliberate differences from the documented command, both to make ENGINE the
+# only variable against this repo's own builds:
+#   - OUR UD-IQ4_XS target, not the IQ4_NL the docs use
+#   - --mmproj omitted entirely: the documented command passes one, but pwilkin's
+#     own install.sh flash-next profile says "No projector: this one is text
+#     only", and this repo has no mmproj for this model
+#
+# DEPENDS ON a model that is committed but not yet deployed: the shared MTP head
+# at /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8/MTP/.
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub24k-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub24k-strixhalo-mtp-v1
+    # Explicit source:target, matching every other build in this repo. A bare
+    # `- /dev/dri` looks equivalent and is NOT: it passed an EMPTY /dev/dri into
+    # the container, so ROCr reported "no ROCm-capable device is detected" and
+    # llama-server died on `-dev ROCm0`. Verified by listing /dev/dri inside the
+    # container - empty with the bare form, card0/card1/renderD128 with this one.
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      # OVERRIDE THE IMAGE'S OWN ENV, which is why this is here at all.
+      # Dockerfile.rocm-10.0-strix-llama bakes HSA_OVERRIDE_GFX_VERSION=11.5.1
+      # unconditionally, and on this box that makes ROCr find NO DEVICE AT ALL:
+      #   ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+      #   error while handling argument "-dev": invalid device: ROCm0
+      # Verified with --list-devices, one variable at a time:
+      #   HSA_OVERRIDE_GFX_VERSION=11.5.1 (image default) -> (none)
+      #   HSA_OVERRIDE_GFX_VERSION=                      -> ROCm0: Radeon 8060S
+      #   HSA_OVERRIDE_GFX_VERSION=11.0.0                -> (none)
+      # gfx1151 is natively supported by ROCm 10.0 here, so the override is both
+      # unnecessary and fatal. An empty value is how HSA reads it as unset.
+      # This is a HOST-SPECIFIC setting baked into a shared image - worth
+      # remembering when an upstream-proven container misbehaves on this box.
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+    ports:
+      - "127.0.0.1:8189:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 24576 -ub 24576 --parallel 1 --jinja
+      --reasoning-budget 8192 --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped
