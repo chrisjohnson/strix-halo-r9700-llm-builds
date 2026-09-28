@@ -1,0 +1,52 @@
+name: occamy-1.0-mtp-q6--llamacpp-vulkan-radv-r9700-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q6_K, MTP, self-grafted)
+  params: 35B
+  active_params: 3B
+  quant: Q6_K
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-28 (M-152). Q6_K R9700 eGPU build, ported from the TESTED_VIABLE
+    occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2 baseline (same
+    -dev Vulkan0 / --mmproj-device Vulkan0, np 3 --kv-unified
+    --kv-unified-per-slot 262144, q4_0 KV, --cache-ram 32768, MTP n-max 2 /
+    p-min 0.3). Only the quant and model file differ.
+
+    Weights are the self-grafted Q6_K build (same pipeline as the strix-apu
+    Q6 build in this catalog: bf16 Accio-Lab/occamy-1.0 base +
+    fetchingcat/model-mtp.safetensors + imatrix.dat, converted via
+    ggml-org/llama.cpp:full's convert_hf_to_gguf.py, then quantized with the
+    kyuz0 toolbox's llama-quantize using fetchingcat's imatrix.dat). File at
+    /var/lib/ai-models/occamy-1.0-mtp-q6/occamy-1.0-mtp-Q6_K.gguf
+    (29,208,731,424 bytes / ~27.2 GiB).
+
+    VRAM budget: Q6_K weights are ~27.2 GiB vs Q4_K_M's ~20.2 GiB (+7.0 GiB).
+    KV at q4_0, np 3, 262144 tokens/slot is ~4.2 GiB (same as Q4 - KV is
+    determined by model config, not weight quant). Plus mmproj F16 (~0.84 GiB)
+    and compute buffers. Total expected ~32.2 GiB of the R9700's 31.86 GiB -
+    this OVERSUBSCRIPTIONS the VRAM by ~0.4 GiB, so expect some GTT spill.
+    The Q6_K weight increase over Q4 is ~7 GiB; the Q5_K_M was ~23.6 GiB
+    (+3.4 over Q4). If Q5 fits cleanly and Q6 spills, the Q6 spill will be
+    modest (the extra ~3.6 GiB of weights over Q5) and mostly in the weight
+    region that is accessed sequentially during decode - less harmful than
+    KV spill. To be confirmed on first launch by reading card0's
+    vram_used/gtt_used.
+
+    Not yet benchmarked on the R9700. Sweep plan: prefill 8k/32k and decode
+    ctx 0/16384, matched against the Q4 v2 baseline (2189/1630 tok/s at
+    8k/32k prefill, 87/80 tok/s decode at ctx 0/16384).
+
+    OPERATIONAL WARNING: the Vulkan backend does NOT fail when VRAM is
+    exhausted, it silently allocates into host GTT. Never bring two R9700
+    builds up at once, and always check card0's vram_used/gtt_used after
+    starting one.
+
+
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image
+    (tag plus the exact build or pull command), weights and where they go,
+    the engine's non-obvious failure modes, and how to run it. The notes above
+    carry what was measured and why.
