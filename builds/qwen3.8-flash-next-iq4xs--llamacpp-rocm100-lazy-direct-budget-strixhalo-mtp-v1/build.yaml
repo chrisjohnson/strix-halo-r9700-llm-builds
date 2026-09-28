@@ -66,3 +66,32 @@ derived:
     KNOWN LIMIT, not yet addressed: if big-moe's maxTokens is ever set explicitly to a small
     number, this build returns empty answers again, and the only cures are a smaller budget or
     the client turning thinking off.
+
+
+    REPRODUCING THIS BUILD - everything needed, none of it implicit:
+    BUILD IT (local image, not in any registry; 40-60 min, several GB):
+            cd docker/pwilkin-strix-halo
+            docker build -f Dockerfile.rocm-10.0-strix-llama -t strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct .
+          Engine: pwilkin/llama.cpp branch strix-halo on a custom retained-PM4 ROCr/HIP
+          runtime built from pwilkin/rocm-systems branch ilintar-experiments, over ROCm
+          10.0. Both upstream commits are PINNED in the Dockerfile. The build self-gates on
+          test-backend-sched-ring, a grep for DEBUG_HIP_GRAPH_PM4 in the built
+          libamdhip64.so, and an ldd check of the custom libraries.
+    WEIGHTS (same for every flash-next build here): unsloth/Qwen3.8-Flash-Next-GGUF,
+            'UD-IQ4_XS/*' (3 shards, 88 GiB) into /var/lib/ai-models/qwen3.8-flash-next-iq4xs,
+            and the SHARED MTP head 'MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf' into
+            /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8 (hf download preserves the
+            nested MTP/ path, and the compose mount says so). Declared in local-ai-machine's
+            configuration.nix models list so a systemd unit fetches it rather than a human.
+    TWO NON-OBVIOUS THINGS THE COMPOSE ALREADY HANDLES, either would stop it dead:
+            HSA_OVERRIDE_GFX_VERSION is forced EMPTY, because the image bakes 11.5.1 and on
+            this box that makes ROCr find NO device at all ('no ROCm-capable device is
+            detected', then 'invalid device: ROCm0'); verified one variable at a time with
+            --list-devices (11.5.1 -> none, empty -> ROCm0, 11.0.0 -> none), and gfx1151 is
+            native on ROCm 10.0 here so the override is unnecessary and fatal. And devices
+            are declared '/dev/kfd:/dev/kfd' / '/dev/dri:/dev/dri' rather than as bare paths,
+            because a bare '- /dev/dri' looks equivalent and passes an EMPTY /dev/dri, which
+            produces the same no-device failure. Never set GGML_CUDA_ENABLE_UNIFIED_MEMORY
+            (corrupts MTP output), and no host networking under rootless docker (masks
+            /sys/class/kfd).
+    Engine internals and what each upstream commit does: docker/pwilkin-strix-halo/README.md

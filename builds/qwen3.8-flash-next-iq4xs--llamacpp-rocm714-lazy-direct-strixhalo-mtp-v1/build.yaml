@@ -127,3 +127,24 @@ derived:
     repo is public. scripts/build_bench_corpus.sh builds a deterministic equivalent from
     this repo alone; absolute rates will differ slightly on it, the build-to-build
     comparison does not.
+
+
+    REPRODUCING THIS BUILD - everything needed, none of it implicit:
+    BUILD IT (local image, not in any registry; ~30-45 min):
+            cd docker/qwen4exp-strix-halo-mtp
+            docker build -f Dockerfile.rocm-7.14-lazy-direct -t strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14-lazy-direct .
+          Engine: the same EngramHalo branch WITH upstream PR #29030 applied. The PR is
+          still OPEN upstream so it is vendored here as llama-cpp-29030-lazy-direct.patch,
+          and the Dockerfile pins the fork commit. NOTE the flag rename it brings:
+          --tensor-read-lazy becomes --lazy-mode and 'on' now means DIRECT reads, so a
+          container passing the old flag name will not start.
+    WEIGHTS (same for every flash-next build here): unsloth/Qwen3.8-Flash-Next-GGUF,
+            'UD-IQ4_XS/*' (3 shards, 88 GiB) into /var/lib/ai-models/qwen3.8-flash-next-iq4xs,
+            and the non-shared MTP head 'MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf' into
+            /var/lib/ai-models/qwen3.8-flash-next-mtp-q8. Also available and NOT mounted here:
+            'mmproj-BF16.gguf' (908 MB), this model's vision projector. Declared in
+            local-ai-machine's configuration.nix models list.
+    RUN IT: sudo ./modelctl up --exclusive <this build id> - it waits for /health and
+            then sends a priming completion, so the first real request does not pay start-up
+            cost. Every build has its own host port, taken from its own compose.
+    Engine internals and what each upstream commit does: docker/qwen4exp-strix-halo-mtp/README.md
