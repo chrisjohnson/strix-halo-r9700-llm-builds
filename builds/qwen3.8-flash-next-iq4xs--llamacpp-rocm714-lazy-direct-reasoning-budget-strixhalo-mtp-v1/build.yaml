@@ -77,6 +77,19 @@ derived:
     content, the answer stranded in reasoning_content - which an agent harness reads as a failed
     turn and retries, presenting as slowness rather than as an error.
 
-    NOT YET DONE: a quality check on whether a forced close degrades reasoning, and a comparison
-    against plain lazy-direct on the agentic replay. A forced think-block close is a real
-    intervention in the model's behaviour, not a free correctness fix.
+    QUALITY CHECK, first probe (2026-09-27): a forced close does not appear to cost correctness.
+    Bat-and-ball (answer $0.05, where the intuitive $0.10 is wrong), one prompt, thinking on:
+
+      cap 8192   finish=stop   content "$0.05"            CORRECT, 5 chars
+      cap 16384  finish=stop   content "$0.05"            CORRECT, 5 chars
+      thinking off (control)   content 489 chars of setup CORRECT, with working
+
+    So the budget turns the empty-content failure into a right answer rather than into a wrong or
+    garbled one. What it does cost is verbosity: with thinking on and the block closed, the reply
+    is just the amount, where thinking-off produced a worked explanation. That may be the prompt
+    (it asked for "the amount"), so treat it as a single-probe signal, not a general claim - this
+    is ONE problem, and a real quality check needs a spread of them.
+
+    STILL NOT DONE: a quality check across a spread of tasks, and a comparison against plain
+    lazy-direct on the agentic replay. A forced think-block close is an intervention in the
+    model's behaviour, not a free correctness fix, and one correct answer does not settle it.
