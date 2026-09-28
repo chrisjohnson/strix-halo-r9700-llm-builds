@@ -22,7 +22,14 @@ for id in "$@"; do
   if [ ! -f "$f" ]; then echo "skip $id: no compose file" >&2; continue; fi
   port="$(grep -oE '127\.0\.0\.1:[0-9]+' "$f" | head -1 | cut -d: -f2)"
   echo "=================== $id (:$port) ==================="
-  ( cd "$REPO" && sudo -n ./modelctl up --exclusive "$id" ) 2>&1 | grep -E 'primed|healthy|warning' | tail -2
+  # Absolute path: the sudoers rule names it, and it works from any cwd.
+  # Output goes to a log rather than through a filter -- an earlier version piped
+  # this through `grep -E 'primed|healthy|warning'`, which DELETED the error line
+  # ("sudo: ./modelctl: command not found") and left the script silently waiting
+  # 200 s for a port that was never going to open. Never filter a bring-up.
+  ( cd "$REPO" && sudo -n "$REPO/modelctl" up --exclusive "$id" ) > "$OUT/bringup_$port.log" 2>&1
+  echo "  bring-up exit=$? (log: $OUT/bringup_$port.log)"
+  grep -E 'primed|healthy|warning|error|refus' "$OUT/bringup_$port.log" | tail -3 | sed 's/^/    /' 
   for i in $(seq 1 40); do
     curl -sf -o /dev/null -m 3 "http://127.0.0.1:$port/health" && break
     sleep 5
