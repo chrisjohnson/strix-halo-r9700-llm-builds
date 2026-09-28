@@ -238,6 +238,33 @@ Prefill is monotone and consistent at every rung (8k 614→786, 128k 422→525),
 The port also improves **decode** — not expected when it was promoted, but the PLE gather runs
 on every token, not only during prefill, so removing the fault serialisation helps both.
 
+### Agentic comparison: the ladder on the §2 metric
+
+`scripts/agentic_compare.sh` over the three builds, each brought up exclusively (so `modelctl`
+waits for health and primes before measuring), 12 turns, compaction at turn 8, identical
+history in every case — only the engine differs:
+
+| build | cache hit | wall/turn | increment | compaction (20k session) |
+|---|---|---|---|---|
+| **lazy-direct (port)** | 82.1% | **9.35 s** | **403 tok/s** | **46.1 s** |
+| v3 | 82.3% | 10.67 s | 321 tok/s | 54.9 s |
+| v1 (before) | 82.1% | 11.83 s | 294 tok/s | 59.4 s |
+
+**v1 → port: increment +37%, wall per turn −21%, compaction −22%.**
+
+Two things worth taking from this:
+
+- **The cache-hit fraction is identical (82.1%) across all three**, which is the control working
+  as intended: the port changed the gather, not the cache architecture, so the entire gain lands
+  on the increment and compaction terms. That is exactly what §2 predicted, and it means the
+  engine comparisons apply where the plan says they do.
+- **The ordering is monotone and matches the prefill ladder** (v1 < v3 < port on both), which is
+  a consistency check between two independent harnesses rather than a single measurement.
+
+For scale, a compaction at 20k tokens costs 46–59 s depending on build, and it scales with
+session length — at 100k this is minutes, and it is the single largest avoidable cost in an
+agentic session.
+
 ### Agentic turn profile (the §2 metric, first measurement)
 
 `llm-inference-bench/agentic_replay.py`, on the port build, a 12-turn session growing a real

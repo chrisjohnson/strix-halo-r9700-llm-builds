@@ -51,9 +51,13 @@ for f in sorted(glob.glob("$OUT/agentic_*.json")):
     rs=d["rows"]; hot=[r for r in rs if not r["compaction"] and r["turn"]>1]
     comp=[r for r in rs if r["compaction"]]
     if not hot: continue
-    hits=[r["cached_tokens"]/(r["prompt_tokens"]+r["cached_tokens"])*100 for r in hot]
+    # prompt_tokens is already the TOTAL (evaluated + reused) as the replay
+    # writes it; adding cached_tokens again double-counts and reports 45% where
+    # the truth is 82%. Same units confusion as the first version, which is why
+    # this comment exists.
+    hits=[r["cached_tokens"]/r["prompt_tokens"]*100 for r in hot]
     walls=[r["wall_s"] for r in hot]
-    rates=[r["prompt_tokens"]/r["prefill_s"] for r in hot if r["prefill_s"]]
+    rates=[(r["prompt_tokens"]-r["cached_tokens"])/r["prefill_s"] for r in hot if r["prefill_s"]]
     rows.append(dict(label=d.get("label") or os.path.basename(f),
                      hit=sum(hits)/len(hits), wall=sum(walls)/len(walls),
                      rate=sum(rates)/len(rates),
