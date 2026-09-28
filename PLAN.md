@@ -7,7 +7,7 @@ deliberately explicit about live state, decisions already made (so they are not 
 dead ends already explored (so they are not re-run), and the expensive mistakes already made
 (so they are not repeated).
 
-- **Last updated**: 2026-09-27 (agentic reframe of the goal added to §2)
+- **Last updated**: 2026-09-27 (engine comparison: the pwilkin engine is 1.77x prefill at 32k and -41% compaction vs our best, and the win is the engine not the config)
 - **Sibling documents**: `AGENTS.md` (repo permissions/conventions), `README.md` (repo layout),
   `builds/README.md` (per-build conventions), `knowledge/decisions/` (why, per decision),
   `knowledge/research/` (what was measured, per investigation).
@@ -254,6 +254,37 @@ harness as the rest of the catalog):
 Prefill is monotone and consistent at every rung (8k 614→786, 128k 422→525), so it is quotable.
 The port also improves **decode** — not expected when it was promoted, but the PLE gather runs
 on every token, not only during prefill, so removing the fault serialisation helps both.
+
+### Engine comparison: the pwilkin engine is decisively the fastest, and it is the ENGINE
+
+The result that justifies the whole engine hunt. Same history, same corpus, same harness; the
+compaction is a cold re-read at turn 8. `bigub` exists purely as the control: our engine with
+the pwilkin build's launch config.
+
+| build | engine | config | cache hit | wall/turn | increment | compaction | prefill @32k |
+|---|---|---|---|---|---|---|---|
+| v1 | EngramHalo | ours | 82.1% | 11.83 s | 294 tok/s | 59.4 s | 326 |
+| v3 | +GDN +HIPBLASLT | ours | 82.3% | 10.67 s | 321 | 54.9 s | 361 |
+| port | +PR #29030 | ours | 82.1% | 9.35 s | 403 | 46.1 s | 434 |
+| bigub | port engine | **theirs** | 82.2% | 8.70 s | **405** | **45.6 s** | 405 |
+| **pwilkin** | **theirs** | theirs | 82.2% | **6.78 s** | **497** | **27.4 s** | **769** |
+
+**v1 → pwilkin: increment +69%, wall/turn −43%, compaction −54%.**
+
+**The control is what makes this meaningful.** Our engine on their config is indistinguishable
+from our engine on ours (405 vs 403 on the increment, 45.6 vs 46.1 s on compaction — both inside
+noise), so **every bit of the advantage is their kernels**, not a flag transplant. Their prefill
+also *rises* with context (368→769) while ours is flat-to-declining (385→434); a rising rate is
+their kernels amortising a fixed per-token cost over a larger batch.
+
+**And our engine cannot run their config at all** — at `-ub 16384` it dies wanting a ~60 GB
+compute buffer (`failed to allocate ROCm0 buffer of size 60193899264`) on a 124 GB machine, while
+their engine runs the same ubatch in the same memory. Their scratch demand at large batch is a
+different order, not a tuning difference. Hence the control ran at 4096, which was also the
+untested gap in the flag sweep — and the answer is it does not help (405 vs our own 434 at 32k).
+
+**So the attribution is: tiled delta-net + their other commits = the win.** Not config, not
+quant (they loaded our UD-IQ4_XS unchanged), not the runtime. Status of adopting it is in §10.
 
 ### Agentic comparison: the ladder on the §2 metric
 
