@@ -23,3 +23,10 @@ derived:
     scope the exclusivity to and stops NOTHING. The previous variant stayed up, two models loaded
     into the same pool, and the new one died at load with a ~60GB allocation failure that looked
     like a verdict on the lever but was a memory collision.
+
+    RESULT: A WASH, so not adopted. Measured same-session against the base:
+      base   PP 793 tok/s  TG 23.3  hit 82.2%  wall 6.68s  compaction 26.9s
+      ub24k  PP 792 tok/s  TG 19.3  hit 82.2%  wall 7.22s  compaction 26.5s
+    Prefill is identical and decode and wall are slightly worse, inside what this box's
+    run-to-run spread allows. That matches pwilkin's own back-to-back measurement of about 1%
+    at depth 40000 - real but not worth the largest compute buffer of the four levers.
