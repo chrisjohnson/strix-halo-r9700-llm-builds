@@ -1,0 +1,46 @@
+name: qwen3.8-flash-next-iq4xs--gufo-rocm723-strixhalo-mtp-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: gufo-rocm723-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    2026-09-27. The highest-ceiling candidate in the engine survey, and not a llama.cpp fork at
+    all - gufo is kyuz0's purpose-built Strix Halo inference engine for gfx1151. Its own README
+    claims 1,628.52 tok/s pp on Qwen3.8-Flash-Next, 59.41 tok/s single-user decode, and 157.22
+    tok/s aggregated across 8 concurrent requests with MTP, against this repo's ~500 tok/s
+    prefill and ~20-27 tok/s decode on the same silicon. See
+    knowledge/research/2026-09-27-strix-halo-engine-landscape.md.
+
+    WHY THIS MATTERS BEYOND THE NUMBER: it ships an OpenAI-compatible `gufo serve llm`, so if it
+    holds up it could sit behind litellm as a drop-in replacement rather than needing the
+    llama.cpp-shaped integration every other build here uses.
+
+    EVERY CHOICE IN THE COMPOSE EXISTS TO MAKE ENGINE THE ONLY VARIABLE:
+      - target is OUR UD-IQ4_XS shards, not gufo's usual Unsloth UD-Q4_K_XL (111.3GB). Without
+        that, every comparison would be engine-vs-engine-vs-quant.
+      - --sessions 1 --context 262144 mirror this repo's `--parallel 1 -c 262144`. gufo's own
+        default is --sessions 2 with a shared KV pool, which is a deliberate follow-up
+        experiment rather than part of the first measurement.
+      - the SHARED-embedding MTP head, which is the variant gufo's docs name. The non-shared
+        head this repo uses elsewhere is a different file.
+    Podman-isms were removed from gufo's documented run command: it passes --userns=keep-id and
+    --group-add keep-groups, which are podman features with no docker equivalent; explicit
+    numeric group_add replaces them.
+
+    STATUS AND BLOCKERS - two, both one step each:
+      1. the image is not pulled yet (ghcr.io/gufo-org/toolboxes/gufo-runtime:latest; verified
+         pullable with `docker manifest inspect`)
+      2. the shared MTP head is committed but NOT DEPLOYED. It arrives via the local-ai-machine
+         commit that adds `qwen3.8-flash-next-mtp-shared-q8` to the models list, landing at
+         /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+         (note the nested MTP/ - hf download keeps repo structure). Until that deploys, this
+         build starts and cannot find its draft head.
+
+    NOT YET RUN, so nothing here is a claim about gufo's behaviour on our weights. Its published
+    numbers are its own, on its own quant, through its own harness.
