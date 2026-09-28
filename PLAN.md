@@ -285,19 +285,38 @@ all four declared model-list settings must be re-checked on any backend swap:
 | `input` | no mmproj mounted (the two `mmproj` mentions are comment text) | `[text]` stands |
 | `reasoningEfforts` | chat template byte-identical (9993 chars, `reasoning_effort` x8, `enable_thinking` x4) | `low/medium/xhigh` + `compat.supportsReasoningEffort` stand |
 
-**BLOCKED at the role repoint.** `local-ai-machine/scripts/set-role.sh` requires
-`LITELLM_MASTER_KEY`, and dsh does not have it: `docker/.env` exists only in the chris-owned
-deploy checkout (`/var/lib/git-checkouts/local-ai-machine/docker/.env`, not readable) and dsh's
-own checkout carries `*.example` stubs only. The one command needed, for whoever holds the key:
+**BLOCKED, and it takes TWO steps that both need Chris.** The second one was a genuine gap in
+this document's model of the deploy path, so it is written out in full.
+
+**Step 1 - bump the vendored flake input.** `strix-halo-r9700-llm-builds` is a **pinned Nix flake
+input** of `local-ai-machine`, so `set-role.sh` does not read this repo at all: it resolves build
+ids under `/etc/local-ai-machine-components/strix-halo-r9700-llm-builds`, which is a **Nix store
+copy** at whatever rev `flake.lock` pins. New builds pushed to GitHub are therefore INVISIBLE to
+`set-role.sh` until that pin is bumped - the error is `No build found at '<id>'`, followed by a
+list of build ids that stops before anything added recently. Currently pinned at `942ba9da...`
+against this repo's HEAD (see below); the bump is `./deploy.sh --update-input <name>`, and
+deploy.sh's own comment explains why it is the one step that cannot be pre-committed: it needs a
+live `nix flake update` resolution against the input's HEAD. It runs as the INVOKING user, so it
+must be run as chris - dsh cannot write `flake.lock` in the chris-owned deploy checkout.
+
+**Step 2 - the role repoint**, which needs `LITELLM_MASTER_KEY`. dsh does not have it:
+`docker/.env` exists only in the chris-owned deploy checkout (not readable) and dsh's own
+checkout carries `*.example` stubs only.
 
 ```sh
 cd /var/lib/git-checkouts/local-ai-machine
+./deploy.sh --update-input strix-halo-r9700-llm-builds
 ./scripts/set-role.sh big-moe qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-strixhalo-mtp-v1
 ```
 
-Not worked around deliberately: the key is readable through `sudo -n docker inspect
-litellm-proxy` (an allowed verb), but this repo's rule for a blocked standard path is to flag and
-confirm rather than improvise an alternative mechanism.
+deploy.sh leaves the resulting `flake.lock` change **uncommitted on the box** (it only ever
+fetches/resets/switches, never pushes). It should be synced back to git so the pin is recorded -
+a COPY of the new rev into this repo's own checkout and committed from there is enough, and is
+something dsh can do.
+
+Not worked around deliberately: the key IS readable through `sudo -n docker inspect
+litellm-proxy`, which is an allowed verb, but the rule for a blocked standard path is to flag it
+and confirm rather than improvise an alternative mechanism.
 
 **After the repoint**, per the same rule: verify end-to-end through litellm (a real completion on
 role `big-moe`), and update the `big-moe` comment in `dsh-deploy/.dsh/settings.yaml`, which still
