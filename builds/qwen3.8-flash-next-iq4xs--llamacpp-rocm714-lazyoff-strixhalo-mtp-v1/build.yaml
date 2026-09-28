@@ -31,20 +31,7 @@ derived:
     DO NOT USE. `--tensor-read-lazy on` (build v1) is the standing value.
 
 
-    REPRODUCING THIS BUILD - everything needed, none of it implicit:
-    BUILD IT (local image, not in any registry; ~30-45 min):
-            cd docker/qwen4exp-strix-halo-mtp
-            docker build -f Dockerfile.rocm-7.14 -t strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14 .
-          Engine: Aristo94/EngramHalo.cpp branch strix-halo-qwen4exp (third-party; this
-          Dockerfile does NOT pin a commit, it takes the branch head) plus two vendored
-          patches applied conditionally, over ROCm 7.14 for gfx1151.
-    WEIGHTS (same for every flash-next build here): unsloth/Qwen3.8-Flash-Next-GGUF,
-            'UD-IQ4_XS/*' (3 shards, 88 GiB) into /var/lib/ai-models/qwen3.8-flash-next-iq4xs,
-            and the non-shared MTP head 'MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf' into
-            /var/lib/ai-models/qwen3.8-flash-next-mtp-q8. Also available and NOT mounted here:
-            'mmproj-BF16.gguf' (908 MB), this model's vision projector. Declared in
-            local-ai-machine's configuration.nix models list.
-    RUN IT: sudo ./modelctl up --exclusive <this build id> - it waits for /health and
-            then sends a priming completion, so the first real request does not pay start-up
-            cost. Every build has its own host port, taken from its own compose.
-    Engine internals and what each upstream commit does: docker/qwen4exp-strix-halo-mtp/README.md
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.

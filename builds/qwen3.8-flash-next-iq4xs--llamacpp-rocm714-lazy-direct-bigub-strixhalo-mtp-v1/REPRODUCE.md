@@ -1,0 +1,54 @@
+# Reproducing `qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-bigub-strixhalo-mtp-v1`
+
+Everything needed to run this build on the same hardware. The build's `build.yaml` has the
+measured results and the reasoning; this file is the mechanical recipe.
+
+## Image
+
+`strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14-lazy-direct`
+
+```sh
+cd docker/qwen4exp-strix-halo-mtp
+docker build -f Dockerfile.rocm-7.14-lazy-direct \
+  -t strix-halo-r9700-llm-builds/qwen4exp-strix-halo-mtp:rocm-7.14-lazy-direct .
+```
+
+Engine: the same EngramHalo branch WITH upstream PR #29030 applied. The PR is still OPEN upstream, so it is vendored here as `llama-cpp-29030-lazy-direct.patch`, and the Dockerfile pins the fork commit.
+
+**The PR renames a flag.** `--tensor-read-lazy` becomes `--lazy-mode`, and `on` now means **direct reads**. A container on this image passing the old flag name will not start.
+
+## Weights
+
+This model's weights, all under `/var/lib/ai-models/` and declared in `local-ai-machine`'s `configuration.nix` `models` list so a systemd unit fetches them rather than a human:
+
+```sh
+hf download unsloth/Qwen3.8-Flash-Next-GGUF 'UD-IQ4_XS/*' \
+  --local-dir /var/lib/ai-models/qwen3.8-flash-next-iq4xs
+hf download unsloth/Qwen3.8-Flash-Next-GGUF 'MTP/mtp-Qwen3.8-Flash-Next-Q8_0.gguf' \
+  --local-dir /var/lib/ai-models/qwen3.8-flash-next-mtp-q8
+```
+
+Also available and **not mounted** here: `mmproj-BF16.gguf` (908 MB), this model's vision projector.
+
+## Running it
+
+```sh
+sudo ./modelctl up --exclusive qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-bigub-strixhalo-mtp-v1
+```
+
+## Running it
+
+```sh
+sudo ./modelctl up --exclusive <this build id>     # waits for /health, then primes
+```
+`up` waits for health and then sends a priming completion, so the first real request does not pay start-up cost. Every build has its own host port, taken from its own compose.
+
+## Engine internals
+
+See `docker/qwen4exp-strix-halo-mtp/README.md`.
+
+## Measured
+
+See this build's `build.yaml` and, for the comparison against the other
+engines, `knowledge/research/2026-09-27-strix-halo-engine-landscape.md` and
+`knowledge/research/2026-09-27-halogen-agentic-tuning-lessons.md`.

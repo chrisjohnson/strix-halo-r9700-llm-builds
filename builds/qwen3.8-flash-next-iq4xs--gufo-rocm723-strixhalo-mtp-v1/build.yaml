@@ -71,18 +71,7 @@ derived:
     does not implement.
 
 
-    REPRODUCING THIS BUILD - everything needed, none of it implicit:
-    PULL IT - external public image, nothing is built here:
-            docker pull ghcr.io/gufo-org/toolboxes/gufo-runtime:latest
-          Engine: kyuz0's gufo, a purpose-built Strix Halo engine (NOT a llama.cpp fork).
-          It supports exactly ONE quant for this model - see the notes above.
-    WEIGHTS: UD-Q4_K_XL and ONLY that quant. gufo's kernels implement one format set
-            for this model and reject UD-IQ4_XS with 'tensor blk.0.ffn_gate_exps.weight has
-            unsupported format IQ3_S', because UD-IQ4_XS is a DYNAMIC quant whose expert
-            tensors mix formats. unsloth/Qwen3.8-Flash-Next-GGUF, 'UD-Q4_K_XL/*' (4 shards,
-            111.3 GiB) into /var/lib/ai-models/qwen3.8-flash-next-ud-q4-k-xl, plus the shared
-            MTP head.
-    PODMAN-ISMS REMOVED from gufo's documented command: it passes --userns=keep-id and
-            --group-add keep-groups, which are podman features with no docker equivalent;
-            explicit numeric group_add replaces them.
-    Engine internals and what each upstream commit does: knowledge/research/2026-09-27-strix-halo-engine-landscape.md
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.

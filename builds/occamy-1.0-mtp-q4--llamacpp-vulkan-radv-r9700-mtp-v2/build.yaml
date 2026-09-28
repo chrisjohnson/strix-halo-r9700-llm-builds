@@ -91,13 +91,7 @@ derived:
     one that is behind, and these as the settings to try there.
 
 
-    REPRODUCING THIS BUILD - everything needed, none of it implicit:
-    PULL IT - external public image, nothing is built here:
-            docker pull docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
-          Engine: llama.cpp compiled for Vulkan RADV on gfx1151.
-    WEIGHTS: /var/lib/ai-models/llamacpp-occamy-1.0-mtp-q4/occamy-1.0-mtp-Q4_K_M.gguf
-            (one file) plus /var/lib/ai-models/occamy-1.0-mmproj for vision. Declared in
-            local-ai-machine's configuration.nix models list.
-    RUN IT: sudo ./modelctl up --exclusive <this build id>. This is the R9700 (Vulkan)
-            build: card0, and ROCm's device numbering is the OPPOSITE of Vulkan's.
-    Engine internals and what each upstream commit does: knowledge/research/2026-09-27-strix-halo-engine-landscape.md
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag
+    plus the exact build or pull command), weights and where they go, the engine's
+    non-obvious failure modes, and how to run it. The notes above carry what was
+    measured and why.
