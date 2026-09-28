@@ -1,0 +1,37 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-strixhalo-mtp-v1
+status: TESTING
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    2026-09-28. THE ADOPTED APU BUILD PLUS VISION. Identical to
+    ...-rocm100-lazy-direct-budget-strixhalo-mtp-v1 in engine, weights, KV quant, batch
+    and reasoning bound - the ONLY change is that the vision projector is mounted and
+    passed with --mmproj. A new build rather than an edit, because this repo does not
+    edit a committed build in place.
+
+    WHY IT WAS MISSING, and the correction involved: pwilkin's install.sh says "No
+    projector: this one is text only" for its flash-next profile, and that was carried
+    into this repo's notes as a property of the model. It is a property of THEIR profile.
+    unsloth/Qwen3.8-Flash-Next-GGUF ships mmproj-BF16.gguf (908MB) and mmproj-F16.gguf,
+    and the pwilkin image ships libmtmd.so and --mmproj support - both verified directly
+    before relying on either. So the model had vision the whole time and nothing was
+    mounting it, which is why image requests had nowhere to go.
+
+    ENABLING VISION TAKES TWO HALVES, and this build is only one of them:
+      - HERE (deployment): mount /var/lib/ai-models/qwen3.8-flash-next-mmproj and pass
+        --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0.
+      - IN dsh: the litellm role's declared `input` must include image, or pi-ai will not
+        send one no matter what the server can accept. For big-moe that means
+        `input: [text, image]` in dsh-deploy/.dsh/settings.yaml.
+    Both are needed; either alone is a silent no-op, which is exactly the failure mode
+    local-ai-machine's own AGENTS.md warns about for hand-declared routes.
+
+    NOT YET VALIDATED end-to-end with a real image request - status TESTING.
