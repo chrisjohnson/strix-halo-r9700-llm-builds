@@ -107,9 +107,19 @@ is not a win.
   silently edited).
 - **Access**: `sudo -n ./modelctl ...` works (a sudoers rule allows
   `/home/dsh/strix-halo-r9700-llm-builds/modelctl *`, added in `local-ai-machine` commit
-  `a1fe57b`, which also marked `dsh`'s `docker` group membership TEMPORARY). Since `dsh` is in
-  the `docker` group, plain `modelctl` also works and docker is reached via
-  `sg docker -c '...'` rather than `sudo docker`. (Note: `local-ai-machine`'s
+  `a1fe57b`). **`dsh` is NOT in the `docker` group** - that membership was added temporarily on
+  2026-09-27 for the ad-hoc `docker run` sweeps and removed again on 2026-09-28 by its own
+  instruction. So:
+
+    - `sudo -n ./modelctl ...` is the path, and now the only one.
+    - `sg docker -c '...'`, `docker run` and `docker exec` as `dsh` DO NOT WORK. Anything that
+      needs a container shell has to go through `sudo docker` - and note the sudo rules cover
+      only the read-mostly verbs (`ps`, `logs`, `inspect`, `images`, `stats --no-stream`, `top`,
+      `restart`, `pull`), not `run` or `exec`.
+    - A consequence worth knowing: reading the bench checkout from inside its container (the
+      `git fetch`/`reset` sync) used `docker exec`, so that workaround is no longer available;
+      the orchestrator does its own sync during a run, and `enqueue`-before-first-sync needs
+      another route. (Note: `local-ai-machine`'s
   `configuration.nix` comment above that rule still says it is "Not reachable today — modelctl
   talks to the docker socket, which dsh can't open". That comment is **stale**: both paths have
   worked all session, since `sudo` makes modelctl run as root and the docker-group membership
