@@ -127,6 +127,23 @@ curl -s -X POST http://127.0.0.1:8092/runs -H 'Content-Type: application/json' \
 **Backend endpoints**: flash-next v1 `127.0.0.1:8152`, occamy v2 `127.0.0.1:8171`. `GET /health`,
 `GET /props`, `GET /metrics`.
 
+**Deploying `local-ai-machine` changes** (this trips people up for an hour):
+
+```sh
+cd /var/lib/git-checkouts/local-ai-machine   # NOT ~/local-ai-machine
+./deploy.sh                                   # add --check to validate only
+```
+
+`/etc/nixos` is a symlink to `/var/lib/git-checkouts/local-ai-machine`, and `deploy.sh` runs its
+git as **chris** (`sudo -n -u chris git ...`) — so running it from a dsh-owned checkout fails with
+`fatal: failed to stat '/home/dsh/local-ai-machine': Permission denied`, because `/home/dsh` is
+mode 700 and chris cannot traverse it. dsh's sudo rules are exactly: `nixos-rebuild switch --flake
+/etc/nixos#local-ai-machine`, `modelctl *`, `(chris) git fetch/reset/clean`, and read-mostly docker
+verbs. A `--check` run from the right directory also fails, but only at the last step — writing a
+`result` symlink into the chris-owned checkout — after the configuration itself has **built
+successfully**, which is still useful validation. The real switch runs that step as root and
+works.
+
 ---
 
 ## 5. What we've done (chronological)
@@ -420,6 +437,17 @@ point, not a problem.
   ROCm SDK's `libamdhip64`/`libhsa-runtime64` by ordering.
 - **Rootless Docker must not use host networking** on this box's ROCm containers; it masks
   `/sys/class/kfd`. Publish ports (every build here already does).
+- **Deploy `local-ai-machine` from the deploy checkout, not your own** — `/etc/nixos` is
+  `/var/lib/git-checkouts/local-ai-machine`, and `deploy.sh` shells out to git as `chris`, who
+  cannot traverse `/home/dsh` (mode 700). See §4.
+- **`chmod` for tidiness is how you break an execute bit**, and git commits it as a real change.
+  This happened here: `chmod 644 modelctl` turned `100755` into `100644`, and `./modelctl` stopped
+  running. Check `git ls-files -s <file>` after any mode change; only 100755 executes.
+- **Never filter a bring-up through `grep`.** `modelctl up ... 2>&1 | grep -E 'primed|healthy'`
+  deleted the one line that explained a hang (`sudo: ./modelctl: command not found`) and left a
+  script silently waiting 200 s. Log the whole thing; filter when reading, not when running.
+- **`pkill -f <pattern>` can match its own command line** and kill the shell running it. Use
+  `pkill -f 'pat[t]ern'`.
 - **This box's shell tools default to 60 s** — pass a longer timeout explicitly for container
   starts and image work, or use a background job.
 - **Don't build or pull images while a benchmark is running**: it contends on CPU *and disk*, and
