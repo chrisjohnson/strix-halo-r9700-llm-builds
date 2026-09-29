@@ -1,0 +1,45 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    2026-09-29. THE mmproj BUILD PLUS A DEFAULT REASONING EFFORT. Identical to
+    ...-budget-mmproj-strixhalo-mtp-v1 in engine, image, weights, KV quant, batch sizes,
+    the 8192 reasoning budget, the MTP draft head and the vision projector - the ONLY
+    change is that `--reasoning-effort medium` is added to the llama-server command line.
+    A new build rather than an edit, because this repo does not edit a committed build in
+    place.
+
+    WHY: this model spends roughly 90% of its generated tokens thinking, and nothing ever
+    selected a level, so every request ran at the chat template's own xhigh default. On one
+    hard prompt at temperature 0, measured on this box:
+      xhigh    257.1 s wall, 24,376 chars of reasoning
+      medium    34.4 s wall
+    a 7.5x wall-time difference, with the answers still correct at medium. Setting the
+    level server-side is what makes it apply to every request that does not name its own,
+    which is all of them.
+
+    IT DOES NOT PIN CALLERS DOWN. `--reasoning-effort` supplies the DEFAULT only; the
+    engine still honors a per-request `reasoning_effort` field, so a caller that sends one
+    (through litellm or straight to llama-server) gets its own level and overrides this.
+    The flag takes 'default' to keep the template default, or a level such as
+    'minimal','low','medium','high','xhigh','max'; naming 'medium' changes the default,
+    not the ceiling.
+
+    IT DOES NOT ALTER MODEL QUALITY - only how much the model thinks by default. The
+    8192 reasoning budget is unchanged and still bounds thinking against pi-ai's 32768
+    maxTokens default, so the empty-answer shape documented on the parent build behaves
+    exactly as before.
+
+    REPRODUCING THIS BUILD: see REPRODUCE.md in this build directory - image (tag plus the
+    exact build or pull command), weights and where they go, the engine's non-obvious
+    failure modes, and how to run it. Everything there is the mmproj build's recipe plus
+    the one extra flag.
