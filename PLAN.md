@@ -241,6 +241,7 @@ All under `knowledge/research/`. The ones that bear on current decisions:
 | Note | What it establishes |
 |---|---|
 | `2026-09-27-strix-halo-engine-landscape.md` | **The other engines, and where the remaining speed is.** `kyuz0/gufo` 1,628 pp; pwilkin/strix-llama ~1,200; the tiled delta-net is 2.37x and we don't have it |
+| `2026-09-28-strata-nvidia-engine-leads.md` | **An NVIDIA engine for the SAME model.** Our prefill already matches it (1,256-1,306 vs 1,070-1,350 tok/s) - so prefill is finished. The decode gap (23-34 vs 52-90) is the memory-bandwidth ratio, so the remaining headroom is **bytes per token, not compute**. Leads: Swift 1.5 (63% fewer thinking tokens), the GSQ-RCO quants (~40 GB smaller, freeing what the failed levers needed). Also records the lead that does NOT transfer and why. |
 | `2026-09-28-flashnext-agentic-tuning-levers.md` | **The remaining levers.** GTT is NOT the constraint (its ceiling already covers all RAM); physical RAM is. The pair is memory-independent, and the R9700 half is already better configured than the APU half. |
 | `2026-09-27-halogen-agentic-tuning-lessons.md` | **The reframe.** A production Flash-Next server's cache-mode spread is 44x; the answer-room failure mode (empty answers on compaction); disk-persistent prompt cache; the shared-KV-pool concurrency model. Read before planning any further tuning. |
 | `2026-09-27-prefill-bench-padding-trap.md` | Repeated filler cannot exercise the PLE table; rates inflate. **Read before designing any prefill measurement.** |
