@@ -55,14 +55,33 @@ right answer for the wrong reason.
 
 ## The leads that do transfer
 
-**1. Swift 1.5 - a fine-tune trained to reach the answer with much less thinking.** Their docs
-say its authors claim **63% fewer thinking tokens**. This is the largest applicable lead, because
-it targets the term that actually dominates our agentic metric: our measured turn latency is
-thinking-bound, not prefill-bound, and the same thinking is what produces the empty-content
-failure at small caps. `ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (~68 GB at IQ2_XS).
-Quality is the open question; it is a fine-tune, so it must be measured rather than assumed.
+**1. Swift 1.5 - WALKED BACK after reading its primary source.** Strata describes it as a
+fine-tune "trained to reach the answer with much less thinking (its authors: 63% fewer thinking
+tokens)", which sounded like the largest applicable lead, since our turn latency is
+thinking-bound. Reading `ukisai/Swift-1.5-Qwen3.8-Flash-Next-GSQ-RCO-GGUF` directly, it does not
+survive contact with this box's requirements:
 
-**2. The GSQ-RCO quantizations - roughly 40 GB smaller than what we run.**
+- **Only 2-3 bit exists** - IQ3_XXS 75.97 GB, IQ2_XS 68.15 GB, Q2_0 66.55 GB. No Q4 or above,
+  because the whole family is ISTA's GSQ-RCO ladder. That fails `big-moe`'s hard requirement of
+  nothing under Q4 for its maximum-intelligence role.
+- **No MTP draft head ships** - only the target shards, an imatrix, an mmproj and eval files. So
+  speculation, which is live here (108,880 draft tokens measured on the adopted build), would have
+  to use the *base* model's head against fine-tuned weights, and acceptance would likely drop.
+  Their own usage example passes no `--spec-type` at all.
+- **The published evidence is KLD only, and disclaims what it is not.** Their words: "not direct
+  capability rankings, task-accuracy percentages or statistical-equivalence claims", and "These
+  tests do not establish long-context quality." So the quality comparison the whole exercise would
+  be for has not been published.
+- **The 63% figure is second-hand** - Strata's characterisation of the authors' claim, not a number
+  in Swift's own README.
+- The repository may be gated: its README says to authenticate with an account granted access
+  "while the repository is private".
+
+**And the thing Swift was going to buy is available for free**, which is the more useful result:
+reasoning effort. See `2026-09-28-reasoning-effort-dominates-turn-latency.md` - 7.5x on wall time,
+measured, with the answers still correct, by picking an effort level `big-moe` already declares.
+
+**2. The GSQ-RCO quantizations - ruled out by the quant floor, but worth knowing.**
 `ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (503k downloads, 360 likes): Q2_0 66 GB / ~40 GB
 resident, IQ2_XS 68 GB / ~42 GB, IQ3_XXS 76 GB / ~49 GB, against **our UD-IQ4_XS at 88 GB**. Two
 effects, both pointed the right way on a bandwidth-bound box: fewer bytes per token (faster
