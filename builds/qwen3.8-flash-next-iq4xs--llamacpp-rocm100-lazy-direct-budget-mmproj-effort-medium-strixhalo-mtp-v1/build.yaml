@@ -67,3 +67,27 @@ derived:
     otherwise provoke very long thinking, which for an agentic loop doing real work is not rare.
     STILL UNVALIDATED: eight easy tasks say nothing about hard, long-horizon work - which is the
     case that matters and needs a task set that actually provokes long chains at xhigh.
+
+    THEN THE TEST THAT MATTERS - hard prompts that actually provoke long thinking. Six problems
+    (Monty Hall, Josephus, modular exponentiation, lattice paths, dice probability, a recurrence),
+    each with "derive from first principles, then state two plausible wrong answers and why they
+    are wrong" appended so the prompt invites exposition. Answers were NOT taken on trust: the
+    correct ones were derived independently in Python first.
+
+      correctness         6/6 at BOTH levels, no disagreements
+      median reasoning    3,657 ch (medium) vs 15,767 ch (xhigh)   -> 4.31x more thinking at xhigh
+      median wall         56.4 s vs 145.8 s                        -> 2.59x (unreliable, see below)
+      failures            none - all 12 finish_reason=stop, no empty content
+
+    **xhigh thought 4.31x harder and got exactly the same answers right.** So the mechanism the
+    change rests on is confirmed - the effort level really does decide how hard the model thinks
+    when the prompt invites it - and on this sample the extra thinking bought nothing.
+
+    SAMPLE SIZE IS THE LIMIT, stated by the agent that ran it: six problems cannot detect a small
+    degradation. If medium failed on 1 hard problem in 20, roughly 60 problems would be needed to
+    see it at 95% confidence. So this is "no degradation visible at n=6", not "no degradation".
+
+    WALL TIMES HERE ARE NOT TRUSTWORTHY and are reported only because they were measured. This
+    engine has total_slots=1 and an agent session (context ~200k tokens, re-sent every turn)
+    periodically occupies it with 160k-212k-token prompts for minutes at a time. Reasoning length
+    is the reliable signal; wall is not.

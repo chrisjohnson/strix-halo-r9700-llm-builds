@@ -107,3 +107,32 @@ prompts** into that single slot, each occupying it for minutes. A repeat run of 
 completed **zero** requests, queued behind one of those prefills. Any wall-time number taken on
 this box can be dominated by whoever else is using that slot, and this change's benefit is
 precisely a wall-time benefit. Measure it in a quiet window or not at all.
+
+## And the test that actually settles it (hard prompts, same day)
+
+The correction above said the missing validation was prompts that *provoke* long chains. Six hard
+problems - Monty Hall, Josephus with 100 people, 3^200 mod 7, lattice paths on a 4x4 grid, dice
+probability, and a linear recurrence - each with "derive from first principles, then state two
+plausible wrong answers and why they are wrong" appended. Correct answers were derived
+independently in Python first rather than taken on trust.
+
+| | default (`medium`) | `xhigh` |
+|---|---|---|
+| correct | **6/6** | **6/6** |
+| median reasoning | 3,657 ch | **15,767 ch (4.31x)** |
+| median wall (unreliable) | 56.4 s | 145.8 s (2.59x) |
+| disagreements | **none** | |
+| failures | none - all 12 `finish_reason=stop`, no empty content | |
+
+**`xhigh` thought 4.31x harder and got exactly the same answers right.** That confirms the mechanism
+this change rests on - the effort level really does govern how hard the model thinks when the
+prompt invites it - and on this sample the extra thinking bought nothing.
+
+So the honest final position: **`medium` is a good default, with no degradation visible at n=6.**
+Six problems cannot detect a small cost - if `medium` failed on 1 hard problem in 20, roughly 60
+would be needed to see it at 95% confidence - so this is reassurance, not proof. The change is
+worth keeping on the evidence available: it is neutral on ordinary prompts, 4.3x less thinking and
+2.6x less wall on demanding ones, and no observed correctness cost anywhere.
+
+The wall figures remain the least trustworthy number here for the reason already recorded: a
+single slot and a ~200k-token client on it.
