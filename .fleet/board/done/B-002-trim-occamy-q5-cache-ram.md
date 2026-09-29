@@ -29,15 +29,21 @@ of headroom against the APU build's fixed ~86 GiB GTT commitment.
    16384`. build.yaml/docker-compose.yaml/REPRODUCE.md all written.
 2. [x] Wrote `knowledge/research/2026-09-29-occamy-cache-ram-midnight-hang.md` in
    local-ai-machine with the full incident (Prometheus queries, timeline, margin math).
-3. [ ] Commit + push this repo (direct-push authorized, same as local-ai-machine).
-4. [ ] Update local-ai-machine's `standing-models.txt` to reference v2 instead of v1.
-5. [ ] Bump local-ai-machine's flake.lock pin for this repo (`deploy.sh --update-input
-   strix-halo-r9700-llm-builds`) so v2's build directory is actually visible to modelctl.
-6. [ ] Deploy + swap the live container: stop v1, bring up v2 via modelctl.
-7. [ ] Verify v2 healthy on :8191, confirm via `/health` and a real request.
+3. [x] Committed + pushed this repo (`7f8c3fb`).
+4. [x] Updated local-ai-machine's `standing-models.txt` to reference v2 instead of v1
+   (`e519909`).
+5. [x] Bumped local-ai-machine's flake.lock pin for this repo via `deploy.sh
+   --update-input strix-halo-r9700-llm-builds` on the box, synced the resulting pin back
+   to git since the box's deploy key is read-only (`77b42cf`).
+6. [x] Swapped the live container: `modelctl down` v1 (clean stop/remove), `modelctl up
+   --exclusive` v2.
+7. [x] Verified: `docker inspect` confirms `--cache-ram 16384` on the running container,
+   `/health` returns 200, `free -h` shows 21GiB available post-swap (vs. 0.08GiB at the
+   incident's trough).
 
 ## Signals
 <!-- signal: claude 2026-09-29T22:50Z — claiming, mid-flight from local-ai-machine's own M-158-equivalent investigation session -->
+<!-- signal: claude 2026-09-29T23:20Z — done, v2 live and healthy on :8191, moving to done/ -->
 
 ## Decision log
 - 2026-09-29: 16384 chosen over other values via explicit margin math against the box's
@@ -45,6 +51,13 @@ of headroom against the APU build's fixed ~86 GiB GTT commitment.
   knowledge/research writeup for the full breakdown. Not yet re-validated under a real
   cache-filling workload; flagged in build.yaml as a follow-up if either a hang recurs at
   smaller scale or cache-hit rates visibly suffer.
+- 2026-09-29: swapped v1 -> v2 without sudo, as plain `chris` (docker-group member) via
+  `modelctl` directly - chris's own sudo rules don't include a passwordless `modelctl`
+  entry (that NOPASSWD rule is scoped to the `dsh` user only), but `modelctl` itself
+  doesn't require root for a docker-group member.
 
 ## Handoff notes
-(in progress - see Plan above for what's left)
+v2 is live and standing in v1's place. Not yet re-validated under a real cache-filling
+workload over hours/days - worth revisiting `--cache-ram` again if either a smaller-scale
+hang recurs or cache-hit rates visibly suffer from the smaller cap. v1's build directory
+is left in place (untouched), per this repo's own convention, for historical reference.
