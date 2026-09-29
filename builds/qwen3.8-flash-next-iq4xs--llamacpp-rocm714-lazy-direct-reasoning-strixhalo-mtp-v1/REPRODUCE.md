@@ -33,13 +33,13 @@ Also available and **not mounted** here: `mmproj-BF16.gguf` (908 MB), this model
 ## Running it
 
 ```sh
-sudo ./modelctl up --exclusive qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-reasoning-strixhalo-mtp-v1
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive qwen3.8-flash-next-iq4xs--llamacpp-rocm714-lazy-direct-reasoning-strixhalo-mtp-v1
 ```
 
 ## Running it
 
 ```sh
-sudo ./modelctl up --exclusive <this build id>     # waits for /health, then primes
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive <this build id>     # waits for /health, then primes
 ```
 `up` waits for health and then sends a priming completion, so the first real request does not pay start-up cost. Every build has its own host port, taken from its own compose.
 

@@ -105,13 +105,13 @@ is not a win.
 - **Never edit or delete** a committed build in place except to *correct a factual claim*
   (there is precedent: commit `c9934cf` withdraws a wrong claim; the old text is quoted, not
   silently edited).
-- **Access**: `sudo -n ./modelctl ...` works (a sudoers rule allows
+- **Access**: `sudo -n /run/current-system/sw/bin/modelctl ...` works (a sudoers rule allows
   `/home/dsh/strix-halo-r9700-llm-builds/modelctl *`, added in `local-ai-machine` commit
   `a1fe57b`). **`dsh` is NOT in the `docker` group** - that membership was added temporarily on
   2026-09-27 for the ad-hoc `docker run` sweeps and removed again on 2026-09-28 by its own
   instruction. So:
 
-    - `sudo -n ./modelctl ...` is the path, and now the only one.
+    - `sudo -n /run/current-system/sw/bin/modelctl ...` is the path, and now the only one.
     - `sg docker -c '...'`, `docker run` and `docker exec` as `dsh` DO NOT WORK. Anything that
       needs a container shell has to go through `sudo docker` - and note the sudo rules cover
       only the read-mostly verbs (`ps`, `logs`, `inspect`, `images`, `stats --no-stream`, `top`,
@@ -134,10 +134,10 @@ is not a win.
 cd ~/strix-halo-r9700-llm-builds
 
 # models
-sudo -n ./modelctl list                     # catalogue: id, status, port
-sudo -n ./modelctl up   <build-id>          # start (own port from its compose)
-sudo -n ./modelctl down <build-id>
-sudo -n ./modelctl up --exclusive <id>      # stops builds sharing derived.target_gpu
+sudo -n /run/current-system/sw/bin/modelctl list                     # catalogue: id, status, port
+sudo -n /run/current-system/sw/bin/modelctl up   <build-id>          # start (own port from its compose)
+sudo -n /run/current-system/sw/bin/modelctl down <build-id>
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive <id>      # stops builds sharing derived.target_gpu
 
 # benchmark orchestrator (container llm-inference-bench)
 curl -s http://127.0.0.1:8092/state | jq '.runs | to_entries | map(select(.value.status=="running" or .value.status=="queued"))'

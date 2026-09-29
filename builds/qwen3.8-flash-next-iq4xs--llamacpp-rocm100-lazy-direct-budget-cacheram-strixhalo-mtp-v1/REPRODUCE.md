@@ -31,7 +31,7 @@ Note the **nested `MTP/` path**: `hf download` preserves the repo's directory st
 ## Running it
 
 ```sh
-sudo ./modelctl up --exclusive qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-cacheram-strixhalo-mtp-v1
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-cacheram-strixhalo-mtp-v1
 ```
 
 ## Two non-obvious things, either of which stops it dead

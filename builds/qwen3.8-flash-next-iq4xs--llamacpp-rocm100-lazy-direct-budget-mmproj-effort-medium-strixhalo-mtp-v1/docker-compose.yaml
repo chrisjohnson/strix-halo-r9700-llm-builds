@@ -83,9 +83,11 @@
 # Deliberate differences from the documented command, both to make ENGINE the
 # only variable against this repo's own builds:
 #   - OUR UD-IQ4_XS target, not the IQ4_NL the docs use
-#   - --mmproj omitted entirely: the documented command passes one, but pwilkin's
-#     own install.sh flash-next profile says "No projector: this one is text
-#     only", and this repo has no mmproj for this model
+#   - --mmproj IS passed, unlike the earlier builds in this series. It was omitted
+#     at first because pwilkin's install.sh flash-next profile says "No projector:
+#     this one is text only" - which turned out to describe THEIR profile, not the
+#     model: unsloth ships mmproj-BF16.gguf and the pwilkin image has libmtmd and
+#     --mmproj. This build exists to mount it; see the vision note below.
 #
 # DEPENDS ON a model that is committed but not yet deployed: the shared MTP head
 # at /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8/MTP/.

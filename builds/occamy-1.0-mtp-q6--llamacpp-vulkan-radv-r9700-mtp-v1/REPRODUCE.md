@@ -25,13 +25,13 @@ Weights under `/var/lib/ai-models/`, declared in `local-ai-machine`'s `configura
 ## Running it
 
 ```sh
-sudo ./modelctl up --exclusive occamy-1.0-mtp-q6--llamacpp-vulkan-radv-r9700-mtp-v1
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive occamy-1.0-mtp-q6--llamacpp-vulkan-radv-r9700-mtp-v1
 ```
 
 ## Running it
 
 ```sh
-sudo ./modelctl up --exclusive <this build id>
+sudo -n /run/current-system/sw/bin/modelctl up --exclusive <this build id>
 ```
 This is the **R9700** (Vulkan) build: `card0`. ROCm's device numbering is the OPPOSITE of Vulkan's, so a `-dev ROCm0` in a Vulkan build does not mean the same GPU as `ROCm0` in a ROCm build.
 
