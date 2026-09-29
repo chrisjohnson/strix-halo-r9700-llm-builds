@@ -1,0 +1,50 @@
+# occamy-1.0-mtp-q5 on the R9700 eGPU (Vulkan0).
+#
+# v2 of the v1 build (2026-09-28) - identical in every way except
+# --cache-ram, trimmed 32768 -> 16384 (M-158, 2026-09-29 midnight-hang
+# investigation). v1's model weights/KV genuinely do live entirely in the
+# R9700's own 32 GiB VRAM as documented - that part of "memory-independent
+# from the APU build" held up under real Prometheus telemetry
+# (amdgpu_vram_used_bytes flat at 30.72 GiB through the whole incident).
+# What v1's own build.yaml/standing-models.txt notes never accounted for:
+# --cache-ram is llama.cpp's own HOST-RAM prompt cache, completely separate
+# from VRAM and invisible to any GPU metric - and its own log
+# ("making room for prompt cache entry, removing oldest entry") shows it
+# was actively filling/evicting right up to the crash. With the APU build's
+# fixed ~86 GiB GTT footprint already committed, a 32 GiB cache ceiling left
+# too little host RAM margin; 16 GiB leaves roughly 12 GiB of genuine
+# headroom even if this cache, dsh, and everything else all peak at once.
+# See knowledge/research/2026-09-29-occamy-cache-ram-midnight-hang.md for
+# the full incident (Prometheus queries, timeline, the arithmetic).
+#
+# Ported from
+# builds/occamy-1.0-mtp-q4--llamacpp-vulkan-radv-r9700-mtp-v2 - same model,
+# same flags, only the quant and model file differ.
+#
+# Vulkan0 = R9700 eGPU (32 GiB GDDR6), Vulkan1 = Strix Halo APU.
+# Port 8191, same as v1 - v1 is retired, not run alongside this.
+#
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+services:
+  occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-v2:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-v2
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/occamy-1.0-mtp-q5:/models:ro
+    - /var/lib/ai-models/occamy-1.0-mmproj:/mmproj:ro
+    command: 'llama-server -m /models/occamy-1.0-mtp-Q5_K_M.gguf -dev Vulkan0
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min
+      0.3 -np 3 --kv-unified --kv-unified-per-slot 262144 -n 8192 -ctk q4_0 -ctv q4_0
+      --cache-ram 16384
+      --mmproj /mmproj/mmproj-occamy-1.0-F16.gguf --mmproj-device Vulkan0
+      --host 0.0.0.0
+      --port 8080 -a occamy-1.0-mtp-q5-r9700 --metrics
+      '
+    ports:
+    - 127.0.0.1:8191:8080

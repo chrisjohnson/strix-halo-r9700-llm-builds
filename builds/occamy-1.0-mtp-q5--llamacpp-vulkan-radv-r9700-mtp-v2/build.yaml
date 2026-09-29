@@ -1,0 +1,58 @@
+name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-v2
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q5_K_M, MTP, self-grafted)
+  params: 35B
+  active_params: 3B
+  quant: Q5_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-09-29 (midnight-hang investigation, following M-153/M-154/M-155/M-157
+    session work). Identical to v1 in every respect except one flag:
+    --cache-ram 32768 -> 16384. Everything else (weights, KV quant, MTP
+    draft config, mmproj, ports) is byte-for-byte v1's. A new build rather
+    than an edit, because this repo does not edit a committed build in
+    place.
+
+    WHY: local-ai-machine hung around 2026-09-29 04:15 UTC (2026-09-28
+    ~midnight Eastern). Root-caused via real Prometheus telemetry, not
+    guesswork - node_memory_MemAvailable_bytes fell from 6.12 GiB (03:45)
+    to 0.08 GiB with swap fully exhausted (04:15), while
+    amdgpu_vram_used_bytes (card0/R9700, occamy) and amdgpu_gtt_used_bytes
+    (card1/APU, the standing flash-next build) were BOTH completely flat
+    the entire window - 30.72 GiB and 85.75 GiB respectively, zero
+    growth. So this was never "occamy and flash-next don't fit together"
+    (they measurably do, GPU-side, exactly as standing-models.txt already
+    documented) - it was v1's OWN --cache-ram 32768, a llama.cpp host-RAM
+    prompt cache entirely separate from VRAM and invisible to every GPU
+    metric that exists on this box. v1's own container log
+    ("making room for prompt cache entry, removing oldest entry") shows
+    it actively filling/evicting right up to the crash - real usage, not
+    a leak, just a bigger cap than the box's actual headroom allowed once
+    stacked against the APU build's fixed ~86 GiB GTT footprint.
+
+    THE MARGIN MATH (124 GiB total RAM): 85.75 GiB flash-next GTT (fixed,
+    confirmed flat) + ~5 GiB dsh (its own systemd-logged peak) + ~2 GiB
+    occamy's non-cache host overhead (weights are in VRAM, this is just
+    program/buffer overhead) + ~3 GiB everything else (litellm/grafana/
+    playsense/docker/caddy/etc) + 16 GiB new cache-ram cap = ~112 GiB,
+    leaving ~12 GiB of genuine headroom even if every one of those peaks
+    simultaneously - versus v1's 32 GiB cap, which left as little as ~0
+    GiB margin at its worst observed point.
+
+    NOT YET RE-VALIDATED under a cache-filling workload - this build has
+    not been run long enough yet to confirm 16 GiB is both (a) large
+    enough to preserve most of the practical cache-hit benefit and (b)
+    small enough to never repeat the incident. Worth revisiting if either
+    a hang recurs at a smaller scale, or cache-hit rates visibly suffer.
+
+    See knowledge/research/2026-09-29-occamy-cache-ram-midnight-hang.md
+    (local-ai-machine repo) for the full incident writeup: exact
+    Prometheus queries, timeline, and the margin arithmetic above in
+    full.
+
+    Promoted to standing in v1's place - see local-ai-machine's
+    standing-models.txt.
