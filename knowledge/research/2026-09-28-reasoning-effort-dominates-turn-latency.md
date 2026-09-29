@@ -6,7 +6,7 @@ tags: [flash-next, reasoning-effort, thinking, wall-time, agentic, tuning, big-m
 status: active
 ---
 
-# Reasoning effort dominates turn latency — 7.5x, measured
+# Reasoning effort can dominate turn latency — but only in proportion to how much the prompt makes it think
 
 Same build, same prompt, same 32768 cap, three effort levels. Only `reasoning_effort` changed:
 
@@ -63,3 +63,47 @@ starting point, being 44% faster than low here while thinking more - and keep `x
 for work that warrants it. Then measure success rate on a spread of real tasks before treating it
 as settled, because the speedup is large enough to be worth the checking and the failure mode
 (worse answers, quietly) is the expensive kind.
+
+---
+
+## Correction after validating it (2026-09-28, same day)
+
+A validation run over eight single-fact tasks, each at the new `medium` default and at an explicit
+`xhigh`, changes how this should be read. Results:
+
+| | default (`medium`) | `xhigh` |
+|---|---|---|
+| correct | **8/8** | **8/8** |
+| median wall | 4.87 s | 2.29 s |
+| median reasoning | 314 ch | 200 ch |
+| disagreements | **none** | |
+| failures | none - all 16 `finish_reason: stop`, no empty content | |
+
+**Correctness held exactly, which is the good news. But the speed win did not reproduce - it
+inverted.** `medium` was 2.13x *slower* on these tasks, and that number is noise rather than a
+finding: on easy prompts the model thinks 82-870 characters at *either* level, i.e. 10-80x less
+than the 24,376-character probe, so the two levels are effectively indistinguishable in cost here
+and the ratio is spread over a few seconds.
+
+**So the 7.5x was not a property of the setting. It was a property of the prompt.** The original
+probe asked for a step-by-step proof and to rule out misreadings - it *demanded* exposition - and
+`xhigh` obliged with 24,376 characters. Task 1 in the validation set is the same puzzle worded as
+"state the final number", and xhigh spent 573 characters on it. The effort level decides how hard
+the model thinks when the prompt invites it to; it does not make an ordinary prompt cheaper.
+
+That reframes the change from "the biggest lever found" to something more modest and still worth
+keeping: **no measurable downside** on correctness (8/8 both, no disagreement, no failures) and a
+**large upside on exactly the prompts that would otherwise provoke very long thinking** - which, for
+an agentic loop doing real work, is not a rare case. It should not be sold as a general 6x.
+
+**What is still unvalidated, and it is the case that matters:** eight easy tasks prove nothing about
+hard, long-horizon work. A real check needs prompts that actually provoke long chains at xhigh -
+the original probe is the right *kind* of material, and the task set was the wrong kind.
+
+**A measurement hazard found while validating, worth knowing:** this engine has `total_slots: 1`,
+and something on the box - very likely this very session, whose context is around 200k tokens and
+which re-sends its whole history every turn - was sending **209,511-, 212,504- and 162,217-token
+prompts** into that single slot, each occupying it for minutes. A repeat run of the 16 measurements
+completed **zero** requests, queued behind one of those prefills. Any wall-time number taken on
+this box can be dominated by whoever else is using that slot, and this change's benefit is
+precisely a wall-time benefit. Measure it in a quiet window or not at all.

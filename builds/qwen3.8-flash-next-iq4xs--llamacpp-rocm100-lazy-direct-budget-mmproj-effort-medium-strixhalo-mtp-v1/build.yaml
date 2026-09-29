@@ -43,3 +43,27 @@ derived:
     exact build or pull command), weights and where they go, the engine's non-obvious
     failure modes, and how to run it. Everything there is the mmproj build's recipe plus
     the one extra flag.
+
+    VALIDATED 2026-09-28, and the result is a correction rather than a confirmation. Eight
+    single-fact tasks with checkable answers, each run at the new medium default and at an explicit
+    xhigh:
+
+      correct            8/8 at BOTH levels, zero disagreements, all 16 finish_reason=stop
+      median wall        4.87 s default vs 2.29 s xhigh
+      median reasoning   314 ch default vs 200 ch xhigh
+
+    So correctness is not measurably harmed, which is what this build needed to establish. But the
+    SPEED WIN DID NOT REPRODUCE - it inverted, and that number is noise rather than a finding:
+    on easy prompts the model thinks 82-870 characters at either level, 10-80x less than the
+    24,376-character probe that justified the change, so the two levels are indistinguishable in
+    cost here.
+
+    THE 6.2x WAS A PROPERTY OF THE PROMPT, NOT THE SETTING. That probe asked for a step-by-step
+    proof and to rule out misreadings - it demanded exposition - and xhigh obliged. Reworded as
+    "state the final number", the same puzzle cost xhigh 573 characters. The effort level decides
+    how hard the model thinks when invited; it does not make an ordinary prompt cheaper.
+
+    KEPT ANYWAY: no measurable downside, and a large upside on exactly the prompts that would
+    otherwise provoke very long thinking, which for an agentic loop doing real work is not rare.
+    STILL UNVALIDATED: eight easy tasks say nothing about hard, long-horizon work - which is the
+    case that matters and needs a task set that actually provokes long chains at xhigh.
