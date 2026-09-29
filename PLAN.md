@@ -538,52 +538,63 @@ gave 483/504/434.
 
 ## 10. The plan
 
-Ordered. Costs are real; don't start a heavy one while a benchmark is running (§11).
+Ordered, and kept honest: done items stay as short records so they are not re-litigated, open ones
+say what would settle them. Costs are real; don't start a heavy one while a benchmark is running
+(§11).
 
-0. **Tuning levers: SWEPT, and the answer is that the build is at the box's ceiling.** All four
-   resolved - `--cache-ram` no help, KV quantisation **impossible** (the engine asserts f16 at
-   `qwen4exp.cpp:1365`), `--parallel 2` **does not fit** (compute buffers), `-ub 24576` a wash.
-   One genuine loose end: the cache-ram test could not exercise its own lever (a single ~31k
-   conversation fits the 8 GiB default many times over, so the hit rate was identical), so it is
-   **unresolved rather than refuted** and needs a multi-conversation test.
-   Historical note: this was the item that needed a maintenance window, because the APU serves
-   `big-moe`. It got one.
-1. **The remaining tuning levers, ranked** — `--cache-ram 32768` on the APU build (unset today,
-   so it runs llama.cpp's 8192 MiB default while occamy has 32 GiB, and cache-hit fraction is the
-   dominant agentic term); `-ctk/-ctv q8_0`→`q4_0` on the APU build (frees 3.2-4.7 GiB and may
-   repeat the +73.7% occamy KV result); `--parallel 2 --kv-unified` for subagents; `-ub 24576`
-   last. See `2026-09-28-flashnext-agentic-tuning-levers.md`.
-   **BLOCKED ON A MAINTENANCE WINDOW, deliberately:** every one of these needs the APU, and the
-   APU now serves `big-moe`, dsh's default model — possibly the very session reading this. The
-   earlier sweeps ran in the background precisely because nothing live depended on them; that is
-   no longer true.
-   Also noted while auditing: the reference for these is the APU build, because **occamy is
-   already configured the way the APU build should be.**
-1. **Agentic measurement first, before any more engine work** (§2, §9.10). Build a replay that
-   looks like a real dsh session — growing context, tool calls, a compaction — and report
-   per-turn latency, cache-hit fraction, and TTFT. Without it, every engine comparison below is
-   ranked on the wrong axis. `llm_decode_bench.py` already has an incremental-prefill mode to
-   start from. **Then the answer-room audit** (§9.11), which is minutes of work and a
-   correctness-shaped failure.
-2. **Let runs 161–163 finish** (~2h). They are the before/after on the *standard* metric rather
-   than the custom prefill ladder. Report the result.
-2. **Build the retained-PM4 image**:
-   `docker build -f docker/pwilkin-strix-halo/Dockerfile.rocm-10.0-strix-llama -t ...:rocm-10.0-lazy-direct .`
-   40–60 min, CPU+disk heavy. Then a `builds/` entry using the documented flags
-   (`--load-mode none --lazy-mode on-direct -ctk f16 -ctv f16 -b 16384 -ub 16384 --jinja`,
-   **never** `GGML_CUDA_ENABLE_UNIFIED_MEMORY`), with **our** weights so the comparison is
-   engine-vs-engine.
-3. **Pull and A/B `kyuz0/gufo`** — cheapest high-ceiling option, no build, best published
-   number (1,628 pp). OpenAI-compatible server, so it could sit behind litellm if it holds up.
-4. **Revisit batch width on our own lazy-direct build** (`-ub` > 2048, with `--load-mode none`),
-   since §7 says the port's value scales with ubatch. Cheapest of the remaining wins.
-5. **Chase the tiled gated delta-net** (2.37x). Kernel work against a different fork — the
-   largest but most expensive win.
-6. Fix the litellm dead roles; decide whether to adopt an engine.
+### Open
 
-**Rule for all of it**: every candidate becomes its own build directory and is compared on the
-same hardware with the same harness and the same weights. Divergent setups side by side is the
-point, not a problem.
+1. **The cache-ram loose end, the only unresolved lever.** `--cache-ram 32768` measured as no help,
+   but the test could not exercise its own lever - the agentic replay is ONE ~31k conversation,
+   which fits inside llama.cpp's 8 GiB default with room to spare, so the hit rate was identical to
+   the decimal because both configurations served the same single cached prefix. **Settling it needs
+   several concurrent conversations, or a session larger than the default cache** - not more runs of
+   the same test. Worth doing because cache-hit fraction is the dominant agentic term (§2).
+
+2. **Hard-task correctness at scale, if the effort default ever looks suspect.** `medium` measured
+   6/6 correct against `xhigh` 6/6 on hard prompts, with xhigh doing 4.31x more thinking for the same
+   answers. But n=6 cannot see a small cost: ruling out a 1-in-20 failure rate needs ~60 problems.
+   **Only worth running if hard-task failures are actually noticed** - the default is otherwise
+   justified.
+
+3. **The tiled gated delta-net, 2.37x - the largest remaining engine win.** It is the single biggest
+   step in pwilkin's series and we do not have it. Kernel work against a different fork, so it is the
+   most expensive item here by a wide margin. Our own GDN win (`GGML_HIP_GDN_CHUNK`, +7.4-10.7%) is
+   the CHUNKED path, which their writeup measured at ~3% against tiled - so this is genuinely a
+   different piece of work, not a retry.
+
+4. **`--n-cpu-moe` / `-ot`: one free test to close a lever.** Strata's core mechanism is splitting
+   experts between GPU VRAM and CPU RAM concurrently, and our engine supports the flags. **The
+   physics says it will not help** - Strix Halo's CPU and iGPU share ONE memory pool, so there is no
+   second bandwidth source to overlap with, unlike Strata's discrete NVIDIA card - but it costs one
+   run with weights already on disk to stop guessing.
+
+5. **`medium-dense` still points at a stopped build.** `medium-moe` was fixed to occamy q5 and
+   `big-moe` to the effort-medium build, but `medium-dense` was left pointing at dirk. Either
+   repoint it or retire the role.
+
+### Done, kept so they are not re-litigated
+
+- **The tuning levers are swept and the APU build is at the box's ceiling.** `--cache-ram` no help;
+  KV quantisation **impossible** (the engine asserts f16 at `qwen4exp.cpp:1365`); `--parallel 2`
+  **does not fit** (compute buffers, not context); `-ub 24576` a wash. The exception is item 1.
+- **Reasoning effort defaults to `medium`** - build `...-budget-mmproj-effort-medium-...v1` on 8194,
+  `big-moe` and its three JSON siblings repointed. Neutral on ordinary prompts, 4.3x less thinking
+  and 2.6x less wall on demanding ones, no correctness cost observed at n=6.
+- **The engine comparison is settled**: the pwilkin engine is 2.62x baseline prefill and 2.36x
+  decode at 64k, and the win is the ENGINE, proven by the control build rather than assumed.
+- **Vision works** end to end: the projector is mounted and passed, the role declares
+  `input: [text, image]`, and real screenshots are described accurately.
+- **The adopted pair is standing**: flash-next on the APU, occamy q5 on the R9700.
+- **gufo is removed.** Its only supported quant (111.3 GiB) does not fit this box, its 33 GB was
+  reclaimed, and the negative result is recorded in the engine survey so nobody retries it.
+- **Strata's model-side leads are closed**: Swift 1.5 exists only at 2-3 bit and ships no MTP head,
+  and Q5-6 is physically impossible here (158-169 GB against 124 GiB), so IQ4_XS is the quality
+  ceiling that fits.
+
+**Rule for all of it**: every candidate becomes its own build directory, is compared on the same
+hardware with the same harness and the same weights, and is never edited in place once committed.
+Divergent setups side by side is the point, not a problem.
 
 ---
 
