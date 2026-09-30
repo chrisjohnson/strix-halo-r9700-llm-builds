@@ -1,0 +1,81 @@
+# Tuned variant of ...-budget-mmproj-effort-medium-strixhalo-mtp-v1, adopted from
+# a real multi-session tuning pass (Chris's DSH usage: 3-5 long-horizon sessions,
+# 2+ genuinely concurrent, regularly hitting 256k and compacting). See build.yaml
+# for the full context and measurements; this is the mechanical recipe.
+#
+# TWO changes from the base build, bundled deliberately (not swept independently -
+# both were decided together after the sweep already isolated each lever):
+#
+#   -b/-ub 16384 -> 8192   Frees ~4-5 GiB of GTT (compute buffers scale with
+#                          ubatch; KV cache does not - it's a fixed ~6.3 GiB f16
+#                          regardless, and can't be quantized: this engine hard-
+#                          asserts f16 K/V for this model, see the kvq4/kvq8
+#                          builds). Costs ~6% prefill throughput (786 -> 739 tok/s,
+#                          measured on a real ~118k-token prompt) - paid only on a
+#                          cache miss, which the cache-ram increase below is
+#                          meant to make rarer. -ub 4096 was also measured and
+#                          rejected: only ~3 GiB more savings for a 21% prefill
+#                          hit, a clearly worse point on the curve.
+#
+#   --cache-ram (unset, 8192 MiB default) -> 14336 MiB   +6 GiB of host-RAM
+#                          prompt-cache-entry capacity (llama.cpp PR #16391),
+#                          funded by the ubatch savings above. This is NOT
+#                          multi-slot / --parallel - the model stays at
+#                          --parallel 1 (multi-slot is confirmed broken on this
+#                          engine: --parallel 2 without --kv-unified crash-loops
+#                          the qwen4exp graph builder with a hard GGML_ASSERT,
+#                          and --parallel 2 --kv-unified fails to allocate
+#                          compute buffers - see the par2 build). Cache-ram keeps
+#                          one active GPU slot but lets several sessions' recently
+#                          -seen prefixes sit as resumable RAM snapshots, so
+#                          switching back to a session that got preempted by
+#                          another is a cheap restore instead of a full re-prefill
+#                          of its whole growing history.
+#
+# Net GTT effect: frees ~4-5 GiB, spends 6 GiB, netting roughly -1 to -2 GiB
+# against the box's real measured sustained floor (~2.5 GiB, not the ~8-9 GiB
+# transient reading right after a restart - see build.yaml). Deliberately NOT
+# spending all the freed memory: banking the rest as safety margin was the
+# explicit point, after this box's one real OOM hang (on occamy's old
+# --cache-ram 32768, a cap sized without checking real margin first).
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-ub8192-cram14g-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-ub8192-cram14g-strixhalo-mtp-v1
+    # Explicit source:target, matching every other build in this repo - a bare
+    # `- /dev/dri` passes an EMPTY /dev/dri into the container (verified on the
+    # base build; ROCr then reports "no ROCm-capable device is detected").
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      # OVERRIDE THE IMAGE'S OWN ENV. Dockerfile.rocm-10.0-strix-llama bakes
+      # HSA_OVERRIDE_GFX_VERSION=11.5.1 unconditionally, which makes ROCr find
+      # NO DEVICE AT ALL on this box (verified one variable at a time on the
+      # base build). gfx1151 is native on ROCm 10.0 here; empty is how HSA
+      # reads it as unset.
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mmproj:/mmproj:ro
+    ports:
+      - "127.0.0.1:8195:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 8192 -ub 8192 --parallel 1 --jinja
+      --cache-ram 14336
+      --reasoning-budget 8192 --reasoning-effort medium
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped

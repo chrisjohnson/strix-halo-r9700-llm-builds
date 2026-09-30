@@ -1,0 +1,30 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub4096-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  notes: >-
+    Second point on the -ub/-b memory-freeing curve, sibling to
+    ...-ub8192-cram14g-strixhalo-mtp-v1 (see that build's build.yaml for the full
+    context: multi-slot is dead on this engine, so freeing GTT to fund
+    --cache-ram, not --parallel, is the lever for Chris's multi-session DSH use).
+
+    MEASURED on this exact engine with a real ~118k-token non-repeating synthetic
+    prompt via the server's own /completion timings:
+
+      -ub 16384 (base)   PP 786.3 tok/s   GTT ~88.2 GiB (idle, single slot)
+      -ub 8192           PP 739.2 tok/s   GTT ~83-85 GiB   (-6% PP, ~4-5 GiB freed)
+      -ub 4096 (this)    PP 619.8 tok/s   GTT ~80.6 GiB   (-21% PP, ~7.5 GiB freed)
+
+    REJECTED: only ~3 GiB more freed than -ub 8192, for 3.5x the throughput cost
+    (21% vs 6%). Clearly the worse point on the curve. Kept as a committed build
+    only for the record, per this repo's rule that negative results stay
+    findable rather than being silently dropped - not intended to be promoted or
+    built on further unless the memory picture changes enough to need the extra
+    ~3 GiB specifically.

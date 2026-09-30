@@ -1,0 +1,40 @@
+# Sweep variant of ...-budget-mmproj-effort-medium-strixhalo-mtp-v1 - ONE lever
+# changed, so the comparison is clean and attributable.
+#
+# Lever: -b/-ub 4096, a quarter of the adopted 16384. See the ub8192-cram14g
+# sibling build's docker-compose.yaml for the full rationale; this is the second
+# point on the same curve (PLAN.md flagged 4096 as an untested gap in the flag
+# sweep, though only ever tested there against a different, now-abandoned
+# engine). REJECTED - see this build's build.yaml.
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub4096-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-ub4096-strixhalo-mtp-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mmproj:/mmproj:ro
+    ports:
+      - "127.0.0.1:8197:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 4096 -ub 4096 --parallel 1 --jinja
+      --reasoning-budget 8192 --reasoning-effort medium
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped
