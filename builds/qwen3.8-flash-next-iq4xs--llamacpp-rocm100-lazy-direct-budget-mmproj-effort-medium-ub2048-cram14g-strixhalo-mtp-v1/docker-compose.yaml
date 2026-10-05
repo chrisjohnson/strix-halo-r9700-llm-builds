@@ -1,0 +1,58 @@
+# Vision-safety fix for ...-ub8192-cram14g-strixhalo-mtp-v1 (M-158/M-159). ONE change:
+# -b/-ub 8192 -> 2048. Everything else byte-for-byte identical.
+#
+# WHY: the standing ub8192 build crash-OOMs (confirmed twice in real production use,
+# M-158) once an image enters a long, deep conversation. Root cause (full writeup:
+# knowledge/research/2026-10-05-qwen4exp-mtp-vision-oom.md): this model's QSA sparse
+# attention correctly falls back to an expensive, non-scalar selection path whenever any
+# image's 2D-positioned cells remain in the KV cache - which at this model's native
+# 262144-token context is PERMANENTLY, since nothing evicts before that. That path's cost
+# is n_kv x ubatch_size per sparse layer (12 of them), and ggml's allocator does not reuse
+# this memory across the computation - confirmed by a failed rechunking fix attempt that
+# shrank individual tensors 20x without changing the crash's total requested size at all
+# (83,259,472,000 bytes, byte-identical before and after). The only lever that actually
+# reduces the total is ubatch size itself.
+#
+# VALIDATED empirically against the real crash repro, pushed to 98% of the full 262144
+# context (256,691 of 262,144 tokens): -ub 2048 survives where -ub 8192 crashed at
+# 158,961 and again at 167,212. Cost: ~43% slower prefill on the tested portion (220s ->
+# 314s for the same ~153k-token stretch) - on top of the ~6% already paid for the
+# 16384->8192 step in the parent build's own history.
+#
+# A proper code-level fix (restructuring the QSA selection to avoid the full n_kv
+# expansion) was identified but not attempted - it touches actual attention-selection
+# math and needs real output-correctness validation this repo didn't have time to build.
+# See the research doc for the full investigation, including the ruled-out approaches.
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-ub2048-cram14g-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/pwilkin-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-ub2048-cram14g-strixhalo-mtp-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mmproj:/mmproj:ro
+    ports:
+      - "127.0.0.1:8198:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 2048 -ub 2048 --parallel 1 --jinja
+      --cache-ram 14336
+      --reasoning-budget 8192 --reasoning-effort medium
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped

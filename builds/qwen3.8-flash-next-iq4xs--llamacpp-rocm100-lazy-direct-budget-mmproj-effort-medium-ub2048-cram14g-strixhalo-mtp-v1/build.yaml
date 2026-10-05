@@ -1,0 +1,78 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-lazy-direct-budget-mmproj-effort-medium-ub2048-cram14g-strixhalo-mtp-v1
+status: TESTED_VIABLE
+derived:
+  engine: llamacpp-rocm100-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    Vision-safety fix for the standing ...-ub8192-cram14g-strixhalo-mtp-v1 build
+    (M-157/M-158/M-159). The standing build OOM-crashed twice in real production
+    use (2026-10-05, ~75 minutes apart, same conversation) once Chris pasted a
+    screenshot into a ~159k-token session: `ggml_backend_cuda_buffer_type_alloc_buffer:
+    ... cudaMalloc failed: out of memory`, requesting 19.8 GiB then 79.4 GiB.
+
+    ROOT CAUSE (confirmed via an instrumented debug build and live crash
+    reproduction, not inferred - full writeup:
+    knowledge/research/2026-10-05-qwen4exp-mtp-vision-oom.md): this model's QSA
+    sparse attention has a cheap "scalar" block-level selection path and an
+    expensive "non-scalar" path that expands per-block scores to per-CELL
+    granularity (an [n_kv, ubatch_size] f32 tensor, twice, per sparse layer - 12
+    of them). Which path runs is decided by qsa_scalar_visibility(), which
+    correctly falls back to the expensive path whenever any 2D-positioned
+    (image) cell remains in the KV cache - and at this model's native 262144
+    context, an image's cells never get evicted. So once ANY image enters a
+    long conversation, the expensive path runs for every subsequent request,
+    permanently, for the rest of that conversation. Confirmed live via added
+    instrumentation: `[DBG scalar_vis] FALSE at is_pos_2d cell-scan j=<the
+    image's own cell>`.
+
+    A FIX ATTEMPT WAS TRIED AND PROVED THE ALLOCATOR DOESN'T REUSE MEMORY HERE.
+    qwen4exp_query_strip() already caps the expensive path's per-iteration chunk
+    at 512 queries; reducing that cap further (budget-based, down to ~17-25 at
+    the crash's n_kv) shrank each expanded/mask tensor 20x (317 MiB -> 15.5 MiB,
+    confirmed via instrumentation) but the crash's TOTAL requested buffer was
+    byte-IDENTICAL before and after (83,259,472,000 bytes both times) - proving
+    total memory scales as n_kv x ubatch_size regardless of chunking, because
+    ggml's graph allocator isn't reusing these buffers across iterations or
+    layers. This fix attempt was reverted, not shipped.
+
+    A GENUINE CODE FIX WAS IDENTIFIED BUT NOT ATTEMPTED: restructure the
+    expensive path into a two-stage selection (cheap block-level top-k on the
+    already-small `score` tensor, THEN expand only the selected ~500-ish blocks
+    to per-cell, instead of all ~40000+). This is very likely correct and would
+    cut the expansion ~80x, but it changes what the model actually attends to,
+    and wasn't attempted without real output-correctness validation (comparing
+    against the unpatched model) that wasn't available in the time budget.
+    Flagged in the research doc for whoever picks this up next. Neither
+    `pwilkin/llama.cpp@strix-halo` (confirmed at branch tip against our pin,
+    `ahead_by: 0, behind_by: 0`) nor upstream `ggml-org/llama.cpp` (issue
+    #22867, "MTP + Vision causes slot position corruption and OOM", still open)
+    has a fix for this specific failure mode.
+
+    THE VALIDATED FIX HERE: -b/-ub 8192 -> 2048, no code patch - the actual
+    lever that reduces the total (since total = n_kv x ubatch_size). Validated
+    empirically against the exact production crash repro, pushed to 98% of the
+    model's full 262144-token context:
+
+      -ub 8192 (standing build)   crashes at n_kv=158,961 and again at 167,212
+      -ub 2048 (this build)       survives up to n_kv=256,691 (98% of max)
+
+    COST: real prefill speed, measured on the ~153k-token portion of the repro:
+    ~220s at ub8192 vs ~314s at ub2048 (~43% slower), ON TOP of the ~6% already
+    paid for the standing build's own 16384->8192 step (see that build's notes).
+
+    Everything else (cache-ram 14336, reasoning-effort medium, MTP, mmproj) is
+    byte-for-byte identical to the standing build - this is a single-variable
+    change, isolated for clean attribution per this repo's convention.
+
+    NOT YET DONE: a real multi-hour soak test of this specific config under
+    mixed text+vision real usage (the repro validates the crash fix at depth,
+    not steady-state memory behavior - same discipline the occamy incident and
+    M-157's promotion both required). NOT PROMOTED TO STANDING - awaiting
+    Chris's review of the diff/pros/cons before any promotion.
