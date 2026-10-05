@@ -39,8 +39,8 @@ import json
 import random
 import re
 import sys
-
-import httpx
+import urllib.error
+import urllib.request
 
 # Deliberately boring, non-repeating distractor content - varying sentence
 # structure so the server can't shortcut via literal repetition, but nothing
@@ -108,10 +108,17 @@ def build_haystack(target_tokens, n_needles, spacing, seed):
 
 def ask(port, prompt, timeout=1800):
     body = {"messages": [{"role": "user", "content": prompt}], "max_tokens": 128, "temperature": 0}
-    r = httpx.post(f"http://127.0.0.1:{port}/v1/chat/completions", json=body, timeout=timeout)
-    if r.status_code != 200:
-        return None, f"HTTP {r.status_code}: {r.text[:200]}"
-    d = r.json()
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/chat/completions", data=data,
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            d = json.load(resp)
+    except urllib.error.HTTPError as e:
+        return None, f"HTTP {e.code}: {e.read()[:200]}"
+    except urllib.error.URLError as e:
+        return None, f"URLError: {e}"
     return d["choices"][0]["message"].get("content", ""), None
 
 
