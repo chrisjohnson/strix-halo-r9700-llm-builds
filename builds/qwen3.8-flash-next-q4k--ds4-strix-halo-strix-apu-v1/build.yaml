@@ -1,0 +1,84 @@
+name: qwen3.8-flash-next-q4k--ds4-strix-halo-strix-apu-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: ds4-strix-halo-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: Q4 (ds4 native: imatrix Q4_K gate/up, MXFP4 down experts)
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    Alternative-engine trial (sibling to the halo-box/strix-llama.cpp lead):
+    antirez/ds4 ("DwarfStar"), a from-scratch (not llama.cpp-derived) C
+    inference engine, built from its own unmerged draft Qwen3.8-Flash-Next
+    integration (antirez/ds4#1070, actual head kyuz0/ds4@
+    codex/qwen38-main-integration-20260917). Chris: "I'm definitely ok with
+    the ds4 unmerged PRs as well. I don't mind trying out new builds."
+
+    GOAL: does ds4's independent implementation avoid or reduce the ~43%
+    prefill cost production pays once vision enters a long conversation
+    (ggml-org/llama.cpp#30032, qwen4exp QSA sparse-attention OOM on this
+    engine family - see ...-ub2048-cram14g-strixhalo-mtp-v1's build.yaml and
+    knowledge/research/2026-10-05-qwen4exp-mtp-vision-oom.md)? ds4 is a
+    separate C codebase with its own attention implementation, not a fork of
+    llama.cpp, so the bug is not assumed to be present - and is not assumed
+    to be absent either.
+
+    Model: qwen38-q4k (165.11 GiB on disk, 69.74 GiB resident weights,
+    imatrix Q4_K gate/up + MXFP4 down experts) - the closer quality match to
+    production's UD-IQ4_XS, chosen over the smaller qwen38-q2 (137.10 GiB)
+    for a fair comparison. Vision via the separate qwen38-vision mmproj
+    (llama.cpp's own Q8_0 Qwen3-VL-tower conversion, ~0.6 GiB, from
+    ggml-org/Qwen3.8-Flash-Next-GGUF). MTP enabled (model ships shared MTP
+    weights; --mtp-exact-sampling not set, matching production's default
+    greedy-acceptance behavior per ds4's own docs).
+
+    API: ds4-server has its own native HTTP API (docs/SERVER.md on this
+    branch), NOT inherited from llama.cpp. It exposes POST
+    /v1/chat/completions (OpenAI-style), /v1/responses, /v1/completions, and
+    /v1/messages (Anthropic-style) - so it should be directly reachable by
+    an OpenAI-compatible client (relevant for Chris's DSH harness) without a
+    translation adapter. Not yet verified live at the time this file was
+    written - see status and the decision log once validated.
+
+    Upstream's OWN measured ROCm/Strix Halo numbers for this exact model+
+    quant (docs/QWEN38_FLASH_NEXT.md on this branch, 2048 new tokens per
+    point, median of three ds4-bench runs, no MTP): Q4 prefill 466 tok/s at
+    0 history, 440 tok/s at 8K, 405 tok/s at 32K; Q4 decode 19.9/19.9/19.7
+    tok/s respectively. Production's own measured baseline (text-only, no
+    vision-crash workaround, llamacpp-rocm100-lazy-direct-strixhalo-mtp-v1,
+    builds/.../benchmarks/llm-inference-bench/20260928T050350Z.json):
+    prefill 1080-1306 tok/s across 8K-131K depth, decode (concurrency 1)
+    25-34 tok/s. On upstream's own numbers alone, ds4's prefill on this
+    hardware is roughly 2.5-3x SLOWER than production's un-degraded llama.cpp
+    path (and still well below even production's degraded -ub2048
+    vision-workaround throughput) - this build exists to confirm or refute
+    that gap with a real on-box measurement, not to assume upstream's Spark/
+    sibling numbers transfer unchanged.
+
+    STATUS AT TIME OF WRITING: image built successfully (strix-halo-r9700-
+    llm-builds/kyuz0-ds4-strix-halo:rocm-10.0-qwen4next, ~98s compile once
+    ROCm packages were cached, confirms ds4's lean C build vs llama.cpp's
+    much longer compile). Model download (qwen38-q4k, then qwen38-vision)
+    running in the background on the box as of this commit - not yet
+    complete, not yet benchmarked. Found and fixed one real bug along the
+    way: the toolbox Dockerfile's `pip install huggingface_hub[hf_xet]`
+    silently split pure-python vs native packages across
+    /usr/local/lib/python3.14 and /usr/local/lib64/python3.14, neither of
+    which is on Fedora 44's system python3 default sys.path, so the baked
+    `hf` CLI failed at runtime with ModuleNotFoundError despite a successful
+    build-time pip install - fixed via an added PYTHONPATH in the Dockerfile
+    (see its own comment). This build.yaml will be updated with real
+    measured numbers and a final TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN
+    status once the download, container bring-up, correctness checks and
+    ds4-bench run are done. Not promoted to standing regardless of outcome
+    without Chris's review - this is a research trial, not a commitment to
+    ship ds4 in production.
+bench:
+  concurrency: "1"
+  contexts: "0,16384,32768,65536"
+  duration: 30
+  max_tokens: 2048

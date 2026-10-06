@@ -1,0 +1,21 @@
+name: docker
+services:
+  qwen3.8-flash-next-q4k--ds4-strix-halo-strix-apu-v1:
+    image: strix-halo-r9700-llm-builds/kyuz0-ds4-strix-halo:rocm-10.0-qwen4next
+    container_name: qwen3.8-flash-next-q4k--ds4-strix-halo-strix-apu-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-ds4-q4k:/models:ro
+    command: >-
+      ds4-server --rocm -m /models/Qwen3.8-Flash-Next-Q4.gguf
+      --vision /models/mmproj-Qwen3.8-Flash-Next-Q8_0.gguf
+      --mtp --ctx 262144 --prefill-chunk 8192
+      --host 0.0.0.0 --port 8080
+    ports:
+      - "127.0.0.1:8181:8080"
+    restart: unless-stopped
