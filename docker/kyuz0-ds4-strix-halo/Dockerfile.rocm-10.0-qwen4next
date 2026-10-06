@@ -132,4 +132,17 @@ RUN echo "/usr/local/lib"  > /etc/ld.so.conf.d/local.conf \
 # (e.g. hf CLI importing the host's broken huggingface_hub).
 ENV PYTHONNOUSERSITE=1
 
+# Deviation from the upstream toolbox recipe (bug found running this image,
+# not present in the original three-line diff): Fedora 44's system python3
+# (/usr/bin/python3 -> python3.14) does not include /usr/local/lib or
+# /usr/local/lib64 on its default sys.path, but `pip install` as root splits
+# pure-python packages into /usr/local/lib/python3.14/site-packages and
+# native/compiled ones (pyyaml, hf_xet) into
+# /usr/local/lib64/python3.14/site-packages. Without this, `hf` (installed
+# by the same `pip install huggingface_hub[hf_xet]` two lines up) fails at
+# runtime with "ModuleNotFoundError: No module named 'huggingface_hub'" (or
+# 'yaml' once huggingface_hub itself is found) even though the install
+# itself reported success at build time. Worth reporting upstream.
+ENV PYTHONPATH=/usr/local/lib/python3.14/site-packages:/usr/local/lib64/python3.14/site-packages
+
 CMD ["/bin/bash"]
