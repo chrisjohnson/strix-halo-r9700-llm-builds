@@ -1,0 +1,65 @@
+# v3 of occamy-1.0-mtp-q5 on the R9700 eGPU (Vulkan0) - identical to v2 in every way
+# except one flag: --cache-ram 16384 -> 0 (disabled entirely). A new build rather than
+# an edit, same discipline as v1->v2 - this repo does not edit a committed build in
+# place.
+#
+# WHY: 2026-10-06, a real system-wide OOM kill (kernel oom-killer, confirmed via
+# journalctl, NOT a clean single-container failure) happened while occamy (v2, this
+# same --cache-ram 16384) ran alongside the halo-box engine-swap trial of flash-next
+# (see local-ai-machine .fleet/board M-160). v2's own build.yaml margin math assumed
+# flash-next's GTT footprint at a fixed ~86 GiB (confirmed flat under the ORIGINAL
+# pwilkin engine at the time). Real measurement during the halo-box trial showed its
+# actual peak under deep+vision load reaching ~102-103 GiB - 16-17 GiB more than what
+# v2's 12 GiB margin was sized against. That gap is what the OOM landed in.
+#
+# --cache-ram is llama.cpp's own HOST-RAM prompt cache (PR #16391) - entirely separate
+# from occamy's VRAM-resident weights/KV (confirmed flat at 30.72 GiB through the prior
+# incident too), invisible to any GPU metric, and PINNED/anonymous memory the kernel
+# cannot reclaim under pressure the way it reclaims page cache - the reason a hard cap
+# (or disabling it outright) matters for OOM-safety in a way that doesn't apply to
+# ordinary filesystem caching.
+#
+# WHY DISABLING IS LOW-COST HERE SPECIFICALLY: occamy already runs `-np 3` - real
+# parallelism, three live VRAM-resident KV slots, unlike flash-next's forced
+# `--parallel 1`. --cache-ram only matters for a 4th+ conversation bouncing back after
+# being displaced from those three slots, paying a fast RAM-restore instead of a full
+# re-prefill. medium-moe's actual role siblings (build/scout/decide-retry/document-json)
+# look like short, transactional tasks rather than long-horizon sessions, so the
+# practical value of fast-resume here is plausibly much lower than it would be for
+# flash-next's primary coding sessions, which have no parallelism to fall back on at
+# all. See build.yaml for the full reasoning.
+#
+# NOT YET VALIDATED under sustained real usage - this build trades a known, demonstrated
+# safety margin for an estimated-low-but-unmeasured cache-hit cost. Revisit if
+# medium-moe's real-world latency on repeated/returning conversations visibly worsens.
+#
+# Vulkan0 = R9700 eGPU (32 GiB GDDR6), Vulkan1 = Strix Halo APU.
+# Port 8206: the entire 8100-8199 llama.cpp-server range (per builds/README.md) is now
+# fully exhausted (all 100 ports in use) - this is the first build to need a port
+# outside it. 8200-8205 are stable-diffusion.cpp-server's range; 8206 is the next free
+# slot right after.
+#
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+services:
+  occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-nocacheram-v1:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-nocacheram-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - '26'
+    - '303'
+    volumes:
+    - /var/lib/ai-models/occamy-1.0-mtp-q5:/models:ro
+    - /var/lib/ai-models/occamy-1.0-mmproj:/mmproj:ro
+    command: 'llama-server -m /models/occamy-1.0-mtp-Q5_K_M.gguf -dev Vulkan0
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min
+      0.3 -np 3 --kv-unified --kv-unified-per-slot 262144 -n 8192 -ctk q4_0 -ctv q4_0
+      --cache-ram 0
+      --mmproj /mmproj/mmproj-occamy-1.0-F16.gguf --mmproj-device Vulkan0
+      --host 0.0.0.0
+      --port 8080 -a occamy-1.0-mtp-q5-r9700 --metrics
+      '
+    ports:
+    - 127.0.0.1:8206:8080

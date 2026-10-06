@@ -1,0 +1,66 @@
+name: occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-nocacheram-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-v1
+  model: Occamy-1.0 (Q5_K_M, MTP, self-grafted)
+  params: 35B
+  active_params: 3B
+  quant: Q5_K_M
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-10-06, same day as a real system-wide OOM kill (see local-ai-machine .fleet
+    M-160, Phase 5). Identical to v2 in every respect except one flag: --cache-ram
+    16384 -> 0 (disabled entirely). A new build rather than an edit, same discipline
+    as v1->v2 - this repo does not edit a committed build in place.
+
+    WHY: v2's own build.yaml margin math (12 GiB headroom, see that file) assumed
+    flash-next's GTT footprint at a fixed ~86 GiB, confirmed flat under the ORIGINAL
+    pwilkin llama.cpp engine at the time it was measured. A same-day trial swapping
+    flash-next to a different, faster engine (halo-box/strix-llama.cpp - see M-160)
+    measured its real peak under deep-context + vision load at ~102-103 GiB, not
+    ~86 GiB - 16-17 GiB more than v2's margin was sized against. Running occamy (v2)
+    alongside that trial produced a confirmed kernel OOM-kill (journalctl, not
+    guessed): the OOM-killer cascaded through several rounds, killing unrelated
+    processes (a DSH session among them - checked and ruled out as the cause, its
+    own resident memory was negligible) before finally killing two llama-server
+    processes, one with ~16.1 GiB anon-rss - matching occamy's own --cache-ram 16384
+    almost exactly, confirming which allocation actually got hit.
+
+    --cache-ram is llama.cpp's HOST-RAM prompt cache (PR #16391), fully separate from
+    occamy's VRAM-resident weights/KV (confirmed flat at 30.72 GiB through the PRIOR
+    incident this model already survived - see v2's build.yaml and
+    knowledge/research/2026-09-29-occamy-cache-ram-midnight-hang.md, local-ai-machine
+    repo). It is PINNED/anonymous memory - the kernel cannot reclaim it under
+    pressure the way it reclaims ordinary page cache, which is exactly why a hard cap
+    (or disabling it) is the correct lever here, not a guess.
+
+    WHY DISABLING IS LOW-COST SPECIFICALLY FOR OCCAMY: unlike flash-next (forced
+    `--parallel 1`, zero fallback for a session-switch other than a full re-prefill),
+    occamy already runs `-np 3` - three genuinely parallel, VRAM-resident KV slots.
+    --cache-ram only ever mattered for a 4th+ conversation returning after being
+    displaced from those three. medium-moe's actual role siblings in litellm
+    (build-json, scout-json, decide-retry-json, document-json) read as short,
+    transactional tasks, not long-horizon sessions bouncing back and forth the way
+    Chris's primary big-moe coding sessions do - so the real-world value being traded
+    away here is plausibly small, though NOT measured directly (see below).
+
+    THE MARGIN MATH, updated: same as v2's (124 GiB total: ~102-103 GiB flash-next
+    GTT under real deep+vision load + ~5 GiB dsh + ~2 GiB occamy's non-cache
+    overhead + ~3 GiB everything else), now with 0 GiB cache-ram instead of 16 GiB -
+    roughly 12-16 GiB more headroom than v2 had at the moment it was built, clawing
+    back most of what the newer engine's real-world peak ate into.
+
+    NOT YET VALIDATED: no soak test under real mixed usage yet, and no direct
+    measurement of how often medium-moe's actual traffic pattern would have
+    benefited from a cache-ram hit that this build now forgoes. If medium-moe's
+    real-world latency on repeated/returning conversations visibly worsens, that's
+    the signal to reconsider (a smaller nonzero cap, not necessarily reverting to
+    16384).
+
+    Chris's explicit instruction for this build: "modelctl can't make this change.
+    add a new build that disables --cache-ram on occamy running on r9700 and push
+    it, deploy it, then bring it up via modelctl... Dont' make edits on the machine
+    directly at all." Built and committed entirely through the local writable clone,
+    no hand-edits on the box.
