@@ -1,0 +1,65 @@
+# Identical to ...-ub8192-cram14g-strixhalo-mtp-v1 (the halo-box engine-swap trial,
+# M-160) except one flag: --cache-ram 14336 -> 0 (disabled entirely). A new build
+# rather than an edit, same discipline as every other single-variable change in this
+# repo.
+#
+# WHY: 2026-10-06, a real system-wide OOM kill (kernel oom-killer, confirmed via
+# journalctl - see local-ai-machine .fleet M-160, Phase 5) happened while this build
+# ran alongside occamy. The occamy side of that margin gap was fixed first (occamy's
+# own --cache-ram 16384 -> 0, see occamy-1.0-mtp-q5--llamacpp-vulkan-radv-r9700-mtp-
+# nocacheram-v1) - but the box kept sliding back toward the edge afterward
+# (node_memory_MemAvailable_bytes in steady decline over ~3 hours, 19 GiB -> under
+# 1 GiB, while GTT on both GPUs stayed flat). Root cause: THIS build's own
+# --cache-ram 14336 was sized (M-157) against the original pwilkin engine's
+# documented ~86 GiB GTT footprint. halo-box's real measured peak under deep+vision
+# load is ~102-103 GiB (M-160) - 16-17 GiB more than the old margin math assumed.
+# `ps aux` confirmed this build's llama-server process at ~21.3 GiB host RSS (its
+# 14 GiB cache-ram pool plus baseline overhead) gradually filling toward that cap
+# over hours of real use - not a leak, just the cache doing exactly what it's
+# designed to do, against a margin that no longer exists once GTT itself grew.
+#
+# THE ASYMMETRY WORTH NOTING (unlike occamy's case): this build has NO parallelism
+# fallback at all (`--parallel 1`, confirmed broken at --parallel>1 for this model
+# since M-157) - every session switch pays a full re-prefill without --cache-ram,
+# with no `-np`-style alternative the way occamy's `-np 3` provides. So disabling
+# this is NOT a low-cost change the way it was for occamy - it's a real, deliberate
+# trade of session-switch speed for safety margin, made because the margin ran out
+# first. Revisit once halo-box's real GTT ceiling has a proper soak-tested
+# characterization - a smaller nonzero cache-ram sized against the REAL ~102-103 GiB
+# footprint (not the old ~86 GiB assumption) may be restorable later.
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-nocacheram-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/halobox-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-nocacheram-strixhalo-mtp-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      # Same override as every other pwilkin-strix-halo-Dockerfile build: the
+      # image bakes HSA_OVERRIDE_GFX_VERSION=11.5.1, which makes ROCr find no
+      # device at all on this box. gfx1151 is native on ROCm 10.0 here.
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mmproj:/mmproj:ro
+    ports:
+      - "127.0.0.1:8207:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 8192 -ub 8192 --parallel 1 --jinja
+      --cache-ram 0
+      --reasoning-budget 8192 --reasoning-effort medium
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped

@@ -1,0 +1,61 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-nocacheram-strixhalo-mtp-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-rocm100-halobox-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    2026-10-06, same-day follow-up to the halo-box engine-swap trial
+    (...-ub8192-cram14g-strixhalo-mtp-v1, M-160). Identical in every respect
+    except one flag: --cache-ram 14336 -> 0 (disabled entirely).
+
+    WHY: a real system-wide OOM kill occurred (kernel oom-killer, confirmed via
+    journalctl, not guessed - see local-ai-machine .fleet M-160 Phase 5) while the
+    cram14g build ran alongside occamy. Fixed occamy's side of the margin gap
+    first (its own --cache-ram 16384 -> 0, see occamy-1.0-mtp-q5--llamacpp-vulkan-
+    radv-r9700-mtp-nocacheram-v1) - but node_memory_MemAvailable_bytes kept
+    declining steadily afterward anyway, 19 GiB -> under 1 GiB over roughly 3
+    hours, while GTT on both GPUs stayed flat. `ps aux` found the real remaining
+    cause: this build's own llama-server process at ~21.3 GiB host RSS - its
+    14 GiB --cache-ram pool plus baseline overhead, gradually filling toward that
+    cap over hours of real sessions. Not a leak - the cache doing exactly what
+    it's designed to do, against a margin that no longer existed.
+
+    THE MARGIN MATH THAT BROKE: --cache-ram 14336 was sized in M-157 against the
+    ORIGINAL pwilkin engine's documented ~86 GiB GTT footprint (with ~1 GiB
+    deliberately banked as extra margin on top of that). halo-box's real measured
+    peak under actual deep-context + vision load is ~102-103 GiB (M-160's crash-
+    repro and live-trial numbers) - 16-17 GiB more than the old assumption. The
+    cache-ram sizing was never re-validated against the new engine's real
+    footprint before this build ran in a live trial.
+
+    THE ASYMMETRY WORTH FLAGGING (unlike occamy's case, where disabling cache-ram
+    was low-cost): this build has NO parallelism fallback - `--parallel 1`,
+    confirmed broken at --parallel>1 for this model since M-157 (hard
+    GGML_ASSERT in the qwen4exp hybrid-memory graph builder). Occamy's `-np 3`
+    meant cache-ram only mattered for a 4th+ bounced session; this model has
+    nothing else - every session switch now pays a full re-prefill. This is a
+    real, deliberate trade of session-switch speed for safety margin, not a
+    free win. Big-moe's actual usage (Chris's primary long-horizon coding
+    sessions, 3-5 concurrent, per M-157's original tuning context) is exactly
+    the workload cache-ram was added FOR in the first place - so this trade
+    costs more here than it did for occamy's shorter/auxiliary medium-moe
+    traffic.
+
+    NOT YET VALIDATED: no soak test, no measurement of the real-world latency
+    cost of losing cache-ram on an actual returning session. If this proves too
+    costly in practice, the right fix is probably a smaller NONZERO cache-ram
+    sized against the real ~102-103 GiB GTT ceiling (not the old ~86 GiB
+    assumption) rather than reverting to 14336 - that re-sizing hasn't been done
+    yet, this build is the safe starting point (0) while that characterization
+    happens. NOT PROMOTED TO STANDING - this is still mid-incident-response, not
+    a tuning pass with its own validation.
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30
