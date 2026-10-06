@@ -1,0 +1,53 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-cram14g-strixhalo-mtp-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-rocm100-halobox-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    Engine-swap experiment (M-160), not a tuning change. Chris: "if there are leads
+    worth pursuing, pursue" - in response to a research pass (M-160) that found
+    halo-box/strix-llama.cpp (https://github.com/halo-box/strix-llama.cpp) as a live,
+    multi-contributor Strix Halo/gfx1151 fork of llama.cpp, 507 commits closer to
+    upstream than our pwilkin/llama.cpp@strix-halo pin, already carrying the
+    qwen4exp mask-construction + indexer-memory-halving rework
+    (ggml-org/llama.cpp#29824, #29825) that landed after our pin - and a
+    third-party benchmark (kyuz0) reporting 1207 tok/s pp2048 on halo-box with the
+    SAME retained-PM4 ROCm runtime (pwilkin/rocm-systems@ilintar-experiments) this
+    box already uses for its pwilkin-engine production image.
+
+    This build is the single-variable isolation: identical flags to the standing
+    production build (...-ub8192-cram14g-strixhalo-mtp-v1) with ONLY the engine
+    source changed - built via the SAME Dockerfile.rocm-10.0-strix-llama (its own
+    top comment already anticipated this exact swap), same two patches applied
+    conditionally (llama-grammar.patch, llama-cpp-25992-rocm-host-buffer.patch -
+    the Dockerfile detects if either is already upstream and skips it), same
+    retained-PM4 runtime. Pinned to halo-box/strix-llama.cpp@master at
+    9e22f8c05437400587709d6890b06b9342cfef07 (2026-10-05) for reproducibility,
+    matching this repo's convention of pinning rather than tracking branch HEAD.
+
+    GOAL: does halo-box's newer qwen4exp code recover any of the ~43% prefill
+    cost the -ub2048 vision-crash mitigation pays (see
+    ...-ub2048-cram14g-strixhalo-mtp-v1 and knowledge/research/
+    2026-10-05-qwen4exp-mtp-vision-oom.md), independent of whether the actual
+    root cause (ggml-org/llama.cpp#30032, still open - no engine has fixed it)
+    is resolved? Secondary question: does the newer qwen4exp code change the
+    crash threshold or behavior at all, even without a real fix?
+
+    NOT YET VALIDATED: image hasn't finished building as of this commit. No
+    correctness check (does this model+mmproj+MTP combo even load and serve
+    correctly on halo-box's current qwen4exp code - it's 507 commits of drift,
+    including an architecture rework of the exact subsystem in question, so
+    flag/behavior compatibility is NOT assumed), no speed benchmark, no vision
+    crash-repro comparison yet. status will move to TESTED_VIABLE or
+    TESTED_NOT_VIABLE once that's done. NOT PROMOTED TO STANDING regardless of
+    outcome without Chris's review.
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30

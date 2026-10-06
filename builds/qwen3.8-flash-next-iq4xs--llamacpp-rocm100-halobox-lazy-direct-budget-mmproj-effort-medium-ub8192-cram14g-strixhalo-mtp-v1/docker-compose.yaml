@@ -1,0 +1,56 @@
+# Engine-swap experiment, isolated for clean attribution (M-160). Every flag is
+# byte-for-byte identical to the standing build
+# (...-ub8192-cram14g-strixhalo-mtp-v1) EXCEPT the image: this one is built from
+# halo-box/strix-llama.cpp@master (a live, multi-contributor Strix Halo/gfx1151
+# fork of llama.cpp) instead of pwilkin/llama.cpp@strix-halo, via the SAME
+# Dockerfile.rocm-10.0-strix-llama (its own comment already anticipated this
+# exact swap: --build-arg REPO=.../halo-box/strix-llama.cpp.git --build-arg
+# BRANCH=master), same retained-PM4 ROCm runtime underneath either way.
+#
+# WHY: M-159 root-caused a real production OOM crash (qwen4exp's QSA indexer
+# permanently falls back to an O(n_kv x ubatch) memory path once vision enters
+# a long conversation) and filed it upstream as ggml-org/llama.cpp#30032 rather
+# than risk a local attention-math patch. The validated workaround (-ub 2048)
+# costs ~43% prefill speed. halo-box/strix-llama.cpp is 507 commits closer to
+# upstream than our pwilkin pin and already contains the qwen4exp
+# mask-construction + indexer-memory-halving rework (ggml-org/llama.cpp#29824,
+# #29825) that landed after our pin - this build measures whether that rework
+# recovers any of the lost margin, independent of whether #30032 itself is
+# fixed. See build.yaml for the full rationale and (once run) the measured
+# numbers.
+services:
+  qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-cram14g-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/halobox-strix-halo:rocm-10.0-lazy-direct
+    container_name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-budget-mmproj-effort-medium-ub8192-cram14g-strixhalo-mtp-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    environment:
+      # Same override as every other pwilkin-strix-halo-Dockerfile build: the
+      # image bakes HSA_OVERRIDE_GFX_VERSION=11.5.1, which makes ROCr find no
+      # device at all on this box. gfx1151 is native on ROCm 10.0 here.
+      HSA_OVERRIDE_GFX_VERSION: ""
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/models:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mtp-shared-q8:/mtp:ro
+      - /var/lib/ai-models/qwen3.8-flash-next-mmproj:/mmproj:ro
+    ports:
+      - "127.0.0.1:8199:8080"
+    command: >-
+      llama-server
+      -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      -dev ROCm0 -ngl all -fa on -fit off
+      --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
+      --load-mode none --lazy-mode on-direct
+      -ctk f16 -ctv f16
+      -c 262144 -b 8192 -ub 8192 --parallel 1 --jinja
+      --cache-ram 14336
+      --reasoning-budget 8192 --reasoning-effort medium
+      --spec-type draft-mtp,ngram-mod --spec-draft-n-max 3
+      --spec-draft-model /mtp/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+      --spec-draft-device ROCm0 --spec-draft-ngl all
+      --host 0.0.0.0 --port 8080 --metrics
+    restart: unless-stopped
