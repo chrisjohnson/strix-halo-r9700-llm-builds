@@ -1,0 +1,119 @@
+name: qwen3.8-flash-next-awq-int4--sglang-strixhalo-mtp-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: jvantuyl-strix-halo-sglang-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: AWQ-INT4
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    Third independent engine lead for Qwen3.8-Flash-Next (sibling trials: a
+    different llama.cpp fork, and antirez/ds4 - M-16x research effort). Chris:
+    "I don't mind trying out new builds." Production (llama.cpp) is forced
+    into -ub 2048 once a conversation uses vision at long context, a real
+    ~43% prefill cost vs -ub 8192 (ggml-org/llama.cpp#30032 - QSA's expensive
+    per-cell attention path never evicts once any image enters a 262144-ctx
+    KV cache; see the -ub2048 sibling build's build.yaml for the full
+    root-cause writeup), and multi-slot (--parallel >1) is separately
+    confirmed broken for this model on llama.cpp (crash-loops at load,
+    GGML_ASSERT in llama-kv-cache.cpp's seq-to-stream mapping, or OOMs at
+    compute-buffer allocation with --kv-unified). This trial asks whether
+    SGLang avoids both problems for the exact same checkpoint family.
+
+    Lead: jvantuyl/strix-halo-sglang
+    (https://github.com/jvantuyl/strix-halo-sglang), pinned commit
+    ad27cf1c9e10333ffe0ab986310a659330b274a5 (2026-09-24, repo's default
+    branch head at vendor time). A DIFFERENT upstream fork from
+    docker/strix-halo-sglang.dockerfile (JeremiahM37/strix-halo-sglang,
+    already used by the qwen3.5/qwen3.6/ornith SGLang builds in this
+    catalog) - that fork has no Qwen3.8-Flash-Next ("qwen4exp": hybrid
+    gated-delta-net + QSA sparse attention, vision tower, 51B-param PLE
+    n-gram table, MTP) support at all. jvantuyl's fork tracks upstream
+    SGLang's own official qwen4exp support (sgl-project/sglang PR #37500,
+    pinned at 70b5b03e) plus 20+ additional gfx1151/qwen4exp patches
+    (patches/11 through /31, vendored in
+    docker/jvantuyl-strix-halo-sglang-patches/), with a full runbook
+    (docs/RUNNING_QWEN38.md) already measured by the fork's author on this
+    exact checkpoint - followed closely rather than re-derived.
+
+    Checkpoint: cyankiwi/Qwen3.8-Flash-Next-AWQ-INT4 (HuggingFace,
+    compressed-tensors AWQ-INT4, group 32, asymmetric; vision tower
+    unquantized) - a different file format from production's GGUF, freshly
+    downloaded to /var/lib/ai-models/qwen3.8-flash-next-awq-int4-ple-fp8,
+    NOT reusable from the GGUF at
+    /var/lib/ai-models/qwen3.8-flash-next-iq4xs. The 51B-parameter n-gram
+    "PLE" embedding table (95 GiB in bf16) is converted to fp8 (~48 GiB) via
+    tools/convert_ple_fp8.py (vendored at
+    docker/jvantuyl-strix-halo-sglang-tools/) and kept file-backed/off-GPU
+    via --ple-offload-backend file --ple-offload-dir - without this
+    conversion the PLE table does not fit this box's memory at all.
+
+    Image: docker/jvantuyl-strix-halo-sglang.dockerfile, built via
+    scripts/build-jvantuyl-strix-halo-sglang.sh as
+    strix-halo-r9700-llm-builds/jvantuyl-strix-halo-sglang:gfx1151. The
+    Dockerfile is jvantuyl's own root Dockerfile used essentially as-is (same
+    base image, same SGLang pin, same patch sequence) with COPY paths
+    re-pointed at this repo's vendored copy of patches/ instead of a live
+    checkout - matches this repo's "build reproducibly from this git repo
+    alone" convention (same rationale as the sibling
+    docker/strix-halo-sglang.dockerfile's own header). Launch command mirrors
+    the runbook's documented flags (docs/RUNNING_QWEN38.md "Launch" section)
+    as closely as docker-compose allows: --ple-offload-embedding
+    --ple-offload-backend file, --mem-fraction-static 0.85, --context-length
+    131072, --kv-cache-dtype fp8_e4m3 --max-total-tokens 262144,
+    --attention-backend triton, --cuda-graph-max-bs-decode 20
+    --max-running-requests 20, --max-mamba-cache-size 100 --mamba-ssm-dtype
+    bfloat16, qwen3 reasoning/tool-call parsers, the repo's own chat template
+    (configs/chat/qwen38.jinja, vendored) with reasoning_effort medium (the
+    template's own default is xhigh, measured elsewhere to cost several times
+    the thinking tokens for no quality gain) and the fork's suggested
+    default_system_prompt. MTP left OFF for this first real trial (matching
+    the runbook's own launcher default, and isolating one variable at a time
+    against production's MTP-on baseline) - a real next step if this trial is
+    promoted further. Tuned MoE tiles for this exact checkpoint
+    (E=512,N=320,...int4_w4a16.json, vendored from configs/moe/qwen38-flash-next/)
+    mounted per the runbook's patch 17 mechanism.
+
+    Port 8196: this repo's nominal llama.cpp-server block (8100-8199) is
+    saturated except this one gap (checked via grep across every
+    docker-compose.yaml in builds/) - the existing SGLang family
+    (qwen3.5/qwen3.6/ornith, ports 8155-8160) already lives inside this same
+    numeric block rather than a dedicated SGLang range, so this build follows
+    that established precedent rather than inventing a new one.
+
+    Disk/RAM checked before starting: 526 GiB free on / (df -h), well clear
+    of the combined ~75 GiB checkpoint + ~48 GiB converted PLE table (~123
+    GiB). Box RAM 124 GiB total, ~85 GiB in use by the standing llama.cpp
+    production container at the time of this check (left untouched - never
+    stopped directly, only via the llm-inference-bench orchestrator's own
+    exclusivity handling per its documented /run flow).
+
+    STATUS AT COMMIT TIME: build dir only (compose + build.yaml + vendored
+    Dockerfile/patches/tools/configs) - image not yet built on the box,
+    checkpoint not yet downloaded/converted. Per the task's own sequencing
+    (write + commit + push first, build/download next), this build.yaml will
+    be updated in a follow-up commit once the image builds, the model is
+    converted, and the server is actually verified (health check, a real
+    chat completion, and critically a vision request) with real measured
+    prefill/decode numbers via the orchestrator's /run endpoint - compared
+    against this box's two already-measured llama.cpp baselines:
+
+      production standing (-ub 8192, cram14g): PP 739.2 tok/s (short-context
+        synthetic prefill measurement), decode numbers in that build's own
+        build.yaml; forced to -ub 2048 once vision touches a long
+        conversation (see below).
+      vision-safety sibling (-ub 2048, cram14g): same engine/quant/MTP,
+        -ub 2048 only - PP ~314s over a ~153k-token repro vs ~220s at ub8192
+        (~43% slower), the exact workaround cost this SGLang trial is meant
+        to test an escape from (vendor's own file-backed PLE + CPU-side
+        gather design doesn't share llama.cpp's QSA-cell-expansion mechanism,
+        so the same failure mode may simply not apply - to be confirmed by
+        an actual long-context vision test, not assumed).
+
+    This build.yaml's status field (UNTESTED-BUT-DOWNLOADED) is provisional
+    and will be corrected to TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN once
+    the real run completes - not left stale.

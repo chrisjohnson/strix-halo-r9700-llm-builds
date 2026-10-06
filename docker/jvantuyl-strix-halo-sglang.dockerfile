@@ -1,0 +1,336 @@
+# strix-halo-sglang (jvantuyl fork) — SGLang for AMD Strix Halo (gfx1151),
+# with the Qwen3.8-Flash-Next ("qwen4exp") patch set from
+# docs/RUNNING_QWEN38.md.
+#
+# Vendored from jvantuyl/strix-halo-sglang (MIT), commit
+# ad27cf1c9e10333ffe0ab986310a659330b274a5 (2026-09-24 default branch head at
+# vendor time), for the SGLang-engine third-alternative trial on
+# Qwen3.8-Flash-Next (sibling trials: a llama.cpp fork, and antirez/ds4 — see
+# docker/kyuz0-ds4-strix-halo/README.md). Chris: "I don't mind trying out new
+# builds." This is a DIFFERENT upstream fork from
+# docker/strix-halo-sglang.dockerfile (JeremiahM37/strix-halo-sglang, used by
+# the qwen3.5/qwen3.6/ornith SGLang builds already in this catalog): that fork
+# has no Qwen3.8-Flash-Next (qwen4exp architecture: hybrid GDN + QSA sparse
+# attention, vision tower, 51B-param PLE n-gram table, MTP) support at all.
+# jvantuyl's fork tracks upstream SGLang's own official qwen4exp support
+# (sgl-project/sglang PR #37500) plus 20+ additional gfx1151/qwen4exp patches
+# documented in patches/*.md, with a full runbook (docs/RUNNING_QWEN38.md)
+# already measured by the fork's author on this exact checkpoint.
+#
+# Upstream base Dockerfile: https://github.com/jvantuyl/strix-halo-sglang/blob/ad27cf1c9e10333ffe0ab986310a659330b274a5/Dockerfile
+# Used essentially as-is; only the COPY paths point at this repo's vendored
+# copy of patches/ (docker/jvantuyl-strix-halo-sglang-patches/) instead of a
+# live checkout, matching this repo's "build reproducibly from this git repo
+# alone" convention (same rationale as docker/strix-halo-sglang.dockerfile's
+# header).
+#
+# Build:   scripts/build-jvantuyl-strix-halo-sglang.sh (run on the box)
+# Run:     see builds/<id>/docker-compose.yaml
+
+# Base is pinned by digest so `:stable` can't drift under us (same rationale
+# as the SGL_BRANCH pin below). Override BASE_IMAGE to bump the base or to
+# use a registry mirror when Docker Hub is unreachable, e.g.
+# --build-arg BASE_IMAGE=mirror.gcr.io/kyuz0/vllm-therock-gfx1151:stable
+ARG BASE_IMAGE=kyuz0/vllm-therock-gfx1151:stable@sha256:f89c8c689ade28877ade980ba0f29b3142af16c6ebb7f3f285311d38bc81a8a2
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SGLANG_FORCE_NATIVE_LAYERNORM=1
+ENV HF_HOME=/root/.cache/huggingface
+ENV PYTORCH_ROCM_ARCH=gfx1151
+
+# Perf flags — measured ~38% throughput uplift on gfx1151 vs disabled defaults.
+# TunableOp autotunes GEMM kernels per-shape; results cached at $PYTORCH_TUNABLEOP_FILENAME.
+# Mount /root/.tunableop as a volume to persist tunings across container restarts.
+ENV PYTORCH_TUNABLEOP_ENABLED=1
+ENV PYTORCH_TUNABLEOP_FILENAME=/root/.tunableop/tunableop_results.csv
+ENV HIP_FORCE_DEV_KERNARG=1
+ENV TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1
+
+# aiter's compiled attention/MoE kernels are CDNA-only; keep sglang on the
+# Triton paths. This is load-bearing beyond attention: aiter's RMSNorm uses
+# v_pk_mul_f32, a CDNA-only instruction, and its CK attention templates
+# assume wave64. (Matches upstream docker/rocm-gfx1151.Dockerfile.)
+ENV SGLANG_USE_AITER=0
+
+WORKDIR /sgl-workspace
+
+ARG SGL_REPO=https://github.com/sgl-project/sglang.git
+# Pinned to a commit verified against this base image by the fork author.
+# Unpinned `main` drifts, which is what broke fresh builds in the fork's own
+# issue #5. SGL_BRANCH accepts any ref (branch, tag, or commit SHA) because we
+# fetch+checkout rather than clone -b.
+ARG SGL_BRANCH=70b5b03e78612c94f86ac98eb4d2d8d19ceda738
+RUN git init sglang \
+    && cd sglang \
+    && git remote add origin ${SGL_REPO} \
+    && git fetch --depth 1 origin ${SGL_BRANCH} \
+    && git checkout FETCH_HEAD
+
+WORKDIR /sgl-workspace/sglang
+
+# Patches 1/1b — gfx1151 arch gate + wave32 WARP_SIZE pin, via the upstream
+# script (python/sglang/kernels moved from sgl-kernel/ to
+# python/sglang/kernels/aot/).
+COPY jvantuyl-strix-halo-sglang-patches/sgl-kernel-gfx1151.sh /tmp/sgl-kernel-gfx1151.sh
+
+# Patch 2 — RMSNorm native fallback on gfx1151.
+RUN python3 - <<'PYEOF'
+p = '/sgl-workspace/sglang/python/sglang/srt/layers/layernorm.py'
+old = '''elif _is_hip:
+    try:
+        from vllm._custom_ops import fused_add_rms_norm, rms_norm
+
+        _has_vllm_rms_norm = True
+    except ImportError:
+        # Fallback: vllm not available, will use forward_native
+        _has_vllm_rms_norm = False'''
+new = '''elif _is_hip:
+    try:
+        from vllm._custom_ops import fused_add_rms_norm, rms_norm
+
+        _has_vllm_rms_norm = True
+        import os as _os
+        if _os.environ.get('SGLANG_FORCE_NATIVE_LAYERNORM', '0') == '1':
+            _has_vllm_rms_norm = False
+    except ImportError:
+        _has_vllm_rms_norm = False'''
+t = open(p).read()
+assert old in t, 'layernorm.py: elif _is_hip block not found, upstream layout changed'
+open(p, 'w').write(t.replace(old, new))
+PYEOF
+
+# Compile the AOT kernels for gfx1151. Upstream moved sgl-kernel to
+# python/sglang/kernels/aot with a pyproject_rocm.toml swap; the vendored
+# script lifts the arch gate and pins WARP_SIZE=32 across both compiler
+# passes.
+WORKDIR /sgl-workspace/sglang/python/sglang/kernels/aot
+RUN rm -f pyproject.toml \
+    && mv pyproject_rocm.toml pyproject.toml \
+    && sh /tmp/sgl-kernel-gfx1151.sh setup_rocm.py \
+    && AMDGPU_TARGET=gfx1151 MAX_JOBS=16 python3 setup_rocm.py install
+
+# setuptools-rust builds the sglang-mm extension during the pip install below
+# if the base image doesn't already ship cargo. Fail loudly if the rustup
+# installer produces nothing (e.g. a truncated download) instead of erroring
+# much later inside pip with a confusing 127.
+RUN command -v cargo >/dev/null || { \
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; \
+      test -x /root/.cargo/bin/rustc; }
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install SGLang. At this pin the extras compose through self-references
+# (srt_hip -> sglang[runtime_common] -> sglang[runtime_base]) and pip's
+# resolver chokes on that cycle from an editable source checkout, so flatten
+# the three groups and install the requirements, then the package itself
+# without dependency solving (same flow as upstream's rocm-gfx1151.Dockerfile).
+#
+# The torch/torchvision constraints file still freezes the base image's
+# gfx1151-compiled builds — the root cause of the fork's issue #5, where a
+# fresh build pulled generic PyPI wheels and failed at runtime with
+# `libc10_hip.so: cannot open shared object file` — so a future
+# incompatibility fails the build loudly instead of silently breaking at
+# runtime.
+WORKDIR /sgl-workspace/sglang
+RUN cp python/pyproject_other.toml python/pyproject.toml \
+    && python3 -c "import torch, torchvision; open('/tmp/rocm-constraints.txt', 'w').write(f'torch=={torch.__version__}\ntorchvision=={torchvision.__version__}\n')"
+RUN python3 - <<'PYEOF'
+import os
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+project = tomllib.loads(Path("python/pyproject.toml").read_text())["project"]
+extras = project["optional-dependencies"]
+requirements = list(project["dependencies"])
+for group in ("runtime_base", "runtime_common", "srt_hip"):
+    requirements.extend(
+        r
+        for r in extras[group]
+        if not r.startswith("sglang[") and r != "torch"
+    )
+requirements = list(dict.fromkeys(requirements))
+env = {**os.environ, "PIP_CONSTRAINT": "/tmp/rocm-constraints.txt"}
+subprocess.check_call(
+    [sys.executable, "-m", "pip", "install", *requirements], env=env
+)
+PYEOF
+RUN PIP_CONSTRAINT=/tmp/rocm-constraints.txt pip install --no-deps -e python \
+    && (pip cache purge 2>/dev/null || true)
+
+# --- gfx1151 Qwen4-Exp fixes (patch 11) ---
+# CPU-side PLE gather (the UVA kernel would fault on Strix Halo), QSA decode
+# via the pure-Triton sm121 kernel, fast_topk fallback chain.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qwen4_exp_rocm.py /tmp/patch_qwen4_exp_rocm.py
+RUN python3 /tmp/patch_qwen4_exp_rocm.py && rm /tmp/patch_qwen4_exp_rocm.py
+
+# --- WNA16 Triton MoE zero points (patch 12) ---
+# Upstream's ROCm auto-route drops the zero points of asymmetric
+# compressed-tensors checkpoints; the Triton kernel then silently computes
+# wrong MoE outputs (Qwen3.8-Flash-Next-AWQ-INT4 is asymmetric, g32).
+COPY jvantuyl-strix-halo-sglang-patches/patch_wna16_zp.py /tmp/patch_wna16_zp.py
+RUN python3 /tmp/patch_wna16_zp.py && rm /tmp/patch_wna16_zp.py
+
+# --- reuse the file-backed PLE table across boots (patch 13) ---
+# Upstream rewrites the whole 48 GiB table from the checkpoint on every start.
+# Record a fingerprinted completion marker and skip the PLE shards when it
+# matches.
+COPY jvantuyl-strix-halo-sglang-patches/patch_ple_table_reuse.py /tmp/patch_ple_table_reuse.py
+RUN python3 /tmp/patch_ple_table_reuse.py && rm /tmp/patch_ple_table_reuse.py
+
+# --- CUDA graphs with the CPU-side PLE gather (patch 14) ---
+# Patch 11's host gather cannot be recorded into a graph. Fill the static PLE
+# prefetch buffer from the host before each decode replay instead; the graph
+# only reads it.
+COPY jvantuyl-strix-halo-sglang-patches/patch_cuda_graph_ple.py /tmp/patch_cuda_graph_ple.py
+RUN python3 /tmp/patch_cuda_graph_ple.py && rm /tmp/patch_cuda_graph_ple.py
+
+# --- dedicated QSA packed-KV scratch for captured graphs (patch 15) ---
+# Upstream shares one growable scratch between captured decode graphs and
+# eager decode; an eager step larger than any graph re-allocates it and the
+# graphs keep writing into freed memory (page fault after the next
+# empty_cache).
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_graph_scratch.py /tmp/patch_qsa_graph_scratch.py
+RUN python3 /tmp/patch_qsa_graph_scratch.py && rm /tmp/patch_qsa_graph_scratch.py
+
+# --- compressed-tensors int4 dense Linear on ROCm (patch 16) ---
+# The wNa16 dense scheme is Marlin-only and Marlin is CUDA-only, so any
+# checkpoint that quantizes attention / shared-expert / lm_head layers dies
+# in process_weights_after_loading. Dequantize the packed weight to bf16 once
+# at load and serve it with F.linear.
+COPY jvantuyl-strix-halo-sglang-patches/patch_wna16_rocm_dense.py /tmp/patch_wna16_rocm_dense.py
+RUN python3 /tmp/patch_wna16_rocm_dense.py && rm /tmp/patch_wna16_rocm_dense.py
+
+# --- idle scheduler sleeps instead of spinning a core (patch 10) ---
+# Upstream busy-polls its ZMQ sockets while idle, pinning one CPU core at
+# 100% forever. Default --sleep-on-idle to on; --no-sleep-on-idle restores
+# upstream behaviour.
+COPY jvantuyl-strix-halo-sglang-patches/patch_sleep_on_idle.py /tmp/patch_sleep_on_idle.py
+RUN python3 /tmp/patch_sleep_on_idle.py && rm /tmp/patch_sleep_on_idle.py
+
+# --- aiter gfx1151 MXFP4 fix (patch 9) ---
+# Unrelated to Qwen3.8-Flash-Next (unlocks Quark/MXFP4 checkpoints), carried
+# because it's part of the fork's unified patch set this image pins.
+COPY jvantuyl-strix-halo-sglang-patches/fix_aiter_gfx1151_mxfp4.py /tmp/fix_aiter_gfx1151_mxfp4.py
+RUN python3 /tmp/fix_aiter_gfx1151_mxfp4.py && rm /tmp/fix_aiter_gfx1151_mxfp4.py
+
+# --- mounted fused-MoE tile configs (patch 17) ---
+# Upstream ships no Radeon_8060S_Graphics configs and its SGLANG_MOE_CONFIG_DIR
+# replaces the builtin tree (fixed configs/triton_x_y_z layout, crashes on a
+# missing directory). Make it a search path checked before the builtin tree,
+# flat or tree layout, so tuned tiles are mounted per checkpoint at run time.
+COPY jvantuyl-strix-halo-sglang-patches/patch_moe_config_dir.py /tmp/patch_moe_config_dir.py
+RUN python3 /tmp/patch_moe_config_dir.py && rm /tmp/patch_moe_config_dir.py
+
+# --- deterministic HyperConnection mix at decode sizes (patch 18) ---
+# The sm_100 JIT mix is unavailable here, so every decode step used the
+# persistent Triton kernel whose split-K atomic_add made greedy decode differ
+# run to run. Two-launch variant (per-split partials, fixed-order reduction)
+# on HIP.
+COPY jvantuyl-strix-halo-sglang-patches/patch_hc_mix_rocm.py /tmp/patch_hc_mix_rocm.py
+RUN python3 /tmp/patch_hc_mix_rocm.py && rm /tmp/patch_hc_mix_rocm.py
+
+# --- GPTQ/AWQ MoE kernel: mask the weight load on a partial K block (patch 19) ---
+# When K % BLOCK_SIZE_K != 0 the kernel masks a and the scales but read the
+# packed weights unmasked, past the last expert's rows: a layout-dependent
+# GPU page fault.
+COPY jvantuyl-strix-halo-sglang-patches/patch_moe_wna16_kmask.py /tmp/patch_moe_wna16_kmask.py
+RUN python3 /tmp/patch_moe_wna16_kmask.py && rm /tmp/patch_moe_wna16_kmask.py
+
+# --- decode QSA block selection honours the HIP top-k guard (patch 20) ---
+# select_decode_tokens called the JIT fast_topk directly, bypassing patch 11's
+# guard: unsafe on RDNA 3.5 and its output order varies past 512 blocks, so
+# long-context greedy decode drifted. Vectorised, graph-capturable torch
+# top-k on HIP.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_decode_topk.py /tmp/patch_qsa_decode_topk.py
+RUN python3 /tmp/patch_qsa_decode_topk.py && rm /tmp/patch_qsa_decode_topk.py
+
+# --- tie-stable QSA block selection on ROCm (patch 21) ---
+# torch.topk orders tied entries differently per launch on this ROCm build,
+# and QSA block scores (relu sums) tie constantly, so prefill above ~1.4k
+# tokens and patch 20's decode selection still drifted bit-wise.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_topk_ties.py /tmp/patch_qsa_topk_ties.py
+RUN python3 /tmp/patch_qsa_topk_ties.py && rm /tmp/patch_qsa_topk_ties.py
+
+# --- greedy first draft under rejection sampling (patch 22) ---
+# HIP defaults EAGLE/NEXTN to rejection sampling, whose per-step proposal
+# hands greedy rows their argmax; the post-prefill draft extend called
+# fast_sample directly, so the first draft token was random at temperature 0.
+COPY jvantuyl-strix-halo-sglang-patches/patch_spec_draft_greedy.py /tmp/patch_spec_draft_greedy.py
+RUN python3 /tmp/patch_spec_draft_greedy.py && rm /tmp/patch_spec_draft_greedy.py
+
+# --- MTP draft decode sees the drafted tokens (patch 23) ---
+# The shared MTP selection wrote the drafted positions after the captured
+# row's -1 padding, but the KV gather packs a row's valid entries as a prefix
+# (count, not mask): the drafted positions were dropped.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_mtp_tail.py /tmp/patch_qsa_mtp_tail.py
+RUN python3 /tmp/patch_qsa_mtp_tail.py && rm /tmp/patch_qsa_mtp_tail.py
+
+# --- length-bounded Triton decode MQA for the QSA indexer (patch 24) ---
+# TileLang is not installed here, so the indexer's decode scoring ran the
+# torch reference, which gathers the whole context/4 window per row on every
+# decode step: the whole 85 -> 72 tok/s drop at 16-20 streams when the
+# default context grew.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_mqa_triton.py /tmp/patch_qsa_mqa_triton.py
+RUN python3 /tmp/patch_qsa_mqa_triton.py && rm /tmp/patch_qsa_mqa_triton.py
+
+# --- row-sliced prefill block selection (patch 25) ---
+# Patch 21's stable sort ran over the whole 8192-row prefill chunk: ~1 GiB of
+# transient buffers per QSA layer, 40% of the prefill VRAM peak.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_topk_slices.py /tmp/patch_qsa_topk_slices.py
+RUN python3 /tmp/patch_qsa_topk_slices.py && rm /tmp/patch_qsa_topk_slices.py
+
+# --- Triton prefill MQA for the QSA indexer (patch 26) ---
+# The prefill twin of patch 24: without TileLang the torch reference
+# materialises the per-head scores (4x the logits budget) plus three copies.
+COPY jvantuyl-strix-halo-sglang-patches/patch_qsa_mqa_prefill_triton.py /tmp/patch_qsa_mqa_prefill_triton.py
+RUN python3 /tmp/patch_qsa_mqa_prefill_triton.py && rm /tmp/patch_qsa_mqa_prefill_triton.py
+
+# --- weights parked in pinned system memory (patch 27) ---
+# SGLANG_HOST_PARKED_PARAMS=<name substrings>: after load, those parameters
+# are copied into exactly sized hipHostMalloc buffers aliased as CUDA tensors
+# and the VRAM is released. For the token embedding (gather only) and the
+# vision tower (idle without images) this costs nothing measurable; ~2.0 GiB
+# of VRAM back on this box.
+COPY jvantuyl-strix-halo-sglang-patches/patch_host_parked_params.py /tmp/patch_host_parked_params.py
+RUN python3 /tmp/patch_host_parked_params.py && rm /tmp/patch_host_parked_params.py
+
+# --- PLE short conv over the packed prefill batch (patch 28) ---
+# Upstream pads the prefill batch to [requests, longest request, 10240
+# channels] for the PLE conv1d and makes three copies of it: a chunked
+# prefill of many short prompts plus a slice of a long one could reach
+# several GiB for one layer. Conv over the packed tokens instead.
+COPY jvantuyl-strix-halo-sglang-patches/patch_ple_short_conv_packed.py /tmp/patch_ple_short_conv_packed.py
+RUN python3 /tmp/patch_ple_short_conv_packed.py && rm /tmp/patch_ple_short_conv_packed.py
+
+# --- request reasoning_effort beats --default-chat-template-kwargs (patch 29) ---
+# The OpenAI endpoint pops a request's reasoning_effort out of its
+# chat_template_kwargs, then setdefaults the server defaults into the
+# emptied slot and merges kwargs over the request field, so with a server
+# default every request renders at the default level. Seed the merge with
+# the request's effort first.
+COPY jvantuyl-strix-halo-sglang-patches/patch_default_effort_override.py /tmp/patch_default_effort_override.py
+RUN python3 /tmp/patch_default_effort_override.py && rm /tmp/patch_default_effort_override.py
+
+# --- MTP draft loads only the shards with mtp tensors (patch 30) ---
+# The draft's load_weights drops every name without "mtp", yet its loader
+# walked all 34 shards (222k expert tensors + 26 PLE shards) to keep 31
+# tensors from three files: 49 s of the boot.
+COPY jvantuyl-strix-halo-sglang-patches/patch_draft_mtp_shards.py /tmp/patch_draft_mtp_shards.py
+RUN python3 /tmp/patch_draft_mtp_shards.py && rm /tmp/patch_draft_mtp_shards.py
+
+# --- presharded dump/reload with a host-resident PLE table (patch 31) ---
+# --load-format presharded copies the post-processed state back on later
+# boots instead of walking 222k small tensors. Not used by this build's
+# launch command (left available; see docs/RUNNING_QWEN38.md "Load time").
+COPY jvantuyl-strix-halo-sglang-patches/patch_presharded_host_tables.py /tmp/patch_presharded_host_tables.py
+RUN python3 /tmp/patch_presharded_host_tables.py && rm /tmp/patch_presharded_host_tables.py
+
+# File-level verification (build host has no GPU; runtime check on container start).
+# The AOT build installs the sgl_kernel package into site-packages.
+RUN python3 -c "import glob, os, sgl_kernel; sos = glob.glob(os.path.join(os.path.dirname(sgl_kernel.__file__), '*.so')); assert sos, 'no built sgl_kernel extensions found'; print(sos)"
+
+EXPOSE 30000
+
+CMD ["python3", "-m", "sglang.launch_server", "--help"]

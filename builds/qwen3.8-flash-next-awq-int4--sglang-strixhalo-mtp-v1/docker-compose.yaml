@@ -1,0 +1,51 @@
+name: docker
+services:
+  qwen3.8-flash-next-awq-int4--sglang-strixhalo-mtp-v1:
+    image: strix-halo-r9700-llm-builds/jvantuyl-strix-halo-sglang:gfx1151
+    container_name: qwen3.8-flash-next-awq-int4--sglang-strixhalo-mtp-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - video
+    - render
+    security_opt:
+    - seccomp:unconfined
+    ipc: host
+    environment:
+      SGLANG_FORCE_NATIVE_LAYERNORM: "1"
+      SGLANG_USE_AITER: "0"
+      SGLANG_QWEN4_PLE_FILE_SKIP_DEVICE_CHECK: "1"
+      SGLANG_MOE_CONFIG_DIR: /moe-configs
+      PYTORCH_TUNABLEOP_TUNING: "0"
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      SGLANG_HOST_PARKED_PARAMS: embed_tokens.weight,visual.
+    volumes:
+    - /var/lib/ai-models/qwen3.8-flash-next-awq-int4-ple-fp8:/models/qwen38:ro
+    - /var/lib/ai-models/qwen3.8-flash-next-awq-int4-ple-cache:/ple
+    - sglang-qwen38-awq-tunableop:/root/.tunableop
+    - sglang-qwen38-awq-triton-cache:/root/.cache/sglang
+    - ../../docker/jvantuyl-strix-halo-sglang-configs/moe/qwen38-flash-next:/moe-configs:ro
+    - ../../docker/jvantuyl-strix-halo-sglang-configs/chat/qwen38.jinja:/chat-template.jinja:ro
+    command: >-
+      python3 -m sglang.launch_server --model-path
+      /models/qwen38 --served-model-name
+      qwen3.8-flash-next-awq-int4-sglang --host 0.0.0.0 --port 30000
+      --ple-offload-embedding --ple-offload-backend file --ple-offload-dir
+      /ple --mem-fraction-static 0.85 --context-length 131072
+      --kv-cache-dtype fp8_e4m3 --max-total-tokens 262144
+      --attention-backend triton --cuda-graph-max-bs-decode 20
+      --max-running-requests 20 --max-mamba-cache-size 100
+      --mamba-ssm-dtype bfloat16 --reasoning-parser qwen3
+      --tool-call-parser qwen3_coder --chat-template /chat-template.jinja
+      --default-chat-template-kwargs
+      '{"reasoning_effort": "medium", "default_system_prompt": "If you are unsure or do not know something, say so plainly instead of guessing."}'
+    ports:
+    - 127.0.0.1:8196:30000
+volumes:
+  sglang-qwen38-awq-tunableop:
+    external: true
+    name: docker_sglang-qwen38-awq-tunableop
+  sglang-qwen38-awq-triton-cache:
+    external: true
+    name: docker_sglang-qwen38-awq-triton-cache
