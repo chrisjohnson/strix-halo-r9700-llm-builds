@@ -96,8 +96,49 @@ derived:
     comfortable, since they never reported `free -h` numbers, only that a
     ~20-minute benchmark didn't fall over.
 
-    Still not promoted. UD-IQ4_XS remains the right choice for Chris's real
-    operating conditions (hours-long sessions, concurrent occamy).
+    FOLLOW-UP 2 (2026-10-07, real co-residency soak): Chris pushed back on the
+    >20 GiB bar above - correctly: it was calibrated against the halo-box
+    incident's specific failure mode (an UNBOUNDED, growing --cache-ram pool
+    bleeding out over hours), which doesn't directly apply to halogen's
+    pre-allocated fixed-size KV pool (shouldn't grow once sized at boot).
+    Asked for real proof occamy + Q4_K_XL can coexist, not just a margin
+    number. Brought occamy back up alongside the already-running Q4_K_XL
+    build (both on their own GPUs, no --exclusive conflict).
+
+    Immediately after occamy rejoined: a real, if transient, scare - available
+    dropped 20 -> 14 GiB in the first 60s (swap spiked 2.6 -> 10 GiB), and a
+    trivial "pong" request took 16.5s (vs ~1s isolated) before succeeding -
+    not a crash, just real settling-induced slowness (confirmed via the
+    container's own log: a client disconnect from an earlier too-short
+    timeout, cleanly cancelled, not a failure). Held at this point rather than
+    pushing into a long soak on top of an actively-worsening number. Waited;
+    confirmed flat at 14 GiB available / 4.4 GiB swap for a full 60s before
+    proceeding - the drop was one-time settling (new container warming KV
+    slots, driver renegotiating GTT), not a sustained decline.
+
+    REAL CO-RESIDENT LONG SOAK (12 cycles, 96 turns, 24 vision requests, both
+    occamy and this build running the entire time): completed clean - zero
+    request failures, RestartCount 0 on both containers throughout. Memory
+    sampled every 40s for the full ~10-minute run: `used` held dead flat at
+    110 GiB and swap flat at 5.0 GiB across all 16 samples - zero drift,
+    not even the modest ~2 GiB settling seen in the isolated soak. Per-turn
+    latency during the soak was normal (2.3-6.2s/turn, consistent with this
+    model's ~30 tok/s decode) - the earlier 16.5s "pong" was the one-time
+    settling transient, not steady-state behavior.
+
+    REVISED VERDICT: occamy + Q4_K_XL genuinely coexist under sustained
+    multi-turn, vision-mixed use at the depths this soak tested (never
+    exceeded ~7k cached tokens/cycle) - real, repeatable, zero-drift
+    evidence, not a one-off. The >20 GiB framing from the original verdict
+    doesn't transfer cleanly to this engine's architecture and shouldn't
+    have been applied as a hard pass/fail bar. HOWEVER: this soak never
+    tested the deep-context case - the M-158/M-159 165k-token crash repro
+    was only run in ISOLATION (M-167, FOLLOW-UP 1), never with occamy also
+    resident. That combination - deep context + vision + occamy co-resident
+    - is the one real gap left before calling this fully characterized.
+    Status left at TESTED_NOT_VIABLE pending that specific test, not because
+    co-residency failed (it didn't) but because the hardest real scenario
+    hasn't been tried under these conditions yet.
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
