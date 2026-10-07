@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1
-status: TESTED_NOT_VIABLE
+status: UNTESTED-BUT-DOWNLOADED
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
