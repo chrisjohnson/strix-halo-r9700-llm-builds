@@ -447,10 +447,36 @@ cmd_down_one() {
     echo "modelctl: no such build '$id' (missing $f)" >&2
     return 1
   fi
+  # Compose project name is a label baked into the container at creation
+  # time - it does not get recomputed later. A container started under an
+  # older naming convention keeps that old label forever, even after this
+  # script's own project_name_for() changes. Confirmed live (M-161,
+  # 2026-10-06): a long-running production container's real label was
+  # "qwen38-flash-next-..." (periods dropped), while today's
+  # project_name_for() computes "qwen3_8-flash-next-..." (periods to
+  # underscores) for the same id - genuinely different strings. `docker
+  # compose -p <wrong-name> down` finds no containers under that project
+  # and exits 0 having done nothing - silently, with no error - which is
+  # exactly how this went unnoticed: modelctl's own "stopping $id" log line
+  # printed, and the container kept running the whole time regardless.
+  # Asking the running container directly for its own real label sidesteps
+  # the whole class of drift, instead of trusting a name recomputed from
+  # scratch to still match whatever it matched when the container was born.
+  local real_project
+  real_project="$(docker inspect "$id" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+  local project="${real_project:-$(project_name_for "$id")}"
   echo "modelctl: stopping $id"
   # Same -p reasoning as cmd_up_one - without it this would resolve to
   # the "docker" project shared with the base stack.
-  docker compose -p "$(project_name_for "$id")" -f "$f" down
+  docker compose -p "$project" -f "$f" down
+  # Verify it actually happened rather than trusting compose's own exit
+  # code: a project-name mismatch neither branch above caught would
+  # otherwise report success while leaving the container running, same as
+  # the original incident. Loud failure here, not a silent no-op.
+  if docker ps --format '{{.Names}}' | grep -qx "$id"; then
+    echo "modelctl: ERROR - '$id' is still running after 'down' (project name mismatch? real label was '${real_project:-<none>}', used '$project')" >&2
+    return 1
+  fi
 }
 
 cmd_down() {
