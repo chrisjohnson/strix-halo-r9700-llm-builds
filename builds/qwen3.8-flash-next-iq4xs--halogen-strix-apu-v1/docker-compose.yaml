@@ -43,6 +43,9 @@ services:
       HALOGEN_CHECKPOINT: /gguf/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
       HALOGEN_MTP_HEAD: /models/qwen38-flash-next-mtp.hgn
       HALOGEN_VISION_TOWER: /models/qwen38-flash-next-vision.hgn
+      # Auto-detection via "/models contains tokenizer/" didn't pick this up in
+      # practice - explicit path per the engine's own second suggested option.
+      HALOGEN_TOKENIZER: /models/tokenizer
       HALOGEN_BIND: "0.0.0.0"
       HALOGEN_API_PORT: "8731"
     volumes:
