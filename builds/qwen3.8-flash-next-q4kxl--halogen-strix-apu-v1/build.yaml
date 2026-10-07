@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1
-status: PLANNED-NOT-DOWNLOADED
+status: TESTED_NOT_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -37,6 +37,38 @@ derived:
     itself could trigger a genuine system OOM rather than a safely-contained
     one, unlike every prior repro this session where starting margin was
     healthy.
+
+    VALIDATED (2026-10-07), stopped short deliberately. Real `free -h`
+    immediately after boot (occamy running concurrently on the other GPU,
+    the actual target co-residency per Chris's stated use case - not an
+    artificial single-model test): 6.0 GiB free / 10.0 GiB available, swap
+    already at 4.3 GiB in use. The engine's own startup log confirmed the
+    pre-written concern directly: "WARNING 15.1 GiB of host RAM is in use
+    before this server starts... expect every prompt to read the table from
+    disk, prefill to run several times slower than published" and
+    automatically shrank the KV pool from the requested 524288 positions to
+    262144 ("host RAM cannot spare it") - sacrificing exactly the
+    long-context headroom this model exists to provide. Real weights
+    resident: 79.6 GiB (vs IQ4_XS's 72.8 GiB - the +17.6 GiB on-disk delta
+    translated almost 1:1 into RAM, as predicted).
+
+    STOPPED before running the crash-repro - 10 GiB available at idle, with
+    swap already engaged, is worse than the margin that preceded BOTH of
+    M-160's real OOM incidents. Pushing a 165k-depth+vision+8192-token
+    stress test on top of that risked a genuine uncontained system OOM, not
+    a safely-survived repro. Stopping the container alone recovered margin
+    to 110 GiB available, confirming this specific build was the entire
+    cause, not a pre-existing problem.
+
+    VERDICT: TESTED_NOT_VIABLE in Chris's real target configuration
+    (occamy + flash-next co-resident). Q4_K_XL's extra weight does not fit
+    this box with adequate safety margin on ANY engine tried, including
+    halogen - the engine with the most real slack of the three alternatives
+    evaluated this session. UD-IQ4_XS remains the right quant choice for
+    this hardware. Not promoted to standing; no further action planned
+    unless Chris wants to explore a deliberately-reduced-context variant
+    (smaller HALOGEN_MAX_TOK/HALOGEN_KV_POOL_POSITIONS) or an occamy-free
+    isolated test, neither of which matches his actual stated workload.
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
