@@ -2,6 +2,9 @@
 # `-fit off` -> `-fit on -fitt 12288 -fitc 4096`, and `-ngl all -c 262144 -b 8192
 # -ub 8192` left UNSET so llama-server's own fit-params mechanism can choose them
 # against real device memory at startup, instead of our hand-picked values.
+# (-fitp/--fit-print is NOT accepted by this box's pinned llama-server build -
+# "error: invalid argument: -fitp", confirmed via a live crash-loop - dropped;
+# what fit actually chose is read from the ordinary startup log instead.)
 #
 # --cache-ram stays explicit at 0 regardless - confirmed by reading common/fit.cpp
 # directly (not guessed) that --fit's scope is llama_model_params/llama_context_params
@@ -41,7 +44,7 @@ services:
     command: >-
       llama-server
       -m /models/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
-      -dev ROCm0 -fa on -fit on -fitt 12288 -fitc 4096 -fitp on
+      -dev ROCm0 -fa on -fit on -fitt 12288 -fitc 4096
       --mmproj /mmproj/mmproj-BF16.gguf --mmproj-device ROCm0
       --load-mode none --lazy-mode on-direct
       -ctk f16 -ctv f16
