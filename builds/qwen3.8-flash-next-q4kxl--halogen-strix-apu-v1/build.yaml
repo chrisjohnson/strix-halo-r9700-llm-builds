@@ -1,0 +1,42 @@
+name: qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: halogen-flash-server-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-Q4_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    M-167. Sibling of qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1 (M-165) -
+    one variable changed: the checkpoint file. UD-Q4_K_XL is +17.6 GiB on disk
+    over UD-IQ4_XS (111.3 GB vs 93.7 GB, per unsloth/Qwen3.8-Flash-Next-GGUF's
+    real file sizes checked via the HF API). Downloaded fresh (4 shards,
+    verified byte-exact against the HF API's reported sizes before use) to
+    /var/lib/ai-models/qwen3.8-flash-next-q4kxl/UD-Q4_K_XL/. Same MTP/vision/
+    tokenizer sidecars as M-165 (quant-independent).
+
+    WHY HALOGEN, NOT HALO-BOX: per this card's own plan, host on whichever
+    engine has real margin for the extra weight. halogen's measured total
+    footprint for IQ4_XS was 100.0 GiB (M-165) vs halo-box's ~111.6 GiB for
+    the SAME file - halogen had ~24 GiB of real slack on this ~124 GiB-usable
+    box, halo-box had far less.
+
+    FLAGGING BEFORE ANY BENCHMARK: this is genuinely tight. If Q4_K_XL's
+    in-memory footprint scales with its +17.6 GiB on-disk size (expected,
+    since GGUF weights are loaded close to 1:1), halogen's total should land
+    near 100.0 + 17.6 ≈ 117.6 GiB - leaving only ~6-7 GiB of margin on this
+    box, well below the >20 GiB margins every other build this session has
+    run with, and in the same danger zone that caused both of M-160's real
+    OOM incidents. This will be checked via real `free -h` readings
+    immediately after boot, BEFORE running the crash-repro (which pushes
+    context to 165k+ depth) - if idle margin is already thin, the repro
+    itself could trigger a genuine system OOM rather than a safely-contained
+    one, unlike every prior repro this session where starting margin was
+    healthy.
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30

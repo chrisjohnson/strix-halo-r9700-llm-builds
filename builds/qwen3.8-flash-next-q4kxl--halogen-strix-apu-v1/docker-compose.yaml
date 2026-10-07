@@ -1,0 +1,43 @@
+# M-167. Sibling of qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1 (M-165) - one
+# variable changed: HALOGEN_CHECKPOINT points at the new UD-Q4_K_XL GGUF
+# (unsloth/Qwen3.8-Flash-Next-GGUF, +17.6 GiB on disk over UD-IQ4_XS) instead of
+# UD-IQ4_XS. Same engine, same sidecars (MTP/vision/tokenizer are quant-
+# independent - the .hgn sidecar files describe structure shared across all
+# quants of this model), same port range convention (8210 = next free slot
+# after the --fit trial's 8209).
+#
+# WHY HALOGEN, NOT HALO-BOX: per M-167's own plan, this trial runs on whichever
+# engine has real margin for the extra +17.6 GiB. halogen's measured total
+# footprint for the IQ4_XS file was ~100.0 GiB (M-165) vs halo-box's ~111.6 GiB
+# for the SAME file - halogen has ~24-28 GiB of real slack, halo-box has far
+# less. Q4_K_XL's larger weights should cost roughly the same +17.6 GiB on
+# either engine, so halogen is the only one with comfortable room for it.
+#
+# License/build notes identical to M-165 - see that build's docker-compose.yaml
+# comment for the full bring-your-own-GGUF rationale.
+services:
+  qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1:
+    image: ghcr.io/peonist-ai/halogen-flash-server:0.16.4
+    container_name: qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    ipc: host
+    ulimits:
+      memlock: -1
+    environment:
+      HALOGEN_CHECKPOINT: /gguf/UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf
+      HALOGEN_MTP_HEAD: /models/qwen38-flash-next-mtp.hgn
+      HALOGEN_VISION_TOWER: /models/qwen38-flash-next-vision.hgn
+      HALOGEN_TOKENIZER: /models/tokenizer
+      HALOGEN_BIND: "0.0.0.0"
+      HALOGEN_API_PORT: "8731"
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-q4kxl:/gguf:ro
+      - /var/lib/ai-models/halogen-flash-next-sidecars:/models
+    ports:
+      - "127.0.0.1:8210:8731"
+    restart: unless-stopped
