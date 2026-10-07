@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -41,12 +41,52 @@ derived:
     (`ghcr.io/peonist-ai/halogen-flash-server:0.16.4`) - no Dockerfile/build
     step in this repo.
 
-    NOT YET VALIDATED: this build.yaml was written before the container's
-    first real boot. No correctness check, no real memory measurement on THIS
-    box (only halogen's own reference-machine numbers so far), no vision/MTP
-    verification, no crash-repro run, no benchmark. status will move to
-    TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN once that's done. NOT PROMOTED
-    TO STANDING regardless of outcome without Chris's review.
+    VALIDATED (2026-10-07). Three real setup issues found and fixed via the
+    engine's own explicit error messages (not guessed): HALOGEN_DOWNLOAD writes
+    sidecars beside the checkpoint (would need our shared read-only GGUF mount
+    writable - fetched the two .hgn sidecar files by hand into a separate mount
+    instead, referenced via explicit HALOGEN_MTP_HEAD/HALOGEN_VISION_TOWER path
+    overrides); tokenizer auto-detection didn't work in practice (set
+    HALOGEN_TOKENIZER explicitly).
+
+    REAL MEASURED MEMORY (engine's own startup log): 72.8 GiB weights + 14.4 GiB
+    KV pool (default 524288 positions/4 slots) + 12.8 GiB working memory
+    (default HALOGEN_MAX_TOK 32768) = 100.0 GiB total, vs halo-box's measured
+    ~111.6 GiB for the identical GGUF - a real but modest ~11.6 GiB improvement,
+    not the ~30-40 GiB the docs' framing implied (that framing compared
+    weights-only, not total footprint). The real structural difference is WHERE
+    it sits: only ~24 GiB in GTT vs halo-box's ~97-103 GiB, the rest in locked
+    host RAM.
+
+    REAL BENCHMARK (orchestrator run 167, committed alongside this file):
+    prefill 2193-2618 tok/s across depth 8k-131k - 38-50% FASTER than halo-box's
+    1590-1751 tok/s at the same depths. Decode at concurrency 1: 32-41 tok/s
+    (comparable to halo-box). Decode at concurrency 4: 64-69 tok/s AGGREGATE -
+    genuine multi-slot scaling, which NO llama.cpp-based engine can do for this
+    model (confirmed broken above --parallel 1 since M-157). This may be the
+    single most consequential result of the whole multi-engine trial effort.
+
+    CRASH-SAFETY: vision confirmed correct (real image test). The exact
+    historical M-158/M-159 crash repro (165k depth, image, +8192 tokens)
+    SURVIVED in 6.4s - more than 2x faster than halo-box's 14.2s on the
+    identical test. Memory held flat afterward (8.2 GiB available, unchanged
+    from the pre-repro baseline) - unlike halo-box, which climbed from 64 GiB
+    to 102+ GiB GTT over a real multi-hour session (M-160 Phase 5). This
+    pre-allocated-pool design appears to genuinely avoid the unbounded-growth
+    pattern that caused today's real OOM incident, though this is one repro
+    and one 20-minute benchmark, not a multi-hour soak test.
+
+    ONE NEW CONSIDERATION, NOT ACTIONABLE REMOTELY: the engine flagged "31.9
+    GiB of this machine's RAM is carved out for the iGPU in firmware" (BIOS
+    UMA/dedicated-graphics-memory setting) as directly eating into its budget -
+    lowering it could free more margin than any container flag, but needs a
+    BIOS change and reboot. Flagged for Chris, not acted on.
+
+    NOT PROMOTED TO STANDING - strong results across every dimension tested,
+    but still needs a real multi-hour soak test (same bar as every prior
+    promotion this session) and confirmation that `HALOGEN_KV_SLOTS=4`'s real
+    concurrency holds up under genuinely concurrent (not just sequential
+    benchmark-matrix) DSH sessions before any promotion conversation.
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
