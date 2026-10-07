@@ -1,0 +1,47 @@
+# halogen-flash-server trial (M-165) - a from-scratch, purpose-built closed-source
+# engine for exactly this model on exactly this hardware (gfx1151), not a
+# llama.cpp derivative. Public pre-built image, no build step here.
+#
+# WHY: M-160's three llama.cpp-family trials (pwilkin, halo-box, antirez/ds4,
+# jvantuyl/sglang) all share one real constraint - flash-next's true footprint
+# (GTT + separate host RSS) is ~111.6 GiB alone on halo-box, confirmed via a live
+# multi-hour real-session trial (M-160 Phase 5) - leaving almost no room for
+# co-residency with occamy, any cache-ram, or a bigger quant (M-167). halogen's
+# own docs claim a dramatically smaller total footprint for the IDENTICAL GGUF
+# file: ~72 GiB (62-68 GiB weights + ~15-27 GiB device memory, well-documented,
+# not reverse-engineered like everything else this session).
+#
+# BRING YOUR OWN GGUF: HALOGEN_CHECKPOINT points at our existing, already-
+# downloaded UD-IQ4_XS file - no new multi-GB download. HALOGEN_DOWNLOAD still
+# fetches the two small sidecar files (vision tower ~0.84 GiB, MTP draft head
+# ~1.42 GiB, peonist-ai's own .hgn format - our existing GGUF-format mmproj/MTP
+# files are NOT reusable here) into the separate /models mount.
+#
+# License checked directly (not taken on the model card's word): free for
+# commercial/production use, no seat/core/revenue limit, no key -
+# ghcr.io/peonist-ai/halogen-flash-server LICENSE.md.
+services:
+  qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1:
+    image: ghcr.io/peonist-ai/halogen-flash-server:0.16.4
+    container_name: qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    ipc: host
+    ulimits:
+      memlock: -1
+    environment:
+      HALOGEN_DOWNLOAD: peonist-ai/halogen-qwen3.8-flash-next
+      HALOGEN_CHECKPOINT: /gguf/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+      HALOGEN_VISION_TOWER: "1"
+      HALOGEN_BIND: "0.0.0.0"
+      HALOGEN_API_PORT: "8731"
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-iq4xs:/gguf:ro
+      - /var/lib/ai-models/halogen-flash-next-sidecars:/models
+    ports:
+      - "127.0.0.1:8208:8731"
+    restart: unless-stopped

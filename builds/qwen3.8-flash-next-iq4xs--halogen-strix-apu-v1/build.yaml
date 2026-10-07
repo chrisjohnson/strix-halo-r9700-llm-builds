@@ -1,0 +1,52 @@
+name: qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: halogen-flash-server-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    M-165. `peonist-ai/halogen-flash-server` - a from-scratch, closed-source
+    inference engine purpose-built for exactly this model on exactly gfx1151, not
+    a llama.cpp derivative. 864 GitHub stars, actively maintained, real community
+    tooling already built on top (including a repo explicitly for "running
+    halogen-flash-server as a local coding-agent backend"). License checked
+    directly: free for commercial/production use, no limits, benchmarking
+    explicitly pre-approved for publication.
+
+    WHY THIS MATTERS: M-160's three llama.cpp-family trials all share one
+    constraint - flash-next's real total footprint on halo-box (the best of
+    those three) is ~111.6 GiB alone (97.64 GiB GTT + 14.0 GiB separate host
+    RSS, confirmed via a live multi-hour real-session trial), leaving almost no
+    room for co-residency with occamy, any cache-ram, or a bigger quant
+    (M-167's Q4_K_XL, +17.6 GiB). halogen's own docs claim a dramatically
+    smaller footprint for the SAME file family: native checkpoint ~62-68 GiB
+    weights + ~15-27 GiB device memory depending on pool/slot config, leaving
+    ~12 GiB free at defaults on a 128 GB machine - and specifically, running
+    OUR UD-IQ4_XS GGUF needs "72 GiB RAM versus the native 68 GiB" per their own
+    comparison. If that number holds up on our actual box, it changes the whole
+    margin calculus this session has been fighting.
+
+    BUILD: bring-your-own-GGUF path - `HALOGEN_CHECKPOINT` points at our
+    existing, already-downloaded `/var/lib/ai-models/qwen3.8-flash-next-iq4xs`
+    file (no new multi-GB download). `HALOGEN_DOWNLOAD` fetches two small
+    sidecar files in peonist-ai's own .hgn format (vision tower ~0.84 GiB, MTP
+    draft head ~1.42 GiB - our existing GGUF-format mmproj/MTP files are not
+    reusable here) into a separate mount. Image is public and pre-built
+    (`ghcr.io/peonist-ai/halogen-flash-server:0.16.4`) - no Dockerfile/build
+    step in this repo.
+
+    NOT YET VALIDATED: this build.yaml was written before the container's
+    first real boot. No correctness check, no real memory measurement on THIS
+    box (only halogen's own reference-machine numbers so far), no vision/MTP
+    verification, no crash-repro run, no benchmark. status will move to
+    TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN once that's done. NOT PROMOTED
+    TO STANDING regardless of outcome without Chris's review.
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30
