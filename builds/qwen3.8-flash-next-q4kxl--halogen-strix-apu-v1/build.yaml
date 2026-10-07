@@ -65,10 +65,39 @@ derived:
     this box with adequate safety margin on ANY engine tried, including
     halogen - the engine with the most real slack of the three alternatives
     evaluated this session. UD-IQ4_XS remains the right quant choice for
-    this hardware. Not promoted to standing; no further action planned
-    unless Chris wants to explore a deliberately-reduced-context variant
-    (smaller HALOGEN_MAX_TOK/HALOGEN_KV_POOL_POSITIONS) or an occamy-free
-    isolated test, neither of which matches his actual stated workload.
+    this hardware. Not promoted to standing.
+
+    FOLLOW-UP (2026-10-07, isolated/occamy-free re-test): prompted by a
+    Reddit benchmark (u/unknown, ASUS ROG Flow Z13 GZ302, 128 GB, Strix
+    Halo) showing Q4_K_XL running successfully on halogen and several other
+    engines up to 256k context. Their box's OS-visible RAM (124.9 GiB post
+    BIOS tweak) is essentially identical to ours (124.4 GiB) - ruled out a
+    hardware/BIOS explanation. Re-ran this build with occamy stopped and
+    everything else (always-up service stack) left running, to isolate the
+    real bare ceiling: boot alone leaves 17 GiB available (vs 10 GiB with
+    occamy up) - confirms occamy was a real but modest contributor, not the
+    dominant factor. The dominant factor is simply that Q4_K_XL + halogen's
+    own footprint (113.8 GiB) leaves only ~10 GiB of slack on a 124.4 GiB
+    box even completely alone, before any other process touches it.
+
+    Full isolated trajectory, real `free -h` available: 117 GiB (pre-boot)
+    -> 17 GiB (post-boot) -> 16 GiB (after the M-158/M-159 crash repro,
+    survived in 7.3s) -> 15 GiB (after a clean 4-cycle/32-turn mild soak,
+    zero failures, RestartCount 0). A real, modest ~2 GiB downward drift
+    across the stress sequence - not the dramatic unbounded climb that
+    caused M-160's actual incidents, but also not perfectly flat, and this
+    is only one short test (one before/after pair, not per-cycle readings,
+    so a one-time settling effect vs. a genuine slow per-use cost can't yet
+    be distinguished). Either way, 15-17 GiB is well below the >20 GiB
+    margin this session has treated as safe since M-160, even in the best
+    case with nothing else sharing the box. The Reddit data isn't
+    contradicted by this - it shows Q4_K_XL CAN run on this hardware class,
+    which is also true here; it just doesn't show whether their margin was
+    comfortable, since they never reported `free -h` numbers, only that a
+    ~20-minute benchmark didn't fall over.
+
+    Still not promoted. UD-IQ4_XS remains the right choice for Chris's real
+    operating conditions (hours-long sessions, concurrent occamy).
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
