@@ -1,0 +1,64 @@
+name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-fit-strixhalo-mtp-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: llamacpp-rocm100-halobox-lazy-direct-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: UD-IQ4_XS
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    M-166. Sibling of ...-ub8192-nocacheram-strixhalo-mtp-v1 - one variable
+    changed: `-fit off -ngl all -c 262144 -b 8192 -ub 8192` replaced with
+    `-fit on -fitt 12288 -fitc 4096 -fitp on` and ngl/c/b/ub left UNSET so
+    llama-server's own fit-params mechanism sizes them against real device
+    memory at startup, instead of our hand-picked values. No new download -
+    reuses the exact same GGUF/mmproj/MTP files already on the box.
+
+    MOTIVATION: split out of Chris's "start from scratch on these flags" audit
+    (M-160). Both existing builds run `-fit off`, and since every memory flag
+    is already pinned explicitly, that's currently a near no-op. Worth
+    checking whether `--fit`'s automatic sizing is actually a better-informed
+    starting point than our own static assumptions, which have been proven
+    wrong twice in one day already (both M-160 nocacheram fixes came from
+    margin math baked in at build time no longer matching reality once the
+    engine's real footprint changed).
+
+    SOURCE-LEVEL FINDING (read common/fit.cpp and common/fit.h directly, not
+    guessed, before building this): `common_fit_params()`'s own header
+    comment states it "fits mparams and cparams to free device memory
+    (assumes system memory is unlimited)" and only modifies parameters that
+    are still at their llama_default_model_params value (n_gpu_layers,
+    tensor_split, tensor_buft_overrides) plus n_ctx when it equals 0 (unset).
+    There is no reference to cache_ram anywhere in fit.cpp - `--cache-ram` is
+    a tools/server-level host-RAM pool entirely outside the
+    llama_model_params/llama_context_params structs `--fit` operates on.
+
+    CONCLUSION BEFORE ANY BENCHMARK: `--fit` categorically cannot size or cap
+    `--cache-ram`, and explicitly assumes system RAM is unlimited - it is a
+    per-device (GPU) memory-sizing tool. Both of M-160's real OOM incidents
+    this session were host-RAM exhaustion from `--cache-ram` pools growing
+    against stale margin assumptions, a problem class `--fit` is not designed
+    to address and would not have prevented either way. This build still
+    exists to answer the narrower, legitimate remaining question: does `--fit`
+    pick a sane, safe `-ngl`/`-c`/`-b`/`-ub` at startup on this specific
+    unified-memory APU (where "device" memory for ROCm IS system RAM, not a
+    fixed discrete VRAM pool), well enough to be a lower-maintenance default
+    than hand-tuning for the flags it CAN reach?
+
+    `-fitt 12288`: target margin picked to roughly match what hand-tuning
+    already banks for this box's other residents (occamy on the other GPU,
+    DSH/app containers) rather than fit's own 1024 MiB default, which assumes
+    nothing else on the box needs memory.
+
+    Not yet downloaded-check needed (reuses existing files, so this should
+    flip to UNTESTED-BUT-DOWNLOADED immediately) - not yet brought up, not yet
+    benchmarked. This build.yaml will be updated with real measured numbers
+    (what ngl/ctx/batch fit actually chose, real memory footprint, real
+    orchestrator benchmark, crash repro, mild soak) and a final status.
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30
