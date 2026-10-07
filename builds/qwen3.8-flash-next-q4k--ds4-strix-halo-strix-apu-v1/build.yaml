@@ -5,7 +5,7 @@ derived:
   model: Qwen3.8-Flash-Next
   params: 177B
   active_params: 6B
-  quant: Q4 (ds4 native: imatrix Q4_K gate/up, MXFP4 down experts)
+  quant: "Q4 (ds4 native: imatrix Q4_K gate/up, MXFP4 down experts)"
   mtp: true
   dflash: false
   target_gpu: strix-apu
