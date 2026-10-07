@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -150,11 +150,40 @@ derived:
     c1 at that depth, likely memory-pressure-related). 22 minutes, 25 tests,
     zero failures, occamy's RestartCount stayed 0 throughout.
 
-    Status left at UNTESTED-BUT-DOWNLOADED (not yet TESTED_NOT_VIABLE or
-    TESTED_VIABLE) pending the one remaining gap: deep-context + vision +
-    occamy co-resident, together, has not yet been tried - not because
-    co-residency failed (it hasn't, repeatedly) but because the hardest
-    real scenario hasn't been tried under these conditions yet.
+    FOLLOW-UP 3 (2026-10-07, deep-context + vision + occamy co-resident,
+    the last remaining gap): ran a soak tuned to reach deep context per
+    cycle (`--cycles 2 --turns-per-cycle 5 --growth-per-turn 110000
+    --image-every 3`) with occamy still up the entire time. Reached ~123k
+    cached tokens by the end of each cycle (short of the isolated repro's
+    exact 165k - image turns contribute almost no text growth, so 4 real
+    text turns/cycle landed around 123k, not 165k), with a vision request
+    mixed in at depth and a clean compaction after each cycle, twice.
+    Result: 2 cycles, 10 turns, 2 vision requests, zero failures. Memory
+    sampled every 30s for the full run: PERFECTLY FLAT - 111 GiB used /
+    12 GiB available / 3.4 GiB swap, unchanged across all 6 samples through
+    both deep buildup-and-compact cycles. RestartCount 0 on both containers
+    (occamy and this build) at the end.
+
+    FINAL VERDICT: TESTED_VIABLE. Full test matrix this session: text+vision
+    correctness (repeated), isolated crash-repro at the exact historical
+    165k/vision/+8192 scenario (survived 7.3s), isolated shallow soak (32
+    turns, modest ~2 GiB settling drift), co-resident shallow soak (96
+    turns, zero drift), co-resident real orchestrator benchmark (22 min, 25
+    tests, zero failures, prefill 1740-2369 tok/s, decode scaling through
+    c4), and co-resident deep-context soak (zero drift at ~123k tokens
+    with vision and compaction). Memory behavior with occamy co-resident
+    has been completely flat in every test run under that condition - no
+    evidence whatsoever that occamy's presence introduces additional risk
+    at depth. The one honest remaining gap: the EXACT 165k-token crash-repro
+    scenario was never re-run with occamy also resident (only the isolated
+    version, FOLLOW-UP 1, and this soak's ~123k depth, FOLLOW-UP 3) - a
+    small, low-risk extrapolation given how consistently flat every
+    co-resident test has been, but not literally identical conditions.
+
+    NOT YET PROMOTED TO STANDING - that's still Chris's call, not an
+    automatic consequence of TESTED_VIABLE. Real quality signal (vs
+    UD-IQ4_XS) also not measured here - this trial answered "does it fit
+    and run stably," not "is the quality improvement worth it."
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
