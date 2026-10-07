@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-iq4xs--llamacpp-rocm100-halobox-lazy-direct-fit-strixhalo-mtp-v1
-status: PLANNED-NOT-DOWNLOADED
+status: TESTED_NOT_VIABLE
 derived:
   engine: llamacpp-rocm100-halobox-lazy-direct-v1
   model: Qwen3.8-Flash-Next
@@ -54,11 +54,63 @@ derived:
     DSH/app containers) rather than fit's own 1024 MiB default, which assumes
     nothing else on the box needs memory.
 
-    Not yet downloaded-check needed (reuses existing files, so this should
-    flip to UNTESTED-BUT-DOWNLOADED immediately) - not yet brought up, not yet
-    benchmarked. This build.yaml will be updated with real measured numbers
-    (what ngl/ctx/batch fit actually chose, real memory footprint, real
-    orchestrator benchmark, crash repro, mild soak) and a final status.
+    VALIDATED (2026-10-07). One real packaging gap found along the way:
+    `-fitp on` (`--fit-print`, meant to log fit's exact chosen values) is NOT
+    accepted by this box's pinned llama-server build - "error: invalid
+    argument: -fitp", confirmed via a live crash-loop before being dropped
+    from the command. Fit's actual choices were read from the ordinary
+    startup log instead.
+
+    WHAT FIT CHOSE: a second real limitation surfaced immediately at boot -
+    `failed to measure the memory of the extra model, fitting without it:
+    failed to create llama_context from model` (the MTP draft model is an
+    "extra model" in fit's own terminology; its own test-context failed with
+    `qwen4exp requires ctx_other to be set`). Fit silently fell back to sizing
+    the main model alone, NOT accounting for the draft model's real memory
+    footprint during its own calculation - a real gap in fit's
+    speculative-decode-aware path for this specific model family. Despite
+    that fallback, the model, mmproj, and MTP draft model all loaded and ran
+    correctly (confirmed via a real "pong" completion), and fit landed on
+    `n_ctx_slot = 262144` - identical to our hand-picked `-c 262144`. 28-31
+    GiB available after boot/soak - a healthy margin.
+
+    CRASH-SAFETY: the exact M-158/M-159 repro (165k depth, image, +8192
+    tokens) SURVIVED in 17.2s - close to the nocacheram hand-tuned sibling's
+    14.2s on the same test (same engine family, expected). Mild agentic soak
+    (4 cycles, 32 turns, 8 screenshots, clean/uncontested run after an
+    earlier attempt was invalidated by overlapping with the orchestrator
+    benchmark - see decision log): zero failures, RestartCount 0, memory
+    drift 31→28 GiB available - within normal noise, not a leak pattern.
+
+    REAL ORCHESTRATOR BENCHMARK (run 169, committed alongside this file) vs
+    the hand-tuned `-b 8192 -ub 8192` sibling's own real numbers
+    (...-ub8192-cram14g-strixhalo-mtp-v1, run committed 2026-10-06):
+    prefill 1009-1082 tok/s across 8k-131k depth - a real **36-39% SLOWER**
+    than the hand-tuned build's 1590-1751 tok/s at the same depths. Decode is
+    essentially identical either way (27-41 tok/s across all
+    concurrency/depth combinations for both - noise-level difference). Since
+    `-b`/`-ub` were left unset specifically so fit could size them, and
+    ctx/ngl/weights loaded identically to the hand-tuned build, the most
+    likely explanation is fit chose a smaller batch/ubatch than our explicit
+    8192 - prefill throughput is batch-size-sensitive in a way decode
+    generally isn't. Not confirmed via an explicit log line (this box's
+    pinned llama-server doesn't support `-fitp`, and `--load-mode
+    none --lazy-mode on-direct` suppresses the verbose per-buffer startup
+    log that would show it directly) but it is the only variable that
+    changed and that this benchmark shape is sensitive to.
+
+    VERDICT: TESTED_NOT_VIABLE as a replacement for hand-tuning. `--fit`
+    correctly reproduced our hand-picked context size on this hardware, and
+    the build is correct and crash-safe - but it costs ~37% of prefill
+    throughput (almost certainly from leaving batch/ubatch unset) for no
+    measured benefit, and - as established before this build was even
+    started (see MOTIVATION/SOURCE-LEVEL FINDING above) - it still cannot
+    size or cap `--cache-ram`, the actual lever behind both of M-160's real
+    OOM incidents. Hand-tuning remains the better-controlled approach for
+    every flag it's currently pinning. Not promoted to standing - closed
+    research trial, no further action planned. If `--fit` is revisited
+    later, leave `-b`/`-ub` explicit and only let it size `-ngl`/`-c`, to
+    isolate whether this prefill cost was really batch-size-driven.
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
