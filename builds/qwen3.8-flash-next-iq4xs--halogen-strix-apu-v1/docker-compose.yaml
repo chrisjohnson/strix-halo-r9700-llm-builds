@@ -12,10 +12,16 @@
 # not reverse-engineered like everything else this session).
 #
 # BRING YOUR OWN GGUF: HALOGEN_CHECKPOINT points at our existing, already-
-# downloaded UD-IQ4_XS file - no new multi-GB download. HALOGEN_DOWNLOAD still
-# fetches the two small sidecar files (vision tower ~0.84 GiB, MTP draft head
-# ~1.42 GiB, peonist-ai's own .hgn format - our existing GGUF-format mmproj/MTP
-# files are NOT reusable here) into the separate /models mount.
+# downloaded UD-IQ4_XS file - no new multi-GB download. The two small sidecar
+# files (vision tower ~0.84 GiB, MTP draft head ~1.42 GiB, peonist-ai's own
+# .hgn format - our existing GGUF-format mmproj/MTP files are NOT reusable
+# here) were fetched once by hand into /var/lib/ai-models/halogen-flash-next-
+# sidecars, NOT via HALOGEN_DOWNLOAD - that mechanism expects to write them
+# BESIDE the checkpoint file itself (confirmed live: "no draft head at
+# /gguf/UD-IQ4_XS/qwen38-flash-next-mtp.hgn"), which is our shared, read-only,
+# multi-build model mount - not something this build should ever write into.
+# HALOGEN_MTP_HEAD and HALOGEN_VISION_TOWER (as a path, not "1") point
+# explicitly at the separate /models mount instead.
 #
 # License checked directly (not taken on the model card's word): free for
 # commercial/production use, no seat/core/revenue limit, no key -
@@ -34,9 +40,9 @@ services:
     ulimits:
       memlock: -1
     environment:
-      HALOGEN_DOWNLOAD: peonist-ai/halogen-qwen3.8-flash-next
       HALOGEN_CHECKPOINT: /gguf/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
-      HALOGEN_VISION_TOWER: "1"
+      HALOGEN_MTP_HEAD: /models/qwen38-flash-next-mtp.hgn
+      HALOGEN_VISION_TOWER: /models/qwen38-flash-next-vision.hgn
       HALOGEN_BIND: "0.0.0.0"
       HALOGEN_API_PORT: "8731"
     volumes:
