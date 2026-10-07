@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-q4k--ds4-strix-halo-strix-apu-v1
-status: PLANNED-NOT-DOWNLOADED
+status: TESTED_NOT_VIABLE
 derived:
   engine: ds4-strix-halo-v1
   model: Qwen3.8-Flash-Next
@@ -71,12 +71,42 @@ derived:
     which is on Fedora 44's system python3 default sys.path, so the baked
     `hf` CLI failed at runtime with ModuleNotFoundError despite a successful
     build-time pip install - fixed via an added PYTHONPATH in the Dockerfile
-    (see its own comment). This build.yaml will be updated with real
-    measured numbers and a final TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN
-    status once the download, container bring-up, correctness checks and
-    ds4-bench run are done. Not promoted to standing regardless of outcome
-    without Chris's review - this is a research trial, not a commitment to
-    ship ds4 in production.
+    (see its own comment).
+
+    VALIDATED (2026-10-07). Correctness: real text completion and real vision
+    (image) request both correct. Crash-safety: the exact historical
+    M-158/M-159 repro (165k depth, image, +8192 tokens) SURVIVED - but in
+    378s, vs halo-box's 14.2s and halogen's 6.4s (~27x and ~59x slower
+    respectively to clear the identical scenario). Mild agentic soak (4
+    cycles, 32 turns, 8 screenshots, same script as M-165): zero failures,
+    zero memory drift (21 GiB available before and after), RestartCount
+    stayed 0 throughout.
+
+    REAL ORCHESTRATOR BENCHMARK (run 168, committed alongside this file):
+    prefill 797-916 tok/s across 8k-131k depth - roughly HALF of halo-box's
+    1590-1751 tok/s and roughly a THIRD of halogen's 2193-2618 tok/s at the
+    same depths (this does land meaningfully faster than upstream's own
+    no-MTP numbers of 405-466 tok/s, so MTP is clearly helping here, just not
+    enough to close the gap). Decode (concurrency 1): 25.4 tok/s at ctx=0
+    (comparable to halo-box/halogen), degrading hard with depth - 13.8 tok/s
+    at 32k, and effectively ZERO at 64k (aggregate_tps 0.0 at concurrency
+    1/2/4, 0.98 at concurrency 8 - the long prefill at that depth eats the
+    entire test window before any decode tokens get measured). No
+    concurrency scaling either: aggregate decode tok/s is flat-to-declining
+    across concurrency 1/2/4/8 at every context depth (e.g. 25.4 at c=1 vs
+    20.8 at c=8, ctx=0) - unlike halogen's genuine 64-69 tok/s aggregate
+    scaling at c=4, ds4 gets no benefit from concurrent requests.
+
+    VERDICT: TESTED_NOT_VIABLE. ds4 does not crash and does not leak memory
+    under soak, so the core premise (an independent, non-llama.cpp attention
+    implementation sidestepping the QSA vision-OOM bug) is technically
+    confirmed - but it loses on every performance axis that matters for
+    Chris's actual use case (slower prefill, decode that falls off a cliff
+    at depth, no concurrency scaling, a crash-scenario recovery nearly two
+    orders of magnitude slower than the alternatives). halogen remains the
+    clear leading alternative-engine candidate from this round of trials. Not
+    promoted to standing - this is a closed research trial, not a
+    production candidate.
 bench:
   concurrency: "1"
   contexts: "0,16384,32768,65536"
