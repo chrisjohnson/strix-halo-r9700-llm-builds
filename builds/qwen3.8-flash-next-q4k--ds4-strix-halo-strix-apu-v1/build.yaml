@@ -107,6 +107,13 @@ derived:
     clear leading alternative-engine candidate from this round of trials. Not
     promoted to standing - this is a closed research trial, not a
     production candidate.
+
+    DISK CLEANUP (2026-10-08): weights (/var/lib/ai-models/qwen3.8-flash-
+    next-ds4-q4k, 166 GiB) and both docker images (kyuz0-ds4-strix-halo,
+    kyuz0/strix-halo-ds4-toolbox) deleted per Chris's explicit go-ahead -
+    disk was at 97% full and this verdict isn't going to change. This
+    build.yaml/docker-compose.yaml stay committed as the record of what was
+    tried; re-running this build requires re-downloading the model first.
 bench:
   concurrency: "1"
   contexts: "0,16384,32768,65536"
