@@ -1,0 +1,61 @@
+name: qwen3.8-flash-next-hgnv2--halogen-strix-apu-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: halogen-flash-server-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: halogen-native-v2 (4.16 bits/weight avg, calibrated precision placement)
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    M-167 follow-up. Trial halogen's NATIVE v2.hgn checkpoint, not our
+    bring-your-own-GGUF path (used by both prior halogen builds this
+    session). Surfaced during the disk-cleanup pass when Chris asked about
+    halogen's native weights after seeing a Reddit benchmark where
+    "Halogen 0.15.1 (v2 .hgn)" was the top performer across every depth
+    tested (fastest prefill, fastest decode, fastest 3-turn time of every
+    engine compared, including gufo/UD-Q4_K_XL).
+
+    WHY v2.hgn SPECIFICALLY (checked peonist-ai/halogen-qwen3.8-flash-next's
+    own README directly, not guessed): it is their CURRENT flagship
+    checkpoint, default since engine version 0.15, not a downgrade path.
+    4.16 bits/weight on average (experts 4-bit, mixing layers 6-bit, draft
+    head dense projections 8-bit), with precision calibrated per-tensor
+    against measured quality loss - the README documents concentrating
+    most of the quality-recovery budget in a small set of tensors (twelve
+    o_proj tensors, 0.09% of the file) that cost disproportionate quality
+    at 4-bit, now shipped at 8-bit. Two alternatives in the same repo were
+    deliberately NOT chosen: `ht43.hgn` is explicitly documented as a
+    smaller/lower-quality opt-in (~8 GiB less resident, slower prefill/
+    decode, "a smaller checkpoint, opt in") - directly against Chris's
+    "err toward Q4_K_XL or better" instruction. `w4b.hgn` (115.55 GiB) is
+    the OLD 0.14 checkpoint v2 superseded - still loads, kept only for
+    backward compatibility, with no documented quality case for choosing
+    it over v2 (the README frames v2 as the replacement, not a smaller
+    sibling).
+
+    DOWNLOAD: v2.hgn (62.1 GiB) + its required ngram.hgn lookup table
+    (47.7 GiB, paged rather than fully resident - same file halogen's own
+    preflight warnings referenced as "the model's 47.7 GiB lookup table"
+    during the Q4_K_XL trial) = ~110 GiB total, to
+    /var/lib/ai-models/qwen3.8-flash-next-hgnv2/. No separate MTP
+    draft-head file needed - the native checkpoint carries its own MTP
+    head built in (unlike the GGUF path, which needs the extracted
+    qwen38-flash-next-mtp.hgn sidecar). Vision tower and tokenizer reused
+    from the existing shared halogen-flash-next-sidecars mount (quant-
+    independent, already downloaded for M-165/M-167).
+
+    NOT YET DOWNLOADED/BUILT/TESTED as of this commit - download queued
+    next. Will need the same validation sequence as every other engine/
+    quant trial this session before any conclusion: correctness
+    (text+vision), the historical crash-repro, a mild soak, and a real
+    orchestrator benchmark - compared directly against Q4_K_XL's own real
+    numbers (prefill 1740-2369 tok/s co-resident, decode scaling through
+    c4), not assumed from the Reddit numbers alone (different hardware/
+    config, not a direct substitute for our own measurement).
+bench:
+  contexts: "0,16384,32768,65536,131072"
+  duration: 30

@@ -1,0 +1,50 @@
+# M-167 follow-up. Halogen's NATIVE checkpoint (v2.hgn), not our bring-your-
+# own-GGUF path used by every other halogen build this session
+# (qwen3.8-flash-next-iq4xs--halogen-strix-apu-v1,
+# qwen3.8-flash-next-q4kxl--halogen-strix-apu-v1). Per peonist-ai's own
+# repo README (checked directly, not guessed): v2.hgn is their CURRENT
+# flagship checkpoint (default since 0.15), 4.16 bits/weight average with
+# calibrated high-precision placement on the tensors measured to lose the
+# most quality at 4-bit - explicitly NOT a downgrade path. The two
+# alternatives in that repo were both ruled out: `ht43.hgn` is documented
+# as a smaller/lower-quality opt-in (goes against "err toward Q4_K_XL or
+# better"); `w4b.hgn` is the OLD checkpoint v2 superseded, kept only for
+# backward compatibility, with no documented quality advantage over v2.
+#
+# v2.hgn needs its ngram.hgn lookup table alongside it (47.7 GiB, paged
+# rather than resident - this is the same "47.7 GiB lookup table" halogen's
+# own preflight warnings referenced during the Q4_K_XL trial). No separate
+# MTP draft-head file needed here - unlike the GGUF path, the native
+# checkpoint carries its own MTP head built in. Vision tower and tokenizer
+# are reused from the existing shared sidecars mount (quant/checkpoint-
+# independent files, already downloaded for M-165/M-167).
+#
+# Port 8211: next free slot after Q4_K_XL's 8210.
+#
+# NOT YET DOWNLOADED/TESTED as of this commit - see build.yaml status.
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+services:
+  qwen3.8-flash-next-hgnv2--halogen-strix-apu-v1:
+    image: ghcr.io/peonist-ai/halogen-flash-server:0.16.4
+    container_name: qwen3.8-flash-next-hgnv2--halogen-strix-apu-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    ipc: host
+    ulimits:
+      memlock: -1
+    environment:
+      HALOGEN_CHECKPOINT: /native-ckpt/qwen38-flash-next-v2.hgn
+      HALOGEN_VISION_TOWER: /models/qwen38-flash-next-vision.hgn
+      HALOGEN_TOKENIZER: /models/tokenizer
+      HALOGEN_BIND: "0.0.0.0"
+      HALOGEN_API_PORT: "8731"
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-hgnv2:/native-ckpt:ro
+      - /var/lib/ai-models/halogen-flash-next-sidecars:/models
+    ports:
+      - "127.0.0.1:8211:8731"
+    restart: unless-stopped
