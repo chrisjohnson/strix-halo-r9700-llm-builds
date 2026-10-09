@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-hgnv2--halogen-strix-apu-v1
-status: PLANNED-NOT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -56,6 +56,56 @@ derived:
     numbers (prefill 1740-2369 tok/s co-resident, decode scaling through
     c4), not assumed from the Reddit numbers alone (different hardware/
     config, not a direct substitute for our own measurement).
+
+    VALIDATED (2026-10-09), occamy co-resident throughout. Downloaded
+    v2.hgn + ngram.hgn (~110 GiB), both verified byte-exact against the HF
+    API before use. Correctness: text + vision both correct.
+
+    STARTUP FINDING, before any benchmark: the full requested
+    524288-position KV pool was reserved successfully - no auto-shrink,
+    unlike Q4_K_XL, which had to fall back to 262144 ("host RAM cannot
+    spare it"). Real pinned weights: 62.11 GiB vs Q4_K_XL's 79.6 GiB -
+    ~17.5 GiB less locked memory for the same shared 47.7 GiB n-gram table
+    (paged/reclaimable either way, not a structural difference between the
+    two). Real `free -h` available right after boot: ~83 GiB, vs Q4_K_XL's
+    typical 10-17 GiB band under the same co-resident conditions.
+
+    CRASH-SAFETY: the exact M-158/M-159 repro (165k depth, image, +8192
+    tokens) SURVIVED in 6.1s - ~2.8x faster than Q4_K_XL's 17.2s, matching
+    the IQ4_XS halogen build's own 6.4s. Memory held essentially flat
+    (83 -> 82 GiB available).
+
+    MILD AGENTIC SOAK (4 cycles, 32 turns, 8 screenshots): zero failures,
+    RestartCount 0 on both this build and occamy. Per-turn latency
+    noticeably faster than Q4_K_XL's equivalent soak (1.1-2.5s/turn vs
+    2.3-8.3s/turn). Memory flat (82 -> 81 GiB available).
+
+    REAL ORCHESTRATOR BENCHMARK (run 172, 19 min - faster than Q4_K_XL's
+    22 min - committed alongside this file, occamy co-resident throughout):
+    a clean sweep against Q4_K_XL's own real co-resident numbers (run 171)
+    on every axis tested:
+      prefill:    2327-2681 tok/s  vs Q4_K_XL's 1740-2369  (+30-34%)
+      decode c1:    42.5-50.8 tok/s  vs Q4_K_XL's 25.1-35.0  (+50-70%)
+      decode c4 agg: 82.8-90.4 tok/s  vs Q4_K_XL's 34.1-66.2  (up to 2.4x)
+      decode c8 agg: 76.4-84.1 tok/s  vs Q4_K_XL's 34.7-62.0  (up to 2.3x)
+    Most significant: Q4_K_XL's concurrency scaling COLLAPSED at the
+    deepest tested depth (131072 ctx, c4 dropped to 34.1 tok/s, no longer
+    scaling past c1) - v2.hgn's did NOT (c4 held at 82.8 tok/s at the same
+    depth). This isn't a marginal win on one metric; it's better on every
+    axis tested, with the deep-context concurrency robustness being the
+    most consequential difference given Chris's real multi-session usage.
+
+    NOT YET RUN: the deep-context (~123k tokens) + vision + compaction
+    soak with occamy co-resident that Q4_K_XL went through before its own
+    promotion (M-167 FOLLOW-UP 3) - the mild soak above only reached ~7k
+    cached tokens/cycle. Given how decisively this build already leads on
+    every other axis, including the real benchmark's own depth sweep to
+    131k, this gap feels lower-risk than it was for Q4_K_XL, but hasn't
+    been directly tested yet.
+
+    STRONG PROMOTION CANDIDATE - better than the current standing build on
+    every measured axis, not promoted yet pending Chris's review and
+    (optionally) the one remaining deep-context co-resident soak.
 bench:
   contexts: "0,16384,32768,65536,131072"
   duration: 30
