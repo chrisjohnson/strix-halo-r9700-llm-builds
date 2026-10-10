@@ -1,0 +1,16 @@
+name: docker
+services:
+  openjev-27b-q4km--llamacpp-vulkan-radv-strix-apu-v1:
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+    container_name: openjev-27b-q4km--llamacpp-vulkan-radv-strix-apu-v1
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    volumes:
+    - /var/lib/ai-models/openjev-27b-q4km:/models:ro
+    command: >-
+      -m /models/OpenJev-Q4_K_M.gguf --mmproj /models/mmproj-OpenJev-Q8_0.gguf
+      -dev Vulkan1 -ngl 999 -fa 1 -np 1 -c 32768 --host 0.0.0.0 --port 8080
+      -a openjev-27b-llamacpp --metrics
+    ports:
+    - 127.0.0.1:8212:8080

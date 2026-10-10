@@ -1,0 +1,89 @@
+name: openjev-27b-q4km--llamacpp-vulkan-radv-strix-apu-v1
+status: null
+derived:
+  engine: llamacpp-vulkan-radv
+  model: OpenJev-27B-v1.1
+  params: 27B
+  active_params: 27B
+  quant: Q4_K_M
+  mtp: false
+  dflash: false
+  target_gpu: strix-apu
+  vision: false
+  notes: >-
+    New model TYPE for this catalog: a "decision model" (TypeSafe's "System
+    One" category, following Jev, launched 2026-09), not a chat/completion
+    model. Takes unstructured state + a schema of typed questions, returns a
+    probability for every allowed option in a single forward pass - no
+    autoregressive generation. Served via llama.cpp's native /v1/systemone
+    endpoint (ggml-org/llama.cpp#29818, merged 2026-10-02; Clef support added
+    separately same day in #29831).
+
+    Chris asked for "a jev-like model" running on this box. Surveyed the
+    open ecosystem that's sprung up since Jev's launch: Clef/Clef-flash
+    (Cloudflare, Apache 2.0, Qwen3.8/3.5-based), Strands Decider 2B (AWS,
+    fully open incl. training data, but no clear GGUF/llama.cpp serving
+    path - needs a custom pip package + harness SDK), OpenJev-27B-v1.1
+    (Zefan Cai, LoRA over Qwen3.8-27B, CC BY-NC 4.0 - non-commercial only),
+    plus several smaller/less-benchmarked options (Laya 0.4B, Julia-1 0.1B,
+    Kev-4B, lev-4B, Bespoke-Nimble-9B-v3, LiquidAI d1-3B/d1-omni-600M,
+    Perplexity pplx-decider-v1-27b, Together Tev1-4B).
+
+    PICKED OpenJev-27B-v1.1: scores 80/111 on JevBench Hard vs proprietary
+    Jev's own 81/111 - essentially parity, the closest open model found to
+    the model that started this category. Initially passed over for Clef-27B
+    on licensing grounds (CC BY-NC 4.0 blocks commercial use), but Chris
+    confirmed "I am non-commercial" - removing that blocker and making
+    OpenJev the stronger pick on raw accuracy. Used the official
+    ggml-org/OpenJev-GGUF release (pre-quantized, matches the upstream PR's
+    own test matrix) rather than the original author's LoRA-only release,
+    which has no documented GGUF/llama.cpp path.
+
+    Checkpoint: ggml-org/OpenJev-GGUF, OpenJev-Q4_K_M.gguf (17.67 GiB) +
+    mmproj-OpenJev-Q8_0.gguf (0.59 GiB), downloaded to
+    /var/lib/ai-models/openjev-27b-q4km. Q4_K_M chosen over Q8_0 (26.63 GiB)
+    for the smaller memory footprint given this build shares a GPU with an
+    already-resident standing model (see below) - no benchmark comparing
+    the two quants' JevBench accuracy was found, so this is an unverified
+    assumption worth revisiting if OpenJev's own accuracy looks off in
+    practice.
+
+    Image: ghcr.io/ggml-org/llama.cpp:server-vulkan (official, pre-built -
+    pulled and smoke-tested directly on the box, created 2026-10-09, so it
+    post-dates the systemone PRs). Confirmed via --list-devices that Vulkan1
+    is this box's APU ("Radeon 8060S Graphics (RADV STRIX_HALO)") and
+    Vulkan0 is the R9700 - matches every other build in this catalog's
+    Vulkan0=r9700/Vulkan1=strix-apu convention. Did NOT reuse the
+    kyuz0/amd-strix-halo-toolboxes image every other llama.cpp-on-this-APU
+    build in this catalog uses - that image's own llama.cpp build date is
+    unknown and the systemone endpoint is brand new (merged one week before
+    this build), so the official upstream image was the safer bet for
+    actually having the feature. No group_add needed (unlike the kyuz0
+    builds) - confirmed this image runs as root and --list-devices worked
+    with just the raw /dev/kfd + /dev/dri device mounts, no group
+    membership required.
+
+    -c 32768: conservative default, not derived from a specific measured
+    need - decision-model "state" inputs are typically much shorter than a
+    full chat transcript, but this hasn't been stress-tested. Revisit if the
+    benchmark step (M-1xx) or real usage calls for more.
+
+    GPU PLACEMENT - the real risk this build exists to test: the R9700 is
+    already full (occamy, ~30.8 GiB / 32 GiB VRAM) and the APU already hosts
+    the standing qwen3.8-flash-next-hgnv2 (big-moe) build. There is no third
+    GPU. This build deliberately targets the SAME physical device
+    (Vulkan1/strix-apu) as the standing production model - a form of
+    co-residency never tested this session (every prior multi-model
+    pairing, e.g. occamy + flash-next, split across the two separate GPUs).
+    Brought up via a PLAIN `modelctl up` (never --exclusive, which would
+    stop v2.hgn first) - v2.hgn's health was checked immediately before and
+    after bring-up to confirm the shared APU tolerates two concurrent
+    llama.cpp/halogen processes. See the Decision log / Signals for the
+    actual result.
+
+    STATUS AT COMMIT TIME: build dir only (compose + build.yaml) - weights
+    downloading in the background, image already pulled and smoke-tested
+    (device enumeration only, not yet a real load). Per this catalog's own
+    sequencing convention, this file will be updated once the model is
+    actually loaded, verified (a real /v1/systemone request), and
+    benchmarked.
