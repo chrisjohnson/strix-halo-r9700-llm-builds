@@ -25,8 +25,21 @@ services:
     - /var/lib/ai-models/qwen3.8-flash-next-awq-int4-ple-cache:/ple
     - sglang-qwen38-awq-tunableop:/root/.tunableop
     - sglang-qwen38-awq-triton-cache:/root/.cache/sglang
-    - ../../docker/jvantuyl-strix-halo-sglang-configs/moe/qwen38-flash-next:/moe-configs:ro
-    - ../../docker/jvantuyl-strix-halo-sglang-configs/chat/qwen38.jinja:/chat-template.jinja:ro
+    # Absolute host paths, not repo-relative (../../docker/...): relative
+    # bind-mount sources get resolved by the docker-compose CLIENT against
+    # ITS OWN filesystem view before being sent to the host daemon as a
+    # literal path string. When modelctl runs directly on the box this
+    # happens to work (the live checkout's $HERE really is the host path),
+    # but the orchestrator invokes modelctl from INSIDE its own container
+    # (a sibling-container/docker-outside-of-docker setup) where $HERE
+    # resolves to that container's own /bench view - the daemon then can't
+    # find anything at that string on the real host and silently creates
+    # an empty directory instead of the intended file (confirmed live:
+    # IsADirectoryError on chat-template.jinja). No other build in this
+    # catalog uses a repo-relative mount for exactly this reason - matching
+    # that convention instead of re-deriving a host-side-only path scheme.
+    - /var/lib/git-checkouts/strix-halo-r9700-llm-builds/docker/jvantuyl-strix-halo-sglang-configs/moe/qwen38-flash-next:/moe-configs:ro
+    - /var/lib/git-checkouts/strix-halo-r9700-llm-builds/docker/jvantuyl-strix-halo-sglang-configs/chat/qwen38.jinja:/chat-template.jinja:ro
     command: >-
       python3 -m sglang.launch_server --model-path
       /models/qwen38 --served-model-name
