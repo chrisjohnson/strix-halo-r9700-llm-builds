@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-awq-int4--sglang-strixhalo-mtp-v1
-status: UNTESTED-BUT-DOWNLOADED
+status: TESTED_VIABLE
 derived:
   engine: jvantuyl-strix-halo-sglang-v1
   model: Qwen3.8-Flash-Next
@@ -114,6 +114,70 @@ derived:
         so the same failure mode may simply not apply - to be confirmed by
         an actual long-context vision test, not assumed).
 
-    This build.yaml's status field (UNTESTED-BUT-DOWNLOADED) is provisional
-    and will be corrected to TESTED_VIABLE / TESTED_NOT_VIABLE / BROKEN once
-    the real run completes - not left stale.
+    VALIDATED (2026-10-10). Four real infra bugs found and fixed via live
+    failures, not guessed: (1) `modelctl`'s preflight check requires a
+    `.download-complete` marker the PLE conversion script never writes
+    (same gap hit earlier with ds4, M-162) - created after independently
+    verifying the conversion output was genuinely complete; (2) the two
+    `external: true` docker volumes this compose file declares
+    (`docker_sglang-qwen38-awq-tunableop`, `...-triton-cache`) were never
+    pre-created - true of every sglang build in this catalog, not unique to
+    this one, `docker volume ls` showed zero sglang volumes existing at
+    all; (3) the chat-template/moe-config bind mounts used repo-relative
+    paths (`../../docker/...`), which resolve against the CALLING
+    process's own filesystem view before being sent to the host daemon as
+    a literal string - works when modelctl runs directly on the box, but
+    breaks under the orchestrator's sibling-container setup (its own
+    `/bench` view resolves to a path that doesn't exist on the real host,
+    so Docker silently creates an empty directory instead of mounting the
+    intended file - confirmed live via `IsADirectoryError` on
+    chat-template.jinja); (4) `llm_decode_bench.py` refused to run without
+    `--enable-metrics` on the sglang server - every sibling sglang build in
+    this catalog already had this flag, this one was missing it.
+
+    Correctness: text + vision both correct. Crash-safety: the M-158/M-159
+    scenario adapted to this build's own `--context-length 131072` ceiling
+    (125k target depth, landed ~137.5k via the repro script's own
+    incremental-growth overshoot - handled fine despite nominally exceeding
+    the configured limit) - SURVIVED in 14.7s (vs halogen v2.hgn's 6.1s,
+    Q4_K_XL's 17.2s, ds4's 378s - solidly mid-pack). Memory held exactly
+    flat (25 GiB available before and after, zero drift).
+
+    REAL ORCHESTRATOR BENCHMARK (run 177, committed alongside this file):
+    prefill 936-1082 tok/s across 8k-65k depth (131k context point missing
+    from the matrix - likely exceeded the configured context length at
+    that test's specific prompt construction) - notably slower than the
+    standing v2.hgn build's 2327-2681 tok/s, though faster than this
+    fork's own author-claimed 450-480 tok/s (different hardware/config,
+    not directly comparable). Decode shows GENUINE multi-slot scaling -
+    the one real architectural property this trial exists to confirm:
+    ctx=0 c1=8.8 -> c8=32.4 tok/s (3.7x), ctx=16384 c1=9.4 -> c8=50.2 tok/s
+    (5.3x). But single-stream decode is weak (8.8-11.0 tok/s vs v2.hgn's
+    42.5-50.8) and aggregate throughput at every tested concurrency level
+    still trails v2.hgn's own numbers (sglang's best observed aggregate,
+    50.2 tok/s at c8/ctx16k, vs v2.hgn's worst observed aggregate, 76.4
+    tok/s at c8/ctx131k) - v2.hgn's much higher per-stream speed outpaces
+    sglang's real concurrency gains at every point actually measured.
+
+    DIRECT CONCURRENCY TEST (beyond the orchestrator's own matrix, to
+    directly demonstrate the real-world effect): 4 identical ~150-word
+    story-generation requests run sequentially took 113.0s total; the same
+    4 requests fired simultaneously took 37.6s total - a real, measured
+    3.0x speedup from genuine parallel request handling. This is the
+    concrete capability no llama.cpp-based engine tried this session could
+    demonstrate at all (confirmed broken above --parallel 1 since M-157;
+    ds4 appears to process requests serially regardless of what's sent
+    concurrently).
+
+    VERDICT: TESTED_VIABLE - the engine works correctly and demonstrates
+    the real architectural property (genuine multi-slot concurrency) this
+    trial was built to confirm or refute. CONFIRMED, not assumed. But it
+    does not beat the current standing engine (halogen v2.hgn, M-168) on
+    any single measured axis - prefill, single-stream decode, or aggregate
+    throughput at any tested concurrency level - because v2.hgn's raw
+    per-stream speed is high enough that its own (architecturally
+    different, pre-allocated-pool-based) concurrency handling still wins
+    on absolute numbers despite not being "real" OS-level parallelism the
+    way sglang's is. Not promoted to standing - a genuinely interesting,
+    correctly-functioning alternative that the current production stack
+    already beats on every number that matters for Chris's real workload.
