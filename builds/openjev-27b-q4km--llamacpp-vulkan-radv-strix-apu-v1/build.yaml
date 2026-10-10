@@ -1,5 +1,5 @@
 name: openjev-27b-q4km--llamacpp-vulkan-radv-strix-apu-v1
-status: null
+status: TESTED_VIABLE
 derived:
   engine: llamacpp-vulkan-radv
   model: OpenJev-27B-v1.1
@@ -81,9 +81,55 @@ derived:
     llama.cpp/halogen processes. See the Decision log / Signals for the
     actual result.
 
-    STATUS AT COMMIT TIME: build dir only (compose + build.yaml) - weights
-    downloading in the background, image already pulled and smoke-tested
-    (device enumeration only, not yet a real load). Per this catalog's own
-    sequencing convention, this file will be updated once the model is
-    actually loaded, verified (a real /v1/systemone request), and
-    benchmarked.
+    VALIDATED (2026-10-10). The catalog had never brought up two models
+    on the SAME physical GPU at once before this trial (every prior
+    pairing split across the two separate GPUs) - this needed a flake.lock
+    bump + nixos-rebuild switch first, since modelctl reads the
+    Nix-pinned /etc/local-ai-machine-components/ snapshot, not the live
+    git checkout the orchestrator uses. The switch itself briefly took
+    down all containers mid-session once before (unrelated nixpkgs bump,
+    M-160 era) via a docker.socket restart; this time nothing restarted
+    and litellm/occamy/hgnv2 were all still "Up" and healthy immediately
+    after.
+
+    Co-residency result: brought up via plain `modelctl up` (never
+    --exclusive). v2.hgn's /health returned HTTP 200 both immediately
+    before and after, and a real /v1/chat/completions call against it
+    post-bring-up returned a normal completion at its usual ~33-40 tok/s -
+    unaffected by sharing the APU with a second loaded model.
+
+    Memory impact (free -h + per-card GTT, before vs after): available
+    86 GiB -> 67 GiB (-19 GiB); card1 (strix-apu) GTT 27.32 GiB -> 46.91
+    GiB (+19.6 GiB, matching the ~18.26 GiB of GGUF weights plus modest
+    KV overhead at -c 32768); card0 (R9700/occamy) GTT essentially
+    unchanged (3.2 -> 3.9 GiB). Cleanly additive - no double-booking, no
+    contention visible in v2.hgn's own numbers. 67 GiB available
+    afterward, still healthy headroom. docker stats under-reports both
+    this container's (256 MiB) and v2.hgn's (1.1 GiB) real footprint, the
+    same mlocked/mmap-outside-cgroup-accounting quirk documented on the
+    v2.hgn build.
+
+    Correctness (scripts/benchmark-decider.py, 6 unambiguous-by-
+    construction triage/routing/scoring cases): 6/6 passed (first run hit
+    4/6 - a bug in the benchmark's own score-type check comparing a raw
+    float to string labels, fixed same session; the model's actual
+    answers were correct both times). Latency direct to the container:
+    min 253ms / p50 264ms / max 325ms. usage.output_tokens confirmed 0 on
+    every request - a real, measured confirmation (not an assumption) that
+    this architecture does a single forward pass with no autoregressive
+    generation and no growing KV cache under repeated use.
+
+    End-to-end via litellm's new /v1/systemone pass-through (see
+    docker/litellm/config.yaml in local-ai-machine): a real authenticated
+    request through the proxy returned the correct billing/shipping
+    classification (confidence 0.9999) in 1.59s - higher than the direct
+    264ms (proxy overhead), still well within useful range for any
+    synchronous caller.
+
+    VERDICT: TESTED_VIABLE. Runs correctly, co-resides safely with the
+    standing v2.hgn build on the same physical GPU, costs a clean ~19.6
+    GiB with no interference, and is reachable end-to-end through
+    litellm. NOT wired into DSH as a selectable "model" (see
+    semantic-loop-kicker.mjs finding above, and Chris's explicit call to
+    expose the raw endpoint only for now) - reachable via curl or
+    scripts/benchmark-decider.py, not yet via any DSH plugin.
