@@ -147,9 +147,6 @@ def check(case, answers):
         v = answers.get(q, {}).get("noul", 2)
         if v > 0.5:
             return False, f"{q}: expected noul<=0.5, got {v}"
-    if "expect_score_in" in case:
-        for q, allowed in [(k, v) for k, v in case.items() if k == "expect_score_in"]:
-            pass
     return True, ""
 
 
@@ -180,9 +177,12 @@ def main():
             ok, detail = check(case, answers)
         elif "expect_score_in" in case:
             q = list(case["questions"].keys())[0]
-            got = answers.get(q, {}).get("score") or answers.get(q, {}).get("choice")
-            ok = got in case["expect_score_in"]
-            detail = f"{q}: got {got!r}, allowed {case['expect_score_in']}"
+            criteria = case["questions"][q]["criteria"]
+            raw = answers.get(q, {}).get("score")
+            idx = round(raw) if raw is not None else -1
+            label = criteria[idx] if 0 <= idx < len(criteria) else None
+            ok = label in case["expect_score_in"]
+            detail = f"{q}: raw={raw!r} -> {label!r}, allowed {case['expect_score_in']}"
 
         status = "PASS" if ok else "FAIL"
         if ok:
