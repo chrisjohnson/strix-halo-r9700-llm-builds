@@ -9,7 +9,7 @@ derived:
   mtp: false
   dflash: false
   target_gpu: strix-apu
-  vision: false
+  vision: true
   notes: >-
     New model TYPE for this catalog: a "decision model" (TypeSafe's "System
     One" category, following Jev, launched 2026-09), not a chat/completion
