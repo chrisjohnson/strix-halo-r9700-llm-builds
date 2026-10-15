@@ -1,0 +1,482 @@
+{
+  "schema_version": 2,
+  "metadata": {
+    "engine": "sglang",
+    "model": "halogen-qwen3.8-flash-next",
+    "server": "localhost:8213",
+    "timestamp": "2026-10-15T04:10:48.843476",
+    "duration_per_test": 30.0,
+    "max_tokens": 8192,
+    "max_total_tokens": 0,
+    "concurrency_levels": [
+      1,
+      4
+    ],
+    "context_lengths": [
+      0,
+      16384,
+      32768,
+      65536,
+      131072,
+      524288,
+      1048576
+    ]
+  },
+  "bench_tool_commit": "308f9b29f3f3de211a9b6f3763d38ea9b0e12bda",
+  "target_launch_config": {
+    "container": {
+      "id": "40d1969a8fe2bc55baf68b8e12bce643fe854ba6ace7e878d5ade0efdc021965",
+      "image": "ghcr.io/peonist-ai/halogen-flash-server:0.18.4",
+      "cmd": [
+        "all"
+      ],
+      "entrypoint": [
+        "/usr/local/bin/entrypoint.sh"
+      ],
+      "env": [
+        "HALOGEN_CTX=1048576",
+        "HALOGEN_VISION_TOWER=/models/qwen38-flash-next-vision.hgn",
+        "HALOGEN_BIND=0.0.0.0",
+        "HALOGEN_WEIGHTS_LOCK=1",
+        "HALOGEN_ROPE_YARN=4",
+        "HALOGEN_CHECKPOINT=/native-ckpt/qwen38-flash-next-v2.hgn",
+        "HALOGEN_TOKENIZER=/models/tokenizer",
+        "HALOGEN_API_PORT=8731",
+        "PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LANG=C.UTF-8",
+        "GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305",
+        "PYTHON_VERSION=3.12.15",
+        "PYTHON_SHA256=c2c4321961fab0fb999d66e0cecf521c2ab3994c7992873ea99e306c1094fd5a",
+        "ROCM_SITE=/usr/local/lib/python3.12/site-packages",
+        "ROCM_PATH=/usr/local/lib/python3.12/site-packages/_rocm_sdk_core",
+        "HIP_PATH=/usr/local/lib/python3.12/site-packages/_rocm_sdk_core",
+        "HIP_DEVICE_LIB_PATH=/usr/local/lib/python3.12/site-packages/_rocm_sdk_core/lib/llvm/amdgcn/bitcode",
+        "LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/_rocm_sdk_core/lib:/usr/local/lib/python3.12/site-packages/_rocm_sdk_libraries/lib",
+        "HALOGEN_ARCH=gfx1151",
+        "HIP_FORCE_DEV_KERNARG=1",
+        "PYTHONUNBUFFERED=1",
+        "HF_HUB_OFFLINE=1",
+        "TRANSFORMERS_VERBOSITY=error",
+        "HALOGEN_ATTN_FA=64",
+        "HALOGEN_PROMPT_CACHE=2",
+        "HALOGEN_PREFILL_CHUNK=32768",
+        "HALOGEN_KV_SLOTS=4",
+        "HALOGEN_MAX_TOK=32768",
+        "HALOGEN_MATMUL_ALGOS=1",
+        "HALOGEN_MATMUL_BUCKET=1",
+        "HALOGEN_MATMUL_TUNING_FILE=/opt/halogen/flash-tune.plan",
+        "HALOGEN_DRAFT_VOCAB_FILE=/opt/halogen/draft-vocab.lists",
+        "HALOGEN_PORT=8730",
+        "HALOGEN_MAX_TOKENS_CAP=65536",
+        "HALOGEN_QUEUE_TIMEOUT=3600",
+        "HALOGEN_IMAGE_VERSION=0.18.4",
+        "HALOGEN_IMAGE_MODES=all engine api bench sweep convert inspect verify ppl niah"
+      ],
+      "devices": [
+        {
+          "PathOnHost": "/dev/kfd",
+          "PathInContainer": "/dev/kfd",
+          "CgroupPermissions": "rwm"
+        },
+        {
+          "PathOnHost": "/dev/dri",
+          "PathInContainer": "/dev/dri",
+          "CgroupPermissions": "rwm"
+        }
+      ],
+      "group_add": [
+        "26",
+        "303"
+      ],
+      "memory_limit_bytes": 0,
+      "created": "2026-10-15T03:33:57.549124975Z"
+    },
+    "image": {
+      "id": "sha256:1a458cd6decdd3a2c27f96196cc3a0bc853cbb3905320c3461d29137072faa78",
+      "repo_tags": [
+        "ghcr.io/peonist-ai/halogen-flash-server:0.18.4"
+      ],
+      "repo_digests": [
+        "ghcr.io/peonist-ai/halogen-flash-server@sha256:1a458cd6decdd3a2c27f96196cc3a0bc853cbb3905320c3461d29137072faa78"
+      ],
+      "created": "2026-10-14T11:37:16.153274688Z"
+    },
+    "build_repo_commit": "f91e28ed9e8d81d2b2fd4e8b610f51d5d4ec1cef",
+    "host": {
+      "kernel": "6.18.39",
+      "OperatingSystem": "NixOS 26.11 (Zokor)",
+      "OSType": "linux",
+      "Architecture": "x86_64",
+      "NCPU": 32,
+      "MemTotal": 133626228736,
+      "ServerVersion": "29.8.1",
+      "KernelVersion": "6.18.39"
+    },
+    "captured_at": "2026-10-15T03:34:50Z",
+    "source": "live docker inspect + git rev-parse at benchmark launch time (orchestrator)"
+  },
+  "server_props": {
+    "model_alias": "halogen-qwen3.8-flash-next",
+    "total_slots": 4,
+    "default_generation_settings": {
+      "n_ctx": 1048576,
+      "params": {
+        "n_predict": 8192
+      }
+    },
+    "chat_template": "{%- set image_count = namespace(value=0) %}\n{%- set video_count = namespace(value=0) %}\n{%- macro render_content(content, do_vision_count, is_system_content=false) %}\n    {%- if content is string %}\n        {{- content }}\n    {%- elif content is iterable and content is not mapping %}\n        {%- for item in content %}\n            {%- if 'image' in item or 'image_url' in item or item.type == 'image' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain images.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set image_count.value = image_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Picture ' ~ image_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|image_pad|><|vision_end|>' }}\n            {%- elif 'video' in item or item.type == 'video' %}\n                {%- if is_system_content %}\n                    {{- raise_exception('System message cannot contain videos.') }}\n                {%- endif %}\n                {%- if do_vision_count %}\n                    {%- set video_count.value = video_count.value + 1 %}\n                {%- endif %}\n                {%- if add_vision_id %}\n                    {{- 'Video ' ~ video_count.value ~ ': ' }}\n                {%- endif %}\n                {{- '<|vision_start|><|video_pad|><|vision_end|>' }}\n            {%- elif 'text' in item %}\n                {{- item.text }}\n            {%- else %}\n                {{- raise_exception('Unexpected item type in content.') }}\n            {%- endif %}\n        {%- endfor %}\n    {%- elif content is none or content is undefined %}\n        {{- '' }}\n    {%- else %}\n        {{- raise_exception('Unexpected content type.') }}\n    {%- endif %}\n{%- endmacro %}\n{%- if not messages %}\n    {{- raise_exception('No messages provided.') }}\n{%- endif %}\n{%- set reasoning_instructions = '' %}\n{%- if enable_thinking is undefined or enable_thinking is true %}\n    {%- set resolved_reasoning_effort = reasoning_effort|default('xhigh') %}\n    {%- if resolved_reasoning_effort not in ('xhigh', 'medium', 'low') %}\n        {{- raise_exception('Unexpected reasoning effort ' ~ reasoning_effort ~ '. Supported types are xhigh (default), medium, and low.') }}\n    {%- endif %}\n    {%- if resolved_reasoning_effort == 'xhigh' %}\n        {%- set reasoning_instructions = 'Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.' %}\n    {%- elif resolved_reasoning_effort == 'low' %}\n        {%- set reasoning_instructions = 'Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.' %}\n    {%- endif %}\n{%- endif %}\n{%- if tools and tools is iterable and tools is not mapping %}\n    {{- '<|im_start|>system\\n' }}\n    {%- if reasoning_instructions %}\n        {{- reasoning_instructions + '\\n\\n' }}\n    {%- endif %}\n    {{- \"# Tools\\n\\nYou have access to the following functions:\\n\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\" }}\n    {{- '\\n\\nIf you choose to call a function ONLY reply in the following format with NO suffix:\\n\\n<tool_call>\\n<function=example_function_name>\\n<parameter=example_parameter_1>\\nvalue_1\\n</parameter>\\n<parameter=example_parameter_2>\\nThis is the value for the second parameter\\nthat can span\\nmultiple lines\\n</parameter>\\n</function>\\n</tool_call>\\n\\n<IMPORTANT>\\nReminder:\\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\\n- Required parameters MUST be specified\\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\\n</IMPORTANT>' }}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '\\n\\n' + content }}\n        {%- endif %}\n    {%- endif %}\n    {{- '<|im_end|>\\n' }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {%- set content = render_content(messages[0].content, false, true)|trim %}\n        {%- if content %}\n            {{- '<|im_start|>system\\n' + (reasoning_instructions + '\\n\\n' if reasoning_instructions else '')  + content + '<|im_end|>\\n' }}\n        {%- elif reasoning_instructions %}\n            {{- '<|im_start|>system\\n' + reasoning_instructions + '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- elif reasoning_instructions %}\n        {{- '<|im_start|>system\\n' + reasoning_instructions + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" %}\n        {%- set content = render_content(message.content, false)|trim %}\n        {%- if not(content.startswith('<tool_response>') and content.endswith('</tool_response>')) %}\n            {%- set ns.multi_step_tool = false %}\n            {%- set ns.last_query_index = index %}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if ns.multi_step_tool %}\n    {{- raise_exception('No user query found in messages.') }}\n{%- endif %}\n{%- for message in messages %}\n    {%- set content = render_content(message.content, true)|trim %}\n    {%- if message.role == \"system\" %}\n        {%- if not loop.first %}\n            {{- raise_exception('System message must be at the beginning.') }}\n        {%- endif %}\n    {%- elif message.role == \"user\" %}\n        {{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- endif %}\n        {%- set reasoning_content = reasoning_content|trim %}\n        {%- if preserve_thinking is undefined or preserve_thinking is true or loop.index0 > ns.last_query_index %}\n            {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content + '\\n</think>\\n\\n' + content }}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls and message.tool_calls is iterable and message.tool_calls is not mapping %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if tool_call.function is defined %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {%- if loop.first %}\n                    {%- if content|trim %}\n                        {{- '\\n\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- else %}\n                        {{- '<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                    {%- endif %}\n                {%- else %}\n                    {{- '\\n<tool_call>\\n<function=' + tool_call.name + '>\\n' }}\n                {%- endif %}\n                {%- if tool_call.arguments is defined and tool_call.arguments != '' %}\n                    {%- for args_name, args_value in tool_call.arguments|items %}\n                        {{- '<parameter=' + args_name + '>\\n' }}\n                        {%- set args_value = args_value | string if args_value is string else args_value | tojson | safe %}\n                        {{- args_value }}\n                        {{- '\\n</parameter>\\n' }}\n                    {%- endfor %}\n                {%- endif %}\n                {{- '</function>\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.previtem and loop.previtem.role != \"tool\" %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- content }}\n        {{- '\\n</tool_response>' }}\n        {%- if not loop.last and loop.nextitem.role != \"tool\" %}\n            {{- '<|im_end|>\\n' }}\n        {%- elif loop.last %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- else %}\n        {{- raise_exception('Unexpected message role.') }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is false %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- else %}\n        {{- '<think>\\n' }}\n    {%- endif %}\n{%- endif %}",
+    "modalities": {
+      "vision": true
+    },
+    "build_info": "halogen 0.18.4",
+    "is_sleeping": false
+  },
+  "prefill": {
+    "8192": {
+      "ttft_seconds": 3.141,
+      "tok_per_sec": 2613.0
+    },
+    "16384": {
+      "ttft_seconds": 6.011,
+      "tok_per_sec": 2728.0
+    },
+    "32768": {
+      "ttft_seconds": 11.681,
+      "tok_per_sec": 2807.0
+    },
+    "65536": {
+      "ttft_seconds": 23.384,
+      "tok_per_sec": 2803.0
+    },
+    "131072": {
+      "ttft_seconds": 51.595,
+      "tok_per_sec": 2541.0
+    }
+  },
+  "results": [
+    {
+      "concurrency": 1,
+      "context_tokens": 0,
+      "aggregate_tps": 51.002746402764714,
+      "per_request_avg_tps": 51.002746402764714,
+      "ttft_avg": 0.22941499995067716,
+      "ttft_p50": 0.22941499995067716,
+      "ttft_p99": 0.22941499995067716,
+      "total_tokens": 1729,
+      "wall_time": 33.87010214314796,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 0,
+      "aggregate_tps": 81.99702418274656,
+      "per_request_avg_tps": 20.49925604568664,
+      "ttft_avg": 0.07246142922667786,
+      "ttft_p50": 0.06254346389323473,
+      "ttft_p99": 0.15595580212539062,
+      "total_tokens": 4507,
+      "wall_time": 33.91453474992886,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 16384,
+      "aggregate_tps": 49.898548347557664,
+      "per_request_avg_tps": 49.898548347557664,
+      "ttft_avg": 0.013386028818786144,
+      "ttft_p50": 0.013386028818786144,
+      "ttft_p99": 0.013386028818786144,
+      "total_tokens": 1730,
+      "wall_time": 33.878143660956994,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 16384,
+      "aggregate_tps": 81.09877051104316,
+      "per_request_avg_tps": 20.27469262776079,
+      "ttft_avg": 0.08280085364822298,
+      "ttft_p50": 0.07209933432750404,
+      "ttft_p99": 0.17076005234848707,
+      "total_tokens": 4486,
+      "wall_time": 34.03903793497011,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 32768,
+      "aggregate_tps": 50.08592927557505,
+      "per_request_avg_tps": 50.08592927557505,
+      "ttft_avg": 0.0213220720179379,
+      "ttft_p50": 0.0213220720179379,
+      "ttft_p99": 0.0213220720179379,
+      "total_tokens": 1718,
+      "wall_time": 33.99255695892498,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 32768,
+      "aggregate_tps": 76.65651887207625,
+      "per_request_avg_tps": 19.164129718019062,
+      "ttft_avg": 0.09573401376837865,
+      "ttft_p50": 0.08411570452153683,
+      "ttft_p99": 0.18793732509715483,
+      "total_tokens": 4338,
+      "wall_time": 34.10305398912169,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 65536,
+      "aggregate_tps": 51.14537728544886,
+      "per_request_avg_tps": 51.14537728544886,
+      "ttft_avg": 0.02996196993626654,
+      "ttft_p50": 0.02996196993626654,
+      "ttft_p99": 0.02996196993626654,
+      "total_tokens": 1761,
+      "wall_time": 33.90659288712777,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 65536,
+      "aggregate_tps": 77.28160559329936,
+      "per_request_avg_tps": 19.32040139832484,
+      "ttft_avg": 0.12855793425114825,
+      "ttft_p50": 0.11835862451698631,
+      "ttft_p99": 0.23599934065248815,
+      "total_tokens": 4383,
+      "wall_time": 33.96791726211086,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 131072,
+      "aggregate_tps": 50.891202426224034,
+      "per_request_avg_tps": 50.891202426224034,
+      "ttft_avg": 0.03249782486818731,
+      "ttft_p50": 0.03249782486818731,
+      "ttft_p99": 0.03249782486818731,
+      "total_tokens": 1657,
+      "wall_time": 79.97641062713228,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 131072,
+      "aggregate_tps": 77.23989175660633,
+      "per_request_avg_tps": 19.30997293915158,
+      "ttft_avg": 0.19255539152072743,
+      "ttft_p50": 0.18243787053506821,
+      "ttft_p99": 0.30998151855310424,
+      "total_tokens": 4268,
+      "wall_time": 34.02552401297726,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 524288,
+      "aggregate_tps": 51.09020764738092,
+      "per_request_avg_tps": 51.09020764738092,
+      "ttft_avg": 0.11497321096248925,
+      "ttft_p50": 0.11497321096248925,
+      "ttft_p99": 0.11497321096248925,
+      "total_tokens": 1588,
+      "wall_time": 248.85441848495975,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 524288,
+      "aggregate_tps": 49.08062350637692,
+      "per_request_avg_tps": 12.27015587659423,
+      "ttft_avg": 0.3203977371255557,
+      "ttft_p50": 0.39642080618068576,
+      "ttft_p99": 0.4691714520426467,
+      "total_tokens": 6206,
+      "wall_time": 90.99605916091241,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 1,
+      "context_tokens": 1048576,
+      "aggregate_tps": 48.60921952571377,
+      "per_request_avg_tps": 48.60921952571377,
+      "ttft_avg": 0.22913662600331008,
+      "ttft_p50": 0.22913662600331008,
+      "ttft_p99": 0.22913662600331008,
+      "total_tokens": 1499,
+      "wall_time": 508.6179630749393,
+      "num_completed": 1,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    },
+    {
+      "concurrency": 4,
+      "context_tokens": 1048576,
+      "aggregate_tps": 42.22909947445493,
+      "per_request_avg_tps": 10.557274868613732,
+      "ttft_avg": 0.8989763951394707,
+      "ttft_p50": 0.8989763951394707,
+      "ttft_p99": 0.8989763951394707,
+      "total_tokens": 3449,
+      "wall_time": 90.91492901579477,
+      "num_completed": 4,
+      "num_errors": 0,
+      "server_gen_throughput": 0.0,
+      "server_utilization": 0.0,
+      "server_spec_accept_rate": 0.0,
+      "avg_running_reqs": 0,
+      "max_running_reqs": 0,
+      "avg_queue_reqs": 0,
+      "max_queue_reqs": 0,
+      "queue_fraction": 0.0
+    }
+  ],
+  "summary_table": {
+    "0": {
+      "1": 51.002746402764714,
+      "4": 81.99702418274656
+    },
+    "16384": {
+      "1": 49.898548347557664,
+      "4": 81.09877051104316
+    },
+    "32768": {
+      "1": 50.08592927557505,
+      "4": 76.65651887207625
+    },
+    "65536": {
+      "1": 51.14537728544886,
+      "4": 77.28160559329936
+    },
+    "131072": {
+      "1": 50.891202426224034,
+      "4": 77.23989175660633
+    },
+    "524288": {
+      "1": 51.09020764738092,
+      "4": 49.08062350637692
+    },
+    "1048576": {
+      "1": 48.60921952571377,
+      "4": 42.22909947445493
+    }
+  }
+}
