@@ -1,0 +1,81 @@
+name: qwen3.8-flash-next-hgnv2-yarn1m--halogen-strix-apu-v1
+status: PLANNED
+derived:
+  engine: halogen-flash-server-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: halogen-native-v2 (4.16 bits/weight avg, calibrated precision placement)
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    2026-10-14/15, Chris's explicit request after seeing a Reddit post
+    about peonist-ai/halogen-flash-server 0.12.0: "I saw some feedback
+    that halogen was degrading at context depth. So I fixed that," with
+    real same-machine/same-session before/after numbers (decode at
+    1,004,581 tokens: 27.3 -> 38.3 tok/s; prefill at the same depth: 790
+    -> 937 tok/s). Enabled via HALOGEN_ROPE_YARN=4 HALOGEN_CTX=1048576.
+
+    THIS BOX IS ALREADY ON 0.16.4, past 0.12.0 - checked the project's own
+    CHANGELOG.md directly (not guessed), which confirms 0.12.1: "Model
+    weights: No changes - this is a server/engine update only." Neither
+    env var has ever been set on the standing build (HALOGEN_CTX=262144,
+    no ROPE_YARN). 262144 x 4 = 1048576 exactly - YARN=4 is a 4x RoPE
+    extrapolation of v2.hgn's native trained window, not a new checkpoint.
+    Reuses the exact same /var/lib/ai-models/qwen3.8-flash-next-hgnv2 +
+    halogen-flash-next-sidecars weights as the standing build - no
+    download needed for this trial.
+
+    Also bumped the image 0.16.4 -> 0.18.4 (current latest, confirmed via
+    GitHub tags, released 2026-10-14) while here. Confirmed via
+    CHANGELOG.md real wins since 0.16.4: dual-conversation speculation
+    (0.17.0), auto draft-depth selection removing the need to hand-tune
+    HALOGEN_MTP_DEPTH (0.17.2), decode/prefill speedups in nearly every
+    0.17.x/0.18.x release, and the sessions/"shared context" system
+    (0.18.0+: HALOGEN_FORK=1 lets conversations keep/fork/join a shared
+    KV-cache lineage instead of each paying for a shared prefix
+    separately). One 0.18.4 known issue from the changelog doesn't apply
+    to us: "Unsloth's UD-Q4_K_XL returns empty replies under concurrent
+    requests" - we run the native v2.hgn checkpoint, not that GGUF.
+
+    REAL MEMORY RISK, flagged directly by peonist-ai's own
+    docs/host-setup.md, not assumed: their own quickstart default (pool
+    524288, 4 slots, 32k max tok) already costs ~89GB STANDALONE on a
+    128GB box, and the doc states this server "is designed to own its
+    dedicated machine." Co-residency with another large resident model
+    is explicitly called out as risky - under memory pressure the OOM
+    killer targets the largest resident process (this server, with
+    locked weights) first, and kernel compaction stalls get worse, not
+    better, as free contiguous memory drops. Pool 1048576 here is a
+    further 2x beyond their own quickstart default, and genuinely needs
+    that much pool to serve a real 1M-token request (the pool IS the
+    context ceiling - no way to claim 1M capability with a smaller pool).
+    The doc also names HALOGEN_WEIGHTS_LOCK=1 as the fix for kernel-
+    reclaim stalls specifically - added here (not present on the standing
+    build) since a 4x larger pool makes that risk more likely, not less;
+    mlock ulimit is already satisfied by this build's own
+    `ulimits: memlock: -1`.
+
+    VALIDATION PLAN, matching this project's own established discipline
+    for every prior engine/quant trial (correctness, crash-repro, soak,
+    real benchmark, before any promotion decision) - with one addition
+    given the real risk above: smoke-test this STANDALONE first (occamy
+    left down, matching the vendor doc's own "owns its dedicated machine"
+    guidance for initial validation), reading the server's own startup
+    contiguous-memory line - the doc's explicitly recommended check, NOT
+    `free`/MemAvailable, which miscounts locked weights as reclaimable -
+    before drawing any conclusion about whether the full 1048576 pool is
+    even viable on this hardware. Only once that's confirmed clean does
+    occamy co-residency get tested as its own explicit, closely-watched
+    step, not assumed safe going in. If co-residency proves unsafe at the
+    full pool size, the fallback is dropping to pool 524288 (already
+    empirically proven co-resident-safe by the standing build's own M-168
+    validation) - still a real win (YARN enabled, newer engine) even
+    short of the full 1M target.
+
+    NOT YET TESTED as of this commit.
+bench:
+  contexts: "0,16384,32768,65536,131072,262144,524288,1048576"
+  duration: 30

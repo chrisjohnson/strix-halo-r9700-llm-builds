@@ -1,0 +1,73 @@
+# 2026-10-14/15, Chris's explicit request after a Reddit post
+# (peonist-ai/halogen-flash-server 0.12.0 release) reported fixing
+# attention-at-depth degradation and adding real 1M-context support via
+# HALOGEN_ROPE_YARN (YARN RoPE scale factor) + HALOGEN_CTX. This box is
+# already on 0.16.4 (past 0.12.0) but has never set either env var -
+# v2.hgn's native trained window is 262144, and 262144 x 4 = 1048576, so
+# YARN=4 is a 4x RoPE extrapolation of that same window, not a new
+# checkpoint. Confirmed server-only via the project's own CHANGELOG.md
+# ("0.12.1: Model weights: No changes") - reuses the exact same
+# /var/lib/ai-models/qwen3.8-flash-next-hgnv2 + halogen-flash-next-sidecars
+# mounts as the standing build, no new download.
+#
+# Bumped the image to 0.18.4 (current latest, confirmed via GitHub tags)
+# while here - real wins since our running 0.16.4 per the changelog:
+# dual-conversation speculation (0.17.0), auto draft-depth (0.17.2),
+# decode/prefill speedups across nearly every 0.17.x/0.18.x release, and
+# the sessions/fork "shared context" system (0.18.0+, HALOGEN_FORK=1).
+#
+# HALOGEN_WEIGHTS_LOCK=1 added (not present on the standing build): the
+# project's own docs/host-setup.md names this as the fix for kernel-
+# reclaim stalls under memory pressure specifically, which a 4x larger KV
+# pool makes more likely, not less - mlock ulimit is already satisfied by
+# the existing `ulimits: memlock: -1` below.
+#
+# Real risk flagged directly by docs/host-setup.md, not assumed: their
+# own quickstart default (pool 524288, 4 slots, 32k max tok) already
+# costs ~89GB STANDALONE, and the doc states this server "is designed to
+# own its dedicated machine" - co-residency with another big model
+# (occamy, this box's other standing build) is explicitly called out as
+# risky (OOM killer targets this process first under pressure). Pool
+# 1048576 here is a further 2x beyond their own quickstart default.
+# Validation plan: smoke-test this standalone first (occamy left down),
+# read the server's own startup contiguous-memory line (the doc's
+# explicitly recommended check, NOT `free`/MemAvailable) before drawing
+# any conclusion, THEN treat co-residency with occamy as its own
+# separate, closely-watched soak step - not assumed safe going in.
+#
+# Port 8213: next free slot after openjev's 8212.
+#
+# NOT YET TESTED as of this commit - see build.yaml status.
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+# Deliberately named as its own build (not an edit to the standing
+# hgnv2 build) - this project's own convention for any engine/config
+# trial, so the standing build's known-good definition stays untouched
+# and trivially restorable if this doesn't pan out.
+services:
+  qwen3.8-flash-next-hgnv2-yarn1m--halogen-strix-apu-v1:
+    image: ghcr.io/peonist-ai/halogen-flash-server:0.18.4
+    container_name: qwen3.8-flash-next-hgnv2-yarn1m--halogen-strix-apu-v1
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - "26"    # video
+      - "303"   # render
+    ipc: host
+    ulimits:
+      memlock: -1
+    environment:
+      HALOGEN_CHECKPOINT: /native-ckpt/qwen38-flash-next-v2.hgn
+      HALOGEN_VISION_TOWER: /models/qwen38-flash-next-vision.hgn
+      HALOGEN_TOKENIZER: /models/tokenizer
+      HALOGEN_BIND: "0.0.0.0"
+      HALOGEN_API_PORT: "8731"
+      HALOGEN_ROPE_YARN: "4"
+      HALOGEN_CTX: "1048576"
+      HALOGEN_WEIGHTS_LOCK: "1"
+    volumes:
+      - /var/lib/ai-models/qwen3.8-flash-next-hgnv2:/native-ckpt:ro
+      - /var/lib/ai-models/halogen-flash-next-sidecars:/models
+    ports:
+      - "127.0.0.1:8213:8731"
+    restart: unless-stopped
