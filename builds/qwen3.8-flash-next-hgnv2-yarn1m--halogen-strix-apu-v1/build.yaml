@@ -77,5 +77,15 @@ derived:
 
     NOT YET TESTED as of this commit.
 bench:
-  contexts: "0,16384,32768,65536,131072,262144,524288,1048576"
+  # Trimmed concurrency to 1,4 (not the default 1,2,4,8) - at pool
+  # 1048576 a full 8-point x 4-context default matrix risks the
+  # orchestrator's own 7200s BENCH_BUILD_TIMEOUT_S, given a single
+  # ~775k-token manual request alone took ~590s. Keeping single-stream
+  # and the standing hgnv2 build's own headline "c4" concurrency level
+  # for direct comparison. Contexts keep every point the standing build
+  # (qwen3.8-flash-next-hgnv2--halogen-strix-apu-v1) was tested at
+  # (0,16384,32768,65536,131072) for apples-to-apples, plus the two new
+  # depths this trial exists to validate (524288, 1048576).
+  concurrency: "1,4"
+  contexts: "0,16384,32768,65536,131072,524288,1048576"
   duration: 30
