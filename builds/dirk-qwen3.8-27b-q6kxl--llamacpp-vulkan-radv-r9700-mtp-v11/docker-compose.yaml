@@ -1,0 +1,67 @@
+# v11 of dirk-qwen3.8-27b-q6kxl on the R9700 eGPU (Vulkan0) - identical to v10 in every
+# way except ONE flag: --cache-ram 24576 -> 8192 (8 GiB). A new build rather than an
+# in-place edit, same discipline as v9->v10: this repo does not edit a committed build.
+#
+# WHY: --cache-ram is llama.cpp's HOST-RAM prompt cache (PR #16391) - pinned/anonymous
+# memory the kernel cannot reclaim the way it reclaims ordinary page cache, and the
+# allocation behind both of this box's real kernel OOM-kill incidents (2026-09-29 occamy
+# midnight hang; 2026-10-06 M-160 system-wide OOM, where the process the oom-killer took
+# had ~16.1 GiB anon-rss matching its own --cache-ram 16384 almost exactly). v10's 24 GiB
+# cap is now larger than the headroom the box actually has to give: measured 2026-10-16
+# with the current standing pair up, MemTotal 124.4 GiB / MemAvailable 14.4 GiB, with
+# flash_serve (halogen, M-167) alone at 75.3 GiB RSS. Bringing v10 up in that state is
+# the same pattern that got llama-server OOM-killed before. 8 GiB fits inside the real
+# headroom, and still holds more prompt state than most sessions use (see below).
+#
+# WHAT THE 16 GiB CLAWED BACK COSTS, in tokens: dirk's KV geometry (qwen35 arch, read off
+# this exact GGUF's header: 65 layers, 4 KV heads, 256 head_dim, K and V) at the -ctk
+# q4_0 -ctv q4_0 already in this command is 65 x 4 x 256 x 2 x 0.5625 B = 74,880 B/token
+# (~73.1 KiB/token). So:
+#   --cache-ram 8192  ~= 114,700 tokens of retained prompt state (~44% of -c 262144)
+#   --cache-ram 24576 ~= 344,000 tokens - more than the full 256k context, i.e. v10's cap
+#       was effectively uncapped for any single session.
+# A conversation whose history exceeds ~112k tokens now falls back to a full re-prefill
+# instead of a RAM restore. At v9's measured prefill for this exact command (1232 tok/s
+# @8k, 924 @65k, 698 @131k - benchmarks/ under v9), a 150k-token history costs roughly
+# 3.5 minutes of TTFT on a miss. That is the trade, stated plainly; it is NOT yet measured
+# in real use.
+#
+# NOT YET VALIDATED: not brought up yet (authored from the writable clone; the authoring
+# session had no docker access). Everything except this one flag is v10's, which is a
+# WORKING build that ran live - see v10's own build.yaml for the --spec-draft-n-max 4
+# sweep history (runs 151/152/153) behind it.
+#
+# PORT: reuses v10's 8161, exactly as v4/v6/v10 already share it - superseded dirk
+# versions inherit the family's production port instead of minting a new one. (The
+# 8100-8199 llama.cpp range is fully exhausted anyway; occamy-nocacheram's note documents
+# the first build to go outside it.) Prometheus already scrapes 8161 as dirk
+# (local-ai-machine docker/prometheus/prometheus.yml), so its metrics carry over with no
+# config change. v10 and v11 therefore cannot run simultaneously - by design: same role,
+# same GPU, and two 262k-context instances would oversubscribe the R9700 regardless.
+#
+# Vulkan0 = R9700 eGPU (32 GiB GDDR6), Vulkan1 = Strix Halo APU.
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+name: docker
+services:
+  dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v11:
+    image: docker.io/kyuz0/amd-strix-halo-toolboxes:vulkan-radv
+    container_name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v11
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "26"
+    - "303"
+    volumes:
+    - /var/lib/ai-models/dirk-qwen3.8-27b-q6kxl:/models:ro
+    - /var/lib/ai-models/dirk-qwen3.8-27b-mmproj:/mmproj:ro
+    command: "llama-server -m /models/Dirk-Qwen3.8-27B-UD-Q6_K_XL.gguf -dev Vulkan0
+      -ngl 999 -fa 1 --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min
+      0.6 -np 1 -c 262144 -n 16384 -ctk q4_0 -ctv q4_0 --cache-ram 8192
+      --mmproj /mmproj/mmproj-F16.gguf --mmproj-device Vulkan0
+      --host 0.0.0.0
+      --port 8080 -a dirk-qwen3.8-27b-q6kxl-r9700-mtp --metrics
+
+      "
+    ports:
+    - 127.0.0.1:8161:8080

@@ -1,0 +1,61 @@
+name: dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v11
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Dirk-Qwen3.8-27B (MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: UD-Q6_K_XL
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-10-16. Byte-for-byte v10's command except ONE flag: --cache-ram 24576 -> 8192
+    (8 GiB). A new build rather than an in-place edit, same discipline as v9->v10 - this
+    repo does not edit a committed build. See v10's own build.yaml for the
+    --spec-draft-n-max 2/1/4 sweep history (runs 151/152/153) that everything else here
+    inherits; nothing about the MTP config changed.
+
+    WHY THE CUT: --cache-ram is llama.cpp's HOST-RAM prompt cache (PR #16391) - separate
+    from the model's VRAM-resident weights/KV, invisible to any GPU metric, and
+    pinned/anonymous memory the kernel cannot reclaim the way it reclaims page cache. It
+    is the allocation behind both of this box's real kernel OOM-kills: the 2026-09-29
+    occamy midnight hang (32768 -> 16384, see occamy v2) and the 2026-10-06 M-160
+    system-wide OOM, where the llama-server the oom-killer took had ~16.1 GiB anon-rss -
+    matching occamy's own --cache-ram 16384 almost exactly. v10's 24 GiB cap is now
+    bigger than the headroom the box actually has: measured 2026-10-16 with the current
+    standing pair up, MemTotal 124.4 GiB, MemAvailable 14.4 GiB, flash_serve (halogen,
+    M-167) alone at 75.3 GiB RSS. Running v10 as-is is the same pattern that got
+    llama-server OOM-killed twice; 8 GiB fits inside what is genuinely free.
+
+    WHAT IT COSTS, in tokens (computed from this exact GGUF's header, not guessed):
+    qwen35 arch, 65 layers, 4 KV heads, 256 head_dim, K and V, at the -ctk q4_0 -ctv
+    q4_0 already in the command = 65 x 4 x 256 x 2 x 0.5625 B = 74,880 B/token (~73.1
+    KiB/token). So 8192 MiB ~= 114,700 tokens of retained prompt state (~44% of the
+    -c 262144 window), while 24576 MiB ~= 344,000 tokens - more than the whole 256k
+    context, i.e. v10's cap was effectively uncapped for any single session. Past ~112k
+    tokens of history a returning conversation now pays a full re-prefill instead of a
+    RAM restore: at v9's measured prefill for this same command (1232 tok/s @8k, 924
+    @65k, 698 @131k), a 150k-token history costs roughly 3.5 minutes of TTFT on a miss.
+    Decode throughput should be unaffected - cache-ram is host RAM, not VRAM, and does
+    not touch the KV pool's residency.
+
+    NOT YET VALIDATED. Not brought up yet (authored from the writable clone; the authoring
+    session had no docker access to this box), so no boot log, no soak, and no real
+    measurement of how often dirk's actual traffic would have wanted more than 8 GiB of
+    cache. Promote to WORKING after a successful boot + a real usage period; if returning
+    long sessions visibly degrade, the middle ground is a larger nonzero cap (12288,
+    say), not a revert to 24576 - the 24 GiB number predates any of the memory-pressure
+    evidence above.
+
+    PORT: reuses v10's 8161, exactly as v4/v6/v10 already share it - superseded dirk
+    versions inherit the family's production port rather than minting a new one (the
+    8100-8199 llama.cpp range is fully exhausted). Prometheus already scrapes 8161 as
+    dirk, so metrics carry over with no config change. v10 and v11 cannot run
+    simultaneously by design: same role, same GPU, and two 262k-context instances would
+    oversubscribe the R9700 regardless (the exact failure mode that invalidated run 151).
+
+    NOT in the standing set: dirk was replaced there on 2026-09-28 and is not currently
+    routed by any litellm role. Bringing this build up is a `modelctl up` away; making it
+    stand again is a separate, Chris-confirmed edit to local-ai-machine's
+    standing-models.txt.
