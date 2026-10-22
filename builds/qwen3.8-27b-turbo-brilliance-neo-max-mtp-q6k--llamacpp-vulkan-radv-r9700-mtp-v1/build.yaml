@@ -1,0 +1,49 @@
+name: qwen3.8-27b-turbo-brilliance-neo-max-mtp-q6k--llamacpp-vulkan-radv-r9700-mtp-v1
+status: PLANNED-NOT-DOWNLOADED
+derived:
+  engine: llamacpp-vulkan-radv-mtp-v1
+  model: Qwen3.8-27B Turbo Brilliance 50X Reasoning Instruct (NEO MAX, MTP, vision)
+  params: 27.32B
+  active_params: null
+  quant: Q6_K
+  mtp: true
+  dflash: false
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    2026-10-22. A mirror of dirk-qwen3.8-27b-q6kxl--llamacpp-vulkan-radv-r9700-mtp-v11
+    (the build currently running on the R9700) for DavidAU's Qwen3.8-27B Turbo Brilliance
+    50X Reasoning Instruct, NEO MAX imatrix quant with MTP (nextn) layers: GGUF
+    Qwen3.8-27B-Turbo-Brilliance-50X-RI-NEO-MAX-MTP-Q6_K.gguf, 24.03 GB (HF tree API),
+    chosen as the quant closest in size to Dirk's 25.3 GB UD-Q6_K_XL. Same engine image,
+    same flags, same GPU placement - only the model files, the served alias and the port
+    differ, so any speed or quality difference between the two is down to the weights.
+
+    WHAT IS IDENTICAL TO DIRK v11: llama-server -ngl 999 -fa 1 on Vulkan0 (the R9700),
+    --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.6 (dirk's tuned MTP
+    settings, runs 151/152/153 in its v10), -np 1, -c 262144, -n 16384, -ctk q4_0 -ctv
+    q4_0, --cache-ram 8192, and the F16 vision projector on Vulkan0. --cache-ram is
+    llama.cpp's host-RAM prompt cache; 8 GiB is the cap dirk v11 settled on after this
+    box's two kernel OOM-kills (see dirk v11's notes for the evidence and the token
+    arithmetic). The same arithmetic should hold here because this is the same
+    Qwen3.8-27B base architecture (65 layers, 4 KV heads, 256 head_dim) - read off
+    Dirk's GGUF header, NOT re-checked against this GGUF's header.
+
+    WHAT DIFFERS: the GGUF and the mmproj directories, the served alias
+    (qwen3.8-27b-turbo-brilliance-r9700-mtp), and the PORT: 8214. The 8100-8199 range is
+    exhausted and 8206-8213 are taken; 8214 is the next free port. Unlike dirk's
+    superseded versions this build does not share dirk's 8161, so both builds' compose
+    files can exist side by side - but they still cannot RUN together: same GPU, and two
+    262k-context 27B instances oversubscribe the R9700's 32 GiB.
+
+    NOT YET VALIDATED, NOT YET DOWNLOADED when authored: the GGUF was still downloading
+    (the download-model service for qwen3.8-27b-turbo-brilliance-neo-max-mtp-q6k) and
+    the mmproj had just finished. Unverified: that this GGUF really carries MTP tensors
+    llama.cpp's draft-mtp accepts (the filename says MTP; the header was not read), that
+    it boots in 32 GiB at -c 262144 with q4_0 KV, and its speed and quality. Next steps:
+    flip status to UNTESTED-BUT-DOWNLOADED once the download completes, bring it up with
+    modelctl, check the boot log for the MTP/draft head, then benchmark against dirk v11.
+
+    NOT wired anywhere: no litellm route, no Prometheus scrape target for 8214 (add one
+    next to dirk's 8161 in local-ai-machine's docker/prometheus/prometheus.yml if it is
+    kept), and not in the standing set - promoting it is a separate, Chris-confirmed edit
+    to local-ai-machine's standing-models.txt.
