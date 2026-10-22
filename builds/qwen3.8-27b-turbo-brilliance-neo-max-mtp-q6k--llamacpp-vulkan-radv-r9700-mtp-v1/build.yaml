@@ -1,5 +1,5 @@
 name: qwen3.8-27b-turbo-brilliance-neo-max-mtp-q6k--llamacpp-vulkan-radv-r9700-mtp-v1
-status: PLANNED-NOT-DOWNLOADED
+status: UNTESTED-BUT-DOWNLOADED
 derived:
   engine: llamacpp-vulkan-radv-mtp-v1
   model: Qwen3.8-27B Turbo Brilliance 50X Reasoning Instruct (NEO MAX, MTP, vision)
