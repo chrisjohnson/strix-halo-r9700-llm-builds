@@ -1,0 +1,16 @@
+╭─────────────────────────────── Configuration ────────────────────────────────╮
+│ LLM Inference Benchmark                                                      │
+│ Model: Qwen3.5 @ localhost:8215                                              │
+│ Decode concurrency: [1, 2, 4, 8]                                             │
+│ Decode contexts: ['0', '16k', '32k', '64k']                                  │
+│ Duration: 30.0s per decode test | Max tokens: 8192                           │
+│ Phase 1: prefill (auto, up to 128k) | Phase 2: 16 decode tests (cached)      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Engine: vLLM 1.14.0  Models: ['qwen3.8-27b-fp8-r9700-radiance']
+vLLM: KV cache budget not available from metrics. Use --kv-budget to skip 
+over-capacity cells, or rely on queue detection.
+Model context length: 65,536 tokens
+Prefill tests: ['8k', '16k', '32k']
+Generating padding texts (run=exegkpufpesy, up to 64k)...
+Done.
+
