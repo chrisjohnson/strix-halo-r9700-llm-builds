@@ -1,0 +1,62 @@
+name: swift1.5-qwen3.8-27b-fp8--radiance-hip-r9700-v15
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: radiance-hip-v1
+  model: Swift-1.5-Qwen3.8-27B FP8 (UkisAI finetune, StillDeadcode .rad repack)
+  params: 27.32B
+  active_params: null
+  quant: FP8 (E4M3, block 128x128)
+  mtp: false
+  dflash: true
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    UkisAI's reasoning-efficient Swift 1.5 finetune of Qwen3.8-27B, quantised to block FP8 from its bf16 checkpoint and packed by the same pipeline as the stock build (vision tower + DFlash2 drafter merged). License: swift-open-license-1.0.
+
+    ENGINE: Radiance (codeberg.org/StillDeadcode/radiance), a from-scratch C++/HIP server for
+    RDNA4 (gfx1200/1201) with hand-written FP8 WMMA kernels; no Vulkan backend, so this is its
+    own container image (stilldeadcode/radiance:1.14.0, pinned: 1.13.0 changed Qwen3.8-27B MXFP4
+    outputs, upstream issue 328), not a llama.cpp variant. Speculation is the merged DFlash2
+    drafter, not the checkpoint's MTP head.
+
+    V15: v13 ran DFlash2 at its own default depth 7 (probe: 92 tok/s mean, 51% of drafted tokens accepted). v15 sets --num-speculative-tokens 4 to test a shallower draft; nothing else changed.
+
+    V13: v12: arena floor 191 MiB (image cap no longer matters), KV pool 262032 tokens, 112 tokens (2 MiB) short of 262144. v13: --max-model-len 262000 so the pool backs a full-length session with no startup warning; 144 tokens under dirk v11's 262144.
+
+    V12: v11: arena 191 MiB, KV pool 261984 tokens, 3 MiB (160 tokens) short of 262144. v12: --mm-max-patches 1536 (largest image ~620x620 px) to close the gap.
+
+    V11: v10: --mm-max-patches 4096 cut the activation arena 475 -> 212 MiB and the KV pool to 260736 tokens, 30 MiB short of 262144. v11: --mm-max-patches 2048 (largest image ~724x724 px) to close the gap.
+
+    V10: v9: --state-cache-dtype f16 lifted the KV pool to 246816 tokens (329 MiB short) but --host-pool-mib moved no weights (dense model, no experts to offload) and pinned 3.6 GiB of RAM for nothing, so it is dropped. v10: --mm-max-patches 4096 (default 16384) to shrink the vision-encoder buffers inside the activation arena; largest image 1024x1024.
+
+    V9: v8: arena floor ~475 MiB (chunk size no longer matters), KV pool 240112 tokens, 473 MiB short. v9: --state-cache-dtype f16 (halves the 297 MiB recurrent state, lossy), --host-pool-mib 3700 (default auto pool is 3.23 GiB; tests whether weights can leave the card), prompt cache 3 GiB to hold the host-RAM budget.
+
+    V8: v7 (512-token chunk): arena 488 MiB, KV pool 236272 tokens, 555 MiB short. v8: chunk 256 and --gpu-headroom-mib 32 (default 96).
+
+    V7: v6 (batched tokens 2048) cut the activation arena to 807 MiB and lifted the KV pool from 107152 to 220032 tokens; 904 MiB short of 262144. v7 drops --max-num-batched-tokens to 512 to shrink the arena further.
+
+    V6: v5 booted but its KV cache held only 107152 of the required 262144 tokens. v6 targets VRAM: --max-num-batched-tokens 2048 (the activation arena is carved off the VRAM budget before the KV cache is sized and scales with the prefill chunk) and a 4 GiB host prompt cache to stay inside dirk v11's ~8.5 GiB pinned-RAM footprint.
+
+    V5: v4 still died on host RAM: 13.28 GiB free, 9.20 GiB still to allocate (8 GiB prompt cache + arenas), plus 0.88 GiB vision tower and the engine's default 4 GiB spare (--host-headroom-mib) needs ~14.1 GiB. v5 lowers the spare to 2 GiB; the container is still capped at mem_limit 16g and oom_score_adj 500.
+
+    V4: v3 died at startup on HOST memory, not VRAM: --host-pool-mib 4096 + --prefix-cache-mib 8192 + the engine's required 4 GiB spare (--host-headroom-mib) exceeded the ~13.7 GiB the box had free. v4 drops the host pool to see whether 262144 fits in VRAM alone.
+
+    V3: v2 capped context at 65536 with fp8 KV and 2 slots, which is not usable for the dirk role.
+    v3 matches dirk v11's shape instead: --max-model-len 262144, --max-num-seqs 1 (-np 1),
+    --kv-cache-dtype k6_v4 (packed KV, 22/32 of fp8 = ~22 KiB/token, the nearest thing to dirk's
+    q4_0 K/V), --prefix-cache-mib 8192 (the host-RAM prompt cache, = --cache-ram 8192) and
+    --host-pool-mib 4096 (weights tier in pinned host RAM to make room for the 262k pool).
+
+    V2: v1 used ROCR_VISIBLE_DEVICES=0, which under ROCm is the Strix Halo iGPU (gfx1151); the
+    R9700 is device 1. v1 stopped at startup with 447 unresolved device bands. Nothing else changed.
+
+    SINGLE CARD: upstream's published 27B recipes are --tp 2; this is --tp 1 on the R9700 only
+    (ROCR_VISIBLE_DEVICES=1 hides the Strix Halo iGPU, which is also an amdgpu device). The
+    30.78 GB container leaves only ~2.5-3 GiB of the card for KV and recurrent state, so
+    --vision-tower-placement ram (frees 0.86 GiB), packed KV and one slot. Nobody upstream has confirmed this fits; first boot decides.
+
+    HOST MEMORY: the box is memory-tight (flash-next alone is ~75 GiB RSS), so the container has
+    a 16 GiB mem_limit and a raised oom_score_adj: if anything is killed it is this, not the
+    standing flash model.
+
+    PORT 8216: Radiance range, outside the llama.cpp 8100-8199 range. NOT validated yet; no
+    boot, bench or soak at authoring time. Weights: /var/lib/ai-models/radiance-swift1.5-qwen3.8-27b-fp8.
