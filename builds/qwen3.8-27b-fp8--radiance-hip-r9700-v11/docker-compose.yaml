@@ -1,0 +1,36 @@
+# qwen3.8-27b-fp8--radiance-hip-r9700-v11: Radiance (HIP/ROCm, RDNA4) on the R9700 only, --tp 1.
+# See build.yaml for the engine, memory and port rationale.
+# No `com.local-ai-machine.always-up` label: not part of the standing set.
+name: docker
+services:
+  qwen3.8-27b-fp8--radiance-hip-r9700-v11:
+    image: docker.io/stilldeadcode/radiance:1.14.0
+    container_name: qwen3.8-27b-fp8--radiance-hip-r9700-v11
+    init: true
+    user: "1000:1000"
+    devices:
+    - /dev/kfd:/dev/kfd
+    - /dev/dri:/dev/dri
+    group_add:
+    - "26"
+    - "303"
+    security_opt:
+    - seccomp=unconfined
+    ulimits:
+      memlock: -1
+    mem_limit: 16g
+    oom_score_adj: 500
+    stop_grace_period: 60s
+    environment:
+    - ROCR_VISIBLE_DEVICES=1
+    volumes:
+    - /var/lib/ai-models/radiance-qwen3.8-27b-fp8:/models:ro
+    command: >-
+      --model /models/qwen3.8-27b-fp8.rad
+      --host 0.0.0.0 --port 8080
+      --served-model-name qwen3.8-27b-fp8-r9700-radiance
+      --tp 1 --vision-tower-placement ram
+      --kv-cache-dtype k6_v4 --max-num-seqs 1 --max-model-len 262144
+      --prefix-cache-mib 3072 --state-cache-dtype f16 --mm-max-patches 2048 --host-headroom-mib 2048 --max-num-batched-tokens 256 --gpu-headroom-mib 32
+    ports:
+    - 127.0.0.1:8215:8080
