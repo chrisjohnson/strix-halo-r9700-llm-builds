@@ -1,0 +1,40 @@
+name: qwen3.8-27b-fp8--radiance-hip-r9700-v3
+status: UNTESTED-BUT-DOWNLOADED
+derived:
+  engine: radiance-hip-v1
+  model: Qwen3.8-27B FP8 (stock Qwen weights, StillDeadcode .rad repack)
+  params: 27.32B
+  active_params: null
+  quant: FP8 (E4M3, block 128x128)
+  mtp: false
+  dflash: true
+  target_gpu: r9700-egpu-dock
+  notes: >-
+    Stock Qwen3.8-27B FP8 (E4M3, 128x128 block scales) repacked into Radiance's .rad container with the vision tower and a merged z-lab DFlash2 block-diffusion drafter. Same base weights as the dirk builds, but no Sharp chat template and no Unsloth Dynamic quantization (the .rad embeds the stock template).
+
+    ENGINE: Radiance (codeberg.org/StillDeadcode/radiance), a from-scratch C++/HIP server for
+    RDNA4 (gfx1200/1201) with hand-written FP8 WMMA kernels; no Vulkan backend, so this is its
+    own container image (stilldeadcode/radiance:1.14.0, pinned: 1.13.0 changed Qwen3.8-27B MXFP4
+    outputs, upstream issue 328), not a llama.cpp variant. Speculation is the merged DFlash2
+    drafter, not the checkpoint's MTP head.
+
+    V3: v2 capped context at 65536 with fp8 KV and 2 slots, which is not usable for the dirk role.
+    v3 matches dirk v11's shape instead: --max-model-len 262144, --max-num-seqs 1 (-np 1),
+    --kv-cache-dtype k6_v4 (packed KV, 22/32 of fp8 = ~22 KiB/token, the nearest thing to dirk's
+    q4_0 K/V), --prefix-cache-mib 8192 (the host-RAM prompt cache, = --cache-ram 8192) and
+    --host-pool-mib 4096 (weights tier in pinned host RAM to make room for the 262k pool).
+
+    V2: v1 used ROCR_VISIBLE_DEVICES=0, which under ROCm is the Strix Halo iGPU (gfx1151); the
+    R9700 is device 1. v1 stopped at startup with 447 unresolved device bands. Nothing else changed.
+
+    SINGLE CARD: upstream's published 27B recipes are --tp 2; this is --tp 1 on the R9700 only
+    (ROCR_VISIBLE_DEVICES=1 hides the Strix Halo iGPU, which is also an amdgpu device). The
+    30.78 GB container leaves only ~2.5-3 GiB of the card for KV and recurrent state, so
+    --vision-tower-placement ram (frees 0.86 GiB), packed KV and one slot. Nobody upstream has confirmed this fits; first boot decides.
+
+    HOST MEMORY: the box is memory-tight (flash-next alone is ~75 GiB RSS), so the container has
+    a 16 GiB mem_limit and a raised oom_score_adj: if anything is killed it is this, not the
+    standing flash model.
+
+    PORT 8215: Radiance range, outside the llama.cpp 8100-8199 range. NOT validated yet; no
+    boot, bench or soak at authoring time. Weights: /var/lib/ai-models/radiance-qwen3.8-27b-fp8.
