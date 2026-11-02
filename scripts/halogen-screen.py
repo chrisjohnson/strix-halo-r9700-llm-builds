@@ -22,6 +22,7 @@ ap.add_argument("port")
 ap.add_argument("--ctx", default="0,131072")
 ap.add_argument("--skip-tools", action="store_true")
 ap.add_argument("--c4", action="store_true")
+ap.add_argument("--par", type=int, default=0, help="also run two concurrent requests of this many tokens each")
 ap.add_argument("--abort-mb", type=int, default=300)
 ap.add_argument("--max-tokens", type=int, default=512)
 ap.add_argument("--timeout", type=int, default=7200)
@@ -227,6 +228,20 @@ if a.c4:
     tot = sum(o[2] for o in out)
     results["c4_agg_tok_s"] = round(tot / (e - s), 1)
     print(f"c4 aggregate (incl. prefill): {results['c4_agg_tok_s']} tok/s over {tot} tokens", flush=True)
+
+if a.par:
+    outp = []
+
+    def par_one(i):
+        pr = f"[run {time.time_ns()} {i}]" + corpus(int(a.par * ratio)) + TASK
+        t0, first, last, u = stream(pr, a.max_tokens)
+        outp.append({"prompt_tokens": u["prompt_tokens"] if u else None, "ttft_s": round(first - t0, 1) if first else None,
+                     "decode_tok_s": round((u["completion_tokens"] - 1) / (last - first), 1) if u and last and last > first else None})
+
+    ts = [threading.Thread(target=par_one, args=(i,)) for i in range(2)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+    results["par2"] = outp
+    print("par2:", json.dumps(outp), flush=True)
 
 stop.set()
 m = meminfo()
