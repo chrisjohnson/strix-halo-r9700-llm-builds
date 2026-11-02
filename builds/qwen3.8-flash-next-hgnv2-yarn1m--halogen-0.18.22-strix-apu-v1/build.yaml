@@ -1,0 +1,22 @@
+name: qwen3.8-flash-next-hgnv2-yarn1m--halogen-0.18.22-strix-apu-v1
+status: PLANNED
+derived:
+  engine: halogen-flash-server-v1
+  model: Qwen3.8-Flash-Next
+  params: 177B
+  active_params: 6B
+  quant: halogen-native-v2 (4.16 bits/weight avg, calibrated precision placement)
+  mtp: true
+  dflash: false
+  target_gpu: strix-apu
+  vision: true
+  notes: >-
+    Image 0.18.22 with the env of the yarn1m@0.18.4 build unchanged
+    (HALOGEN_ROPE_YARN=4, HALOGEN_CTX=1048576, HALOGEN_WEIGHTS_LOCK=1).
+    The vendor changelog for 0.18.5-0.18.22 lists the Flash checkpoints as
+    unchanged, so the same weights and sidecars are reused. Port 8217.
+    Not yet tested.
+bench:
+  concurrency: "1,4"
+  contexts: "0,16384,32768,65536,131072,524288,1048576"
+  duration: 30
