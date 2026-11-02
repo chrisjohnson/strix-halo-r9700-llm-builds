@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-hgnv2-yarn1m-kv8-depth3--halogen-0.18.22-strix-apu-v1
-status: PLANNED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -12,7 +12,11 @@ derived:
   vision: true
   notes: >-
     Image 0.18.22, yarn1m env plus HALOGEN_KV8=1 (8-bit KV cache) plus
-    fixed draft depth HALOGEN_MTP_DEPTH=3 with the confidence gate off (HALOGEN_MTP_GATE_P=0). Same weights and sidecars. Port 8222. Not yet tested.
+    fixed draft depth HALOGEN_MTP_DEPTH=3 with the confidence gate off (HALOGEN_MTP_GATE_P=0). Same weights and sidecars. Port 8222. 
+    2026-11-02 screen only (no full bench). Speculation probe: mean 73.5
+    tok/s (73.8, 73.1), acceptance 0.80-0.82, against 71.5 for the default
+    gate over five runs (69.6-73.2): about +3 percent, borderline against
+    the noise. Memory identical to the plain KV8 build.
 bench:
   concurrency: "1,4"
   contexts: "0,16384,32768,65536,131072,524288,1048576"

@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-hgnv2-yarn1m-kv8-pool1p5m--halogen-0.18.22-strix-apu-v1
-status: PLANNED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -12,7 +12,14 @@ derived:
   vision: true
   notes: >-
     Image 0.18.22, yarn1m env plus HALOGEN_KV8=1 (8-bit KV cache) plus
-    a 1,572,864-position KV pool (HALOGEN_KV_POOL_POSITIONS) so a full 1M conversation and a ~500k one can be resident together. Same weights and sidecars. Port 8224. Not yet tested.
+    a 1,572,864-position KV pool (HALOGEN_KV_POOL_POSITIONS) so a full 1M conversation and a ~500k one can be resident together. Same weights and sidecars. Port 8224. 
+    2026-11-02 screen only. 24.5 GiB KV pool; "host memory left for
+    everything else" 14.4 GiB (181 contiguous 2 MiB blocks), above the
+    9.9 GiB of the non-KV8 1M build. Min MemAvailable with Swift resident
+    9.7-9.9 GiB. Decode 78.8 tok/s at ctx 0, 72.6 at 131k, 53.9 at a
+    1,017,070-token request; c4 aggregate 103.1. Two concurrent 576,919-token
+    requests were both admitted and resident at once (prefill runs one
+    after the other: first token at 383 s and 769 s).
 bench:
   concurrency: "1,4"
   contexts: "0,16384,32768,65536,131072,524288,1048576"

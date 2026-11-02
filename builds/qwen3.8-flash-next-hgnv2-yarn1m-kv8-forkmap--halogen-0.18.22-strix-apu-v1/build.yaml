@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-hgnv2-yarn1m-kv8-forkmap--halogen-0.18.22-strix-apu-v1
-status: PLANNED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -12,7 +12,12 @@ derived:
   vision: true
   notes: >-
     Image 0.18.22, yarn1m env plus HALOGEN_KV8=1 (8-bit KV cache) plus
-    per-thread state keeping HALOGEN_FORK_MAP=claude-code (HALOGEN_FORK defaults on). Same weights and sidecars. Port 8223. Not yet tested.
+    per-thread state keeping HALOGEN_FORK_MAP=claude-code (HALOGEN_FORK defaults on). Same weights and sidecars. Port 8223. 
+    2026-11-02 screen only. Starts and serves: "host memory left" 23.9 GiB,
+    min MemAvailable 20.3 GiB with Swift resident, decode 80.4 tok/s at ctx
+    0 and 74.5 at 131k, tool checks as on the plain KV8 build. The
+    subagent-reuse benefit needs a Claude Code client driving it and was
+    not measured.
 bench:
   concurrency: "1,4"
   contexts: "0,16384,32768,65536,131072,524288,1048576"

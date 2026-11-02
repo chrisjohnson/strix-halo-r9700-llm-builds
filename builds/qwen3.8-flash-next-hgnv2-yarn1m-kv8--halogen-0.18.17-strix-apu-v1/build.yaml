@@ -1,5 +1,5 @@
 name: qwen3.8-flash-next-hgnv2-yarn1m-kv8--halogen-0.18.17-strix-apu-v1
-status: PLANNED
+status: TESTED_VIABLE
 derived:
   engine: halogen-flash-server-v1
   model: Qwen3.8-Flash-Next
@@ -12,7 +12,12 @@ derived:
   vision: true
   notes: >-
     Image 0.18.17, yarn1m env plus HALOGEN_KV8=1. Used to compare tool-call
-    parsing against 0.18.22. Same weights and sidecars. Port 8225. Not yet tested.
+    parsing against 0.18.22. Same weights and sidecars. Port 8225. 
+    2026-11-02 screen only. Starts and serves with KV8 (same memory as the
+    0.18.22 KV8 build: min MemAvailable 18.6 GiB). Tool-call checks give the
+    same results as 0.18.22 (including the cut at a literal </tool_call>
+    inside an argument), so the later parser changes show no difference on
+    these checks. Decode 73.1 tok/s at ctx 0 over 256 tokens.
 bench:
   concurrency: "1,4"
   contexts: "0,16384,32768,65536,131072,524288,1048576"
